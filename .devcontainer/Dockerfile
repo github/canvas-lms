@@ -1,4 +1,5 @@
-FROM mcr.microsoft.com/vscode/devcontainers/base:bullseye
+ARG VARIANT=3.1-bullseye
+FROM mcr.microsoft.com/vscode/devcontainers/ruby:${VARIANT}
 
 ENV CANVAS_LMS_STATS_COLLECTION=opt_out
 ENV CANVAS_LMS_ACCOUNT_NAME=learn_good_things_school
