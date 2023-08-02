@@ -1,0 +1,68 @@
+# this config file is useful if you don't want to run a consul
+# cluster with canvas.  Just provide the config data you would
+# like for the DynamicSettings class to find, and it will use
+# it whenever a call for consul data is issued. Data should be
+# shaped like the example below, one key for the related set of data,
+# and a hash of key/value pairs (no nesting)
+development:
+  # tree
+  config:
+    # service
+    canvas:
+      # prefix
+      address-book:
+        app-host: "http://address-book.docker"
+        secret: "opensesame"
+      canvas:
+        encryption-secret: "astringthatisactually32byteslong"
+        signing-secret: "astringthatisactually32byteslong"
+      live-events:
+        aws_endpoint: http://kinesis.canvaslms.docker
+        kinesis_stream_name: live-events
+        aws_access_key_id: key
+        aws_secret_access_key_dec: secret
+        # stub_credentials: true # can be used in dev to print creds to stdout
+      live-events-subscription-service:
+        app-host: "http://les.docker"
+        sad-panda: null
+      math-man:
+        base_url: "http://mathman.docker"
+        use_for_svg: "false"
+        use_for_mml: "false"
+      microsoft-sync:
+        client-id: some_client_id
+        client-secret: some_client_secret
+      rich-content-service:
+        app-host: "http://rce.canvas.docker:3000"
+    # another service
+    inst-fs:
+      app-host: "http://api.instfs.docker"
+      # this is just "super-sekret-value", base64-encoded:
+      secret: "c3VwZXItc2VrcmV0LXZhbHVlCg=="
+    pandata:
+      ios-pandata-key: IOS_pandata_key
+      ios-pandata-secret: teamrocketblastoffatthespeedoflight
+      android-pandata-key: ANDROID_pandata_key
+      android-pandata-secret: surrendernoworpreparetofight
+  store:
+    canvas:
+      lti-keys:
+        # these are all the same JWK but with different kid
+        # to generate a new key, run the following in a Canvas console:
+        #
+        # key = OpenSSL::PKey::RSA.generate(2048)
+        # key.public_key.to_jwk(kid: Time.now.utc.iso8601).to_json
+        jwk-past.json: '{"kty":"RSA","e":"AQAB","n":"xY6RTRVp0HW-EMzP41CTEaY7uAg4Q8A8hM9cQEXa5OXA_uEzNNB8ggbCmUrfzH-IQS_o6o8Fb5lXPmleALxk_scmgvf0ZWJRiYhXt0Idms6wcHZDy22F0-IUKzoIhczzcX_BD4gtOyzqztls3jjopnkEfiwpWKsWsLAXINl20p0bVBfZ08r6wJOKl4THkwxv-1WWkz0kVVRMK5bfRfF5EIz_FZI9ReQnQ8EzyqO5xgHERMc88Xo92hAMpEMdls39rcMK5P6Su_jACrrUGUbQh1PuIfUWZdV2Qxlb3nmmZt5M-pQiMDNwg2IY2fcyiUizmWrRyz9QX838mnEcrWJW6w","kid":"2023-06-21T01:38:01Z"}'
+        jwk-present.json: '{"kty":"RSA","e":"AQAB","n":"xY6RTRVp0HW-EMzP41CTEaY7uAg4Q8A8hM9cQEXa5OXA_uEzNNB8ggbCmUrfzH-IQS_o6o8Fb5lXPmleALxk_scmgvf0ZWJRiYhXt0Idms6wcHZDy22F0-IUKzoIhczzcX_BD4gtOyzqztls3jjopnkEfiwpWKsWsLAXINl20p0bVBfZ08r6wJOKl4THkwxv-1WWkz0kVVRMK5bfRfF5EIz_FZI9ReQnQ8EzyqO5xgHERMc88Xo92hAMpEMdls39rcMK5P6Su_jACrrUGUbQh1PuIfUWZdV2Qxlb3nmmZt5M-pQiMDNwg2IY2fcyiUizmWrRyz9QX838mnEcrWJW6w","kid":"2023-06-21T01:38:01Z"}'
+        jwk-future.json: '{"kty":"RSA","e":"AQAB","n":"xY6RTRVp0HW-EMzP41CTEaY7uAg4Q8A8hM9cQEXa5OXA_uEzNNB8ggbCmUrfzH-IQS_o6o8Fb5lXPmleALxk_scmgvf0ZWJRiYhXt0Idms6wcHZDy22F0-IUKzoIhczzcX_BD4gtOyzqztls3jjopnkEfiwpWKsWsLAXINl20p0bVBfZ08r6wJOKl4THkwxv-1WWkz0kVVRMK5bfRfF5EIz_FZI9ReQnQ8EzyqO5xgHERMc88Xo92hAMpEMdls39rcMK5P6Su_jACrrUGUbQh1PuIfUWZdV2Qxlb3nmmZt5M-pQiMDNwg2IY2fcyiUizmWrRyz9QX838mnEcrWJW6w","kid":"2023-06-21T01:38:01Z"}'
+  private:
+    canvas:
+      # api_gateway_enabled: 'true'
+      # api_gateway_uri: 'http://inst-gateway.docker/graphql'
+      auditors.yml: |
+        write_paths:
+          - active_record
+        read_path: active_record
+      datadog_apm.yml: |
+        sample_rate: 0.0
+        host_sample_rate: 0.0
