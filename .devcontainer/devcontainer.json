@@ -11,7 +11,7 @@
 	"postCreateCommand": "./.devcontainer/build/finalize-app-setup.sh",
 	"postStartCommand": "./.devcontainer/start-services.sh",
 
-	"remoteUser": "canvas",
+	"remoteUser": "vscode",
 	"features": {
 		"ghcr.io/devcontainers-contrib/features/postgres-asdf:1": {
 			"version": "latest"
