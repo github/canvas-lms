@@ -1,6 +1,7 @@
 {
 	"name": "Canvas LMS",
-	"build": { "dockerfile": "Dockerfile" },
+	"dockerComposeFile": "docker-compose.yml",
+	"service": "app",
 	"workspaceFolder": "/workspace/canvas-lms",
 
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
@@ -13,16 +14,6 @@
 
 	"remoteUser": "vscode",
 	"features": {
-		"ghcr.io/devcontainers-contrib/features/postgres-asdf:1": {
-			"version": "latest"
-		},
-		"ghcr.io/devcontainers/features/node:1": {
-			"nodeGypDependencies": true,
-			"version": "16"
-		},
-		"ghcr.io/devcontainers-contrib/features/redis-homebrew:1": {
-			"version": "latest"
-		},
 		"ghcr.io/devcontainers/features/github-cli:1": {
 			"installDirectlyFromGitHubRelease": true,
 			"version": "latest"
