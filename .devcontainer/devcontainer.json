@@ -2,7 +2,7 @@
 	"name": "Canvas LMS",
 	"dockerComposeFile": "docker-compose.yml",
 	"service": "app",
-	"workspaceFolder": "/workspace/canvas-lms",
+	"workspaceFolder": "/workspaces/canvas-lms",
 
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
 	// This can be used to network with other containers or the host.
