@@ -10,7 +10,7 @@
 
 	// Use 'postCreateCommand' to run commands after the container is created.
 	"postCreateCommand": "./.devcontainer/build/finalize-app-setup.sh",
-	"postStartCommand": "./.devcontainer/start-services.sh",
+	"postStartCommand": "./.devcontainer/start/start-services.sh",
 
 	"remoteUser": "vscode",
 	"features": {
