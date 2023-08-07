@@ -1,17 +1,22 @@
 {
 	"name": "Canvas LMS",
 	"dockerComposeFile": "docker-compose.yml",
+	"hostRequirements": {
+		// Specs for 16 cores, 32 RAM, 128 Gb storage
+		"storage": "128gb",
+		"memory": "32gb",
+		"cpus": 16
+	},
 	"service": "app",
 	"workspaceFolder": "/workspaces/canvas-lms",
-
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
 	// This can be used to network with other containers or the host.
-	"forwardPorts": [3000],
-
+	"forwardPorts": [
+		3000
+	],
 	// Use 'postCreateCommand' to run commands after the container is created.
 	"postCreateCommand": "./.devcontainer/build/finalize-app-setup.sh",
 	"postStartCommand": "./.devcontainer/start/start-services.sh",
-
 	"remoteUser": "vscode",
 	"features": {
 		"ghcr.io/devcontainers/features/github-cli:1": {
