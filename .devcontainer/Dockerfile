@@ -16,7 +16,7 @@ RUN gem install bundler:2.2.17
 
 # Default value to allow debug server to serve content over GitHub Codespace's port forwarding service
 # The value is a comma-separated list of allowed domains
-ENV RAILS_DEVELOPMENT_HOSTS=".app.github.dev"
+ENV RAILS_DEVELOPMENT_HOSTS=".preview.app.github.dev"
 
 # [Choice] Node.js version: lts/*, 16, 14, 12, 10
 ARG NODE_VERSION="16"
