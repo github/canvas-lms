@@ -18,74 +18,28 @@
 
 import {Moment} from 'moment-timezone'
 import {useScope} from '@canvas/i18n'
-import RRuleHelper, {RRuleHelperSpec} from '../RecurringEvents/RRuleHelper'
-import {AllRRULEDayValues} from '../RecurringEvents/types'
-import {cardinalDayInMonth} from '../RecurringEvents/RepeatPicker/RepeatPicker'
-import RRuleToNaturalLanguage from '../RecurringEvents/RRuleNaturalLanguage'
-
-export type FrequencyOptionValue =
-  | 'not-repeat'
-  | 'daily'
-  | 'weekly-day'
-  | 'monthly-nth-day'
-  | 'annually'
-  | 'every-weekday'
-  | 'saved-custom'
-  | 'custom'
-export type FrequencyOption = {id: FrequencyOptionValue; label: string}
-export type FrequencyOptionsArray = FrequencyOption[]
+import RRuleHelper, {RRuleHelperSpec} from '../RRuleHelper'
+import {AllRRULEDayValues, FrequencyOptionValue} from '../types'
+import {cardinalDayInMonth, weekdayInMonth} from '../utils'
+import RRuleToNaturalLanguage from '../RRuleNaturalLanguage'
+import {FrequencyOption} from './FrequencyPicker'
 
 const FrequencyCounts = {
   daily: 200, // Backend maximum is 200
   'weekly-day': 52, // weeks in a year
   'monthly-nth-day': 12, // Months in a year
   annually: 5, // The event will occur for five years
-  'every-weekday': 52, // weeks in a year
+  'every-weekday': 200, // Backend maximum is 200
 }
 
 const I18n = useScope('calendar_frequency_picker')
-
-export function getSelectTextWidth(strings: string[]) {
-  const testdiv = document.createElement('div')
-  testdiv.setAttribute('style', 'position: absolute; left: -9999px; visibility: hidden;')
-  testdiv.innerHTML = `<div><div>${strings.join('</div><div>')}</div></div>`
-  document.body.appendChild(testdiv)
-  const w = `${testdiv.getBoundingClientRect().width + 24 + 12 + 14 + 2}px`
-  testdiv.remove()
-  return w
-}
-
-// Gets the index of the weekday of the month of the given moment.
-// If is the last -1 is returned.
-const weekdayInMonth = (eventStart: Moment): number => {
-  let day = eventStart.clone().startOf('month').day(eventStart.day())
-  const days = []
-
-  // Sometimes it can return a weekday of previous month
-  if (day.date() > 7) {
-    day.add(7, 'd')
-  }
-
-  const month = day.month()
-  while (month === day.month()) {
-    days.push(day)
-    day = day.clone().add(7, 'd')
-  }
-
-  let index = days.findIndex(d => d.date() === eventStart.date())
-  if (index + 1 >= days.length) {
-    index = -1
-  }
-
-  return index
-}
 
 export const generateFrequencyOptions = (
   eventStart: Moment,
   locale: string = 'en',
   timezone: string,
   rrule: string | null
-): FrequencyOptionsArray => {
+): FrequencyOption[] => {
   const day = I18n.lookup('date.day_names').at(eventStart.day())
   const month = I18n.lookup('date.month_names').at(eventStart.month() + 1)
   const date = eventStart.date()
@@ -97,7 +51,7 @@ export const generateFrequencyOptions = (
     I18n.t('fourth', 'fourth'),
     I18n.t('last', 'last'),
   ].at(weekdayIndex)
-  const opts: FrequencyOptionsArray = [
+  const opts: FrequencyOption[] = [
     {id: 'not-repeat', label: I18n.t('not_repeat', 'Does not repeat')},
     {id: 'daily', label: I18n.t('daily', 'Daily')},
     {
@@ -154,7 +108,7 @@ export const generateFrequencyOptions = (
   return opts
 }
 
-export const generateFrequencyRRule = (
+export const generateFrequencyRRULE = (
   id: FrequencyOptionValue,
   eventStart: Moment
 ): string | null => {
@@ -196,11 +150,11 @@ export const generateFrequencyRRule = (
   }
 }
 
-export const rruleToFrequencyOptionValue = (
+export const RRULEToFrequencyOptionValue = (
   eventStart: Moment,
-  rrule: string | null
+  rrule: string | null | undefined
 ): FrequencyOptionValue => {
-  if (rrule === null) return 'not-repeat'
+  if (rrule === null || rrule === undefined) return 'not-repeat'
   if (rrule.length === 0) return 'custom'
 
   const spec: RRuleHelperSpec = RRuleHelper.parseString(rrule)
@@ -249,4 +203,19 @@ export const rruleToFrequencyOptionValue = (
     return 'every-weekday'
   }
   return 'saved-custom'
+}
+
+export const rruleToOptionValue = (rrule: string | null): FrequencyOptionValue => {
+  if (rrule === null) return 'not-repeat'
+  if (rrule === 'FREQ=DAILY;INTERVAL=1;COUNT=200') return 'daily'
+  if (/^FREQ=WEEKLY;BYDAY=(SU|MO|TU|WE|TH|FR|SA);INTERVAL=1;COUNT=52$/.test(rrule))
+    return 'weekly-day'
+  if (
+    /^FREQ=MONTHLY;BYSETPOS=(-?\d+);BYDAY=(SU|MO|TU|WE|TH|FR|SA);INTERVAL=1;COUNT=12$/.test(rrule)
+  )
+    return 'monthly-nth-day'
+  if (/^FREQ=YEARLY;BYMONTH=\d{2};BYMONTHDAY=\d{2};INTERVAL=1;COUNT=5$/.test(rrule))
+    return 'annually'
+  if (/^FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;INTERVAL=1;COUNT=200$/.test(rrule)) return 'every-weekday'
+  return 'custom'
 }

@@ -44,3 +44,11 @@ export async function executeApiRequest<T>(request: ApiRequest): Promise<ApiResp
     link,
   }
 }
+
+export enum ApiCallStatus {
+  NOT_STARTED = 'NOT_STARTED',
+  NO_CHANGE = 'NO_CHANGE',
+  PENDING = 'PENDING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+}

@@ -73,7 +73,7 @@ export function TempEnrollModal(props: Props) {
         theme={{smallMaxWidth: '30em'}}
       >
         <Modal.Header>
-          <Heading tabIndex="-1">
+          <Heading tabIndex={-1}>
             {I18n.t('Create a Temporary Enrollment for %{name}', {name: props.user.name})}
           </Heading>
         </Modal.Header>

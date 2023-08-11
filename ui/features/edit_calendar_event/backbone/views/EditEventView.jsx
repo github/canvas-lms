@@ -32,14 +32,15 @@ import RichContentEditor from '@canvas/rce/RichContentEditor'
 import unflatten from 'obj-unflatten'
 import deparam from 'deparam'
 import coupleTimeFields from '@canvas/calendar/jquery/coupleTimeFields'
-import {renderDeleteCalendarEventDialog} from '@canvas/calendar/react/DeleteCalendarEventDialog'
+import {renderDeleteCalendarEventDialog} from '@canvas/calendar/react/RecurringEvents/DeleteCalendarEventDialog'
 import datePickerFormat from '@canvas/datetime/datePickerFormat'
 import CalendarConferenceWidget from '@canvas/calendar-conferences/react/CalendarConferenceWidget'
 import filterConferenceTypes from '@canvas/calendar-conferences/filterConferenceTypes'
 import FrequencyPicker, {
   FrequencyPickerErrorBoundary,
-} from '@canvas/calendar/react/FrequencyPicker/FrequencyPicker'
-import {rruleToFrequencyOptionValue} from '@canvas/calendar/react/FrequencyPicker/FrequencyPickerUtils'
+} from '@canvas/calendar/react/RecurringEvents/FrequencyPicker/FrequencyPicker'
+import {renderUpdateCalendarEventDialog} from '@canvas/calendar/react/RecurringEvents/UpdateCalendarEventDialog'
+import {RRULEToFrequencyOptionValue} from '@canvas/calendar/react/RecurringEvents/FrequencyPicker/utils'
 
 const I18n = useI18nScope('calendar.edit')
 
@@ -217,12 +218,12 @@ export default class EditCalendarEventView extends Backbone.View {
     if (ENV.FEATURES.calendar_series) {
       const pickerNode = document.getElementById('recurring_event_frequency_picker')
       const start = this.$el.find('[name="start_date"]').val()
-      const eventStart = start ? moment(start) : moment('invalid')
+      const eventStart = start ? moment.tz(start, ENV.TIMEZONE) : moment('invalid')
 
       const rrule = this.model.get('rrule')
       const freq =
         rrule && eventStart.isValid()
-          ? rruleToFrequencyOptionValue(eventStart, rrule)
+          ? RRULEToFrequencyOptionValue(eventStart, rrule)
           : 'not-repeat'
 
       const date = eventStart.isValid() ? eventStart.toISOString(true) : undefined
@@ -460,8 +461,34 @@ export default class EditCalendarEventView extends Backbone.View {
     return this.saveEvent(eventData)
   }
 
+  renderWhichEditDialog(eventData) {
+    const modalNode = document.getElementById('which_edit_modal')
+    const params = {}
+    Object.keys(eventData).forEach(key => (params[`calendar_event[${key}]`] = eventData[key]))
+
+    return renderUpdateCalendarEventDialog(modalNode, {
+      event: this.model.attributes,
+      params,
+      isOpen: true,
+      onCancel: () => ReactDOM.unmountComponentAtNode(modalNode),
+      onUpdated: () => this.redirectWithMessage(I18n.t('event_saved', 'Event Saved Successfully')),
+      onError: response => {
+        showFlashAlert({
+          message: response.message,
+          err: null,
+          type: 'error',
+        })
+        ReactDOM.unmountComponentAtNode(modalNode)
+      },
+    })
+  }
+
   saveEvent(eventData) {
     RichContentEditor.closeRCE(this.$('textarea'))
+
+    if (ENV?.FEATURES?.calendar_series && this.model.get('series_uuid')) {
+      return this.renderWhichEditDialog(eventData)
+    }
 
     return this.$el.disableWhileLoading(
       this.model.save(eventData, {
