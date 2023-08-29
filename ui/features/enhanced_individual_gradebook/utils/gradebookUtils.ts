@@ -98,8 +98,8 @@ export function mapAssignmentGroupQueryResults(
         rules: curr.rules,
         id: curr.id,
         position: curr.position,
-        integration_data: {}, // TODO: Get Data
-        sis_source_id: null, // TODO: Get data
+        integration_data: {},
+        sis_source_id: curr.sisId,
         invalid: totalGroupPoints === 0,
         gradingPeriodsIds: _.uniq(assignmentGroupGradingPeriods),
       }
@@ -156,7 +156,7 @@ export function studentDisplayName(
   student: SortableStudent | GradebookStudentDetails,
   hideStudentNames: boolean
 ): string {
-  return hideStudentNames ? student.hiddenName ?? I18n.t('Student') : student.name
+  return hideStudentNames ? student.hiddenName ?? I18n.t('Student') : student.sortableName
 }
 
 export function sortAssignments(
@@ -218,6 +218,8 @@ export function mapUnderscoreSubmission(submission: Submission): GradebookUserSu
     submissionType: submission.submission_type,
     state: submission.workflow_state,
     cachedDueDate: submission.cached_due_date,
+    deductedPoints: submission.points_deducted,
+    enteredGrade: submission.entered_grade,
   }
 }
 
@@ -321,6 +323,7 @@ export function gradebookOptionsSetup(env: GlobalEnv) {
     lastGeneratedCsvAttachmentUrl: env.GRADEBOOK_OPTIONS?.attachment_url,
     messageAttachmentUploadFolderId: env.GRADEBOOK_OPTIONS?.message_attachment_upload_folder_id,
     pointsBasedGradingSchemesFeatureEnabled: !!env.POINTS_BASED_GRADING_SCHEMES_ENABLED,
+    proxySubmissionEnabled: !!env.GRADEBOOK_OPTIONS?.proxy_submissions_allowed,
     publishToSisEnabled: env.GRADEBOOK_OPTIONS?.publish_to_sis_enabled,
     publishToSisUrl: env.GRADEBOOK_OPTIONS?.publish_to_sis_url,
     reorderCustomColumnsUrl: env.GRADEBOOK_OPTIONS?.reorder_custom_columns_url,

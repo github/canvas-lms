@@ -70,7 +70,7 @@ class GradebooksController < ApplicationController
              student_grade_summary_upgrade: Account.site_admin.feature_enabled?(:student_grade_summary_upgrade),
              can_clear_badge_counts: Account.site_admin.grants_right?(@current_user, :manage_students),
              POINTS_BASED_GRADING_SCHEMES_ENABLED: Account.site_admin.feature_enabled?(:points_based_grading_schemes),
-             custom_grade_statuses: @context.root_account.custom_grade_statuses.active.as_json(include_root: false)
+             custom_grade_statuses: @context.custom_grade_statuses.as_json(include_root: false)
            })
     return render :grade_summary_list unless @presenter.student
 
@@ -227,6 +227,7 @@ class GradebooksController < ApplicationController
                     end
 
       js_hash[:effective_final_score] = total_score.effective_final_score if total_score&.overridden?
+      js_hash[:final_override_custom_grade_status_id] = total_score.custom_grade_status_id if total_score&.overridden? && Account.site_admin.feature_enabled?(:custom_gradebook_statuses)
     end
 
     js_env(js_hash)
@@ -319,7 +320,8 @@ class GradebooksController < ApplicationController
         return
       end
 
-      if gradebook_version == "individual_enhanced"
+      individual_enhanced_enabled = @context.root_account.feature_enabled?(:individual_gradebook_enhancements)
+      if gradebook_version == "individual_enhanced" && individual_enhanced_enabled
         show_enhanced_individual_gradebook
       elsif ["srgb", "individual"].include?(gradebook_version)
         show_individual_gradebook
@@ -488,7 +490,7 @@ class GradebooksController < ApplicationController
     standard_status_hash = standard_statuses.pluck(:status_name, :color).to_h
     colors = standard_status_hash.merge!(gradebook_settings(:colors))
 
-    custom_grade_statuses = custom_grade_statuses_enabled ? root_account.custom_grade_statuses.active.as_json(include_root: false) : []
+    custom_grade_statuses = custom_grade_statuses_enabled ? @context.custom_grade_statuses.as_json(include_root: false) : []
 
     gradebook_options = {
       active_grading_periods: active_grading_periods_json,
@@ -621,6 +623,7 @@ class GradebooksController < ApplicationController
       group_weighting_scheme: @context.group_weighting_scheme,
       individual_gradebook_enhancements: true,
       outcome_gradebook_enabled: outcome_gradebook_enabled?,
+      proxy_submissions_allowed: Account.site_admin.feature_enabled?(:proxy_file_uploads) && @context.grants_right?(@current_user, session, :proxy_assignment_submission),
       publish_to_sis_enabled: (
         !!@context.sis_source_id && @context.allows_grade_publishing_by(@current_user) && gradebook_is_editable
       ),
@@ -1080,6 +1083,7 @@ class GradebooksController < ApplicationController
           ),
           course_id: @context.id,
           assignment_id: @assignment.id,
+          custom_grade_statuses: Account.site_admin.feature_enabled?(:custom_gradebook_statuses) ? @context.custom_grade_statuses.as_json(include_root: false) : [],
           assignment_title: @assignment.title,
           rubric: rubric ? rubric_json(rubric, @current_user, session, style: "full") : nil,
           nonScoringRubrics: @domain_root_account.feature_enabled?(:non_scoring_rubrics),

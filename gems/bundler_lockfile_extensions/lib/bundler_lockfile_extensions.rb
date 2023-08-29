@@ -155,10 +155,10 @@ module BundlerLockfileExtensions
       # must be running `bundle cache`
       return unless ::Bundler.default_lockfile == default_lockfile_definition[:lockfile]
 
+      require "bundler_lockfile_extensions/check"
+
       if ::Bundler.frozen_bundle? && !install
         # only do the checks if we're frozen
-        require "bundler_lockfile_extensions/check"
-
         exit 1 unless Check.run
         return
       end
@@ -180,6 +180,9 @@ module BundlerLockfileExtensions
       end
       default_root = ::Bundler.root
 
+      attempts = 1
+
+      checker = Check.new
       ::Bundler.settings.temporary(cache_all_platforms: true, suppress_install_using_messages: true) do
         @lockfile_definitions.each do |lockfile_definition|
           # we already wrote the default lockfile
@@ -189,6 +192,19 @@ module BundlerLockfileExtensions
           ::Bundler.root = lockfile_definition[:gemfile].dirname
 
           relative_lockfile = lockfile_definition[:lockfile].relative_path_from(Dir.pwd)
+
+          # already up to date?
+          up_to_date = false
+          ::Bundler.settings.temporary(frozen: true) do
+            ::Bundler.ui.silence do
+              up_to_date = checker.base_check(lockfile_definition) && checker.check(lockfile_definition, allow_mismatched_dependencies: false)
+            end
+          end
+          if up_to_date
+            attempts = 1
+            next
+          end
+
           if ::Bundler.frozen_bundle?
             # if we're frozen, you have to use the pre-existing lockfile
             unless lockfile_definition[:lockfile].exist?
@@ -199,7 +215,7 @@ module BundlerLockfileExtensions
             ::Bundler.ui.info("Installing gems for #{relative_lockfile}...")
             write_lockfile(lockfile_definition, lockfile_definition[:lockfile], install:)
           else
-            ::Bundler.ui.info("Syncing to #{relative_lockfile}...")
+            ::Bundler.ui.info("Syncing to #{relative_lockfile}...") if attempts == 1
 
             # adjust locked paths from the default lockfile to be relative to _this_ gemfile
             adjusted_default_lockfile_contents = default_lockfile_contents.gsub(/PATH\n  remote: ([^\n]+)\n/) do |remote|
@@ -227,10 +243,16 @@ module BundlerLockfileExtensions
               default_lockfile = ::Bundler::LockfileParser.new(adjusted_default_lockfile_contents)
               lockfile = ::Bundler::LockfileParser.new(lockfile_definition[:lockfile].read)
 
+              dependency_changes = false
               # replace any duplicate specs with what's in the default lockfile
               lockfile.specs.map! do |spec|
-                default_specs[[spec.name, spec.platform]] || spec
+                default_spec = default_specs[[spec.name, spec.platform]]
+                next spec unless default_spec
+
+                dependency_changes ||= spec != default_spec
+                default_spec
               end
+
               lockfile.specs.replace(default_lockfile.specs + lockfile.specs).uniq!
               lockfile.sources.replace(default_lockfile.sources + lockfile.sources).uniq!
               lockfile.platforms.concat(default_lockfile.platforms).uniq!
@@ -244,20 +266,31 @@ module BundlerLockfileExtensions
               new_contents = adjusted_default_lockfile_contents
             end
 
+            had_changes = false
             # Now build a definition based on the given Gemfile, with the combined lockfile
             Tempfile.create do |temp_lockfile|
               temp_lockfile.write(new_contents)
               temp_lockfile.flush
 
-              write_lockfile(lockfile_definition, temp_lockfile.path, install:)
+              had_changes = write_lockfile(lockfile_definition, temp_lockfile.path, install:, dependency_changes:)
+            end
+
+            # if we had changes, bundler may have updated some common
+            # dependencies beyond the default lockfile, so re-run it
+            # once to reset them back to the default lockfile's version.
+            # if it's already good, the `check` check at the beginning of
+            # the loop will skip the second sync anyway.
+            if had_changes && attempts < 3
+              attempts += 1
+              redo
+            else
+              attempts = 1
             end
           end
         end
       end
 
-      require "bundler_lockfile_extensions/check"
-
-      exit 1 unless Check.run
+      exit 1 unless checker.run
     ensure
       @recursive = previous_recursive
     end
@@ -276,9 +309,10 @@ module BundlerLockfileExtensions
       @default_lockfile_definition ||= @lockfile_definitions.find { |d| d[:default] }
     end
 
-    def write_lockfile(lockfile_definition, lockfile, install:)
+    def write_lockfile(lockfile_definition, lockfile, install:, dependency_changes: false)
       lockfile_definition[:prepare]&.call
       definition = ::Bundler::Definition.build(lockfile_definition[:gemfile], lockfile, false)
+      definition.instance_variable_set(:@dependency_changes, dependency_changes) if dependency_changes
 
       resolved_remotely = false
       begin
@@ -286,7 +320,7 @@ module BundlerLockfileExtensions
         ::Bundler.ui.level = "warn"
         begin
           definition.resolve_with_cache!
-        rescue ::Bundler::GemNotFound
+        rescue ::Bundler::GemNotFound, ::Bundler::VersionConflict
           definition = ::Bundler::Definition.build(lockfile_definition[:gemfile], lockfile, false)
           definition.resolve_remotely!
           resolved_remotely = true
@@ -303,6 +337,8 @@ module BundlerLockfileExtensions
           ::Bundler::Installer.install(lockfile_definition[:gemfile].dirname, definition, {})
         end
       end
+
+      !definition.nothing_changed?
     end
   end
 

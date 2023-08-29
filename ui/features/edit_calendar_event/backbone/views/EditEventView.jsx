@@ -19,7 +19,6 @@
 import $ from 'jquery'
 import _ from 'underscore'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
 import tz from '@canvas/timezone'
 import moment from 'moment-timezone'
 import Backbone from '@canvas/backbone'
@@ -39,8 +38,11 @@ import filterConferenceTypes from '@canvas/calendar-conferences/filterConference
 import FrequencyPicker, {
   FrequencyPickerErrorBoundary,
 } from '@canvas/calendar/react/RecurringEvents/FrequencyPicker/FrequencyPicker'
+import Course from '@canvas/courses/backbone/models/Course'
 import {renderUpdateCalendarEventDialog} from '@canvas/calendar/react/RecurringEvents/UpdateCalendarEventDialog'
 import {RRULEToFrequencyOptionValue} from '@canvas/calendar/react/RecurringEvents/FrequencyPicker/utils'
+import {CommonEventShowError} from '@canvas/calendar/jquery/CommonEvent/CommonEvent'
+import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
 
 const I18n = useI18nScope('calendar.edit')
 
@@ -82,23 +84,29 @@ export default class EditCalendarEventView extends Backbone.View {
         'course_sections',
         'rrule'
       )
-      if (picked_params.start_at) {
-        picked_params.start_date = tz.format(
-          $.fudgeDateForProfileTimezone(picked_params.start_at),
-          'date.formats.default'
-        )
+      if (picked_params.start_date) {
+        // this comes from the calendar via url params when editing an event
+        picked_params.start_date = new Intl.DateTimeFormat(ENV.LOCALE, {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          timeZone: ENV.TIMEZONE,
+        }).format(new Date(picked_params.start_date))
+      } else if (picked_params.start_at) {
+        // this comes from the query to canvas for the event
+        picked_params.start_date = new Intl.DateTimeFormat(ENV.LOCALE, {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          timeZone: ENV.TIMEZONE,
+        }).format(new Date(picked_params.start_at))
       } else {
-        picked_params.start_date = tz.format(
-          $.fudgeDateForProfileTimezone(picked_params.start_date),
-          'date.formats.default'
-        )
-      }
-
-      if (!picked_params.start_date) {
-        picked_params.start_date = tz.format(
-          moment().tz(ENV.TIMEZONE).startOf('day').toDate(),
-          'date.formats.default'
-        )
+        picked_params.start_date = new Intl.DateTimeFormat(ENV.LOCALE, {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          timeZone: ENV.TIMEZONE,
+        }).format(new Date())
       }
 
       if (picked_params.new_context_code) {
@@ -210,7 +218,7 @@ export default class EditCalendarEventView extends Backbone.View {
   _handleFrequencyChange(newFrequency, newRRule) {
     if (newFrequency !== 'custom') {
       this.model.set('rrule', newRRule)
-      this.renderRecurringEventFrequencyPicker(newFrequency, newRRule)
+      this.renderRecurringEventFrequencyPicker()
     }
   }
 
@@ -228,6 +236,14 @@ export default class EditCalendarEventView extends Backbone.View {
 
       const date = eventStart.isValid() ? eventStart.toISOString(true) : undefined
 
+      let courseEndAt
+
+      if (this.course) {
+        courseEndAt = this.course.get('restrict_enrollments_to_course_dates')
+          ? this.course.get('end_at')
+          : this.course.get('term')?.end_at
+      }
+
       ReactDOM.render(
         <div id="recurring_event_frequency_picker" style={{margin: '.5rem 0 1rem'}}>
           <FrequencyPickerErrorBoundary>
@@ -241,6 +257,7 @@ export default class EditCalendarEventView extends Backbone.View {
               rrule={rrule}
               width="fit"
               onChange={this.handleFrequencyChange}
+              courseEndAt={courseEndAt || undefined}
             />
           </FrequencyPickerErrorBoundary>
         </div>,
@@ -256,6 +273,23 @@ export default class EditCalendarEventView extends Backbone.View {
     this.$el.find('[name="start_date"]').on('change', () => {
       this.renderRecurringEventFrequencyPicker()
     })
+
+    const context_code = this.model.get('context_code')
+    const [context_type, context_id] = context_code.split('_')
+    if (context_type === 'course') {
+      this.course = new Course()
+      this.course.urlRoot = `/api/v1/courses/${context_id}?include[]=term`
+      this.course
+        .fetch()
+        .done(() => this.renderRecurringEventFrequencyPicker())
+        .fail(err =>
+          showFlashAlert({
+            message: 'Failed to fetch course data.',
+            err,
+            type: 'error',
+          })
+        )
+    }
   }
 
   render() {
@@ -346,6 +380,7 @@ export default class EditCalendarEventView extends Backbone.View {
         },
         delUrl: this.model.url(),
         isRepeating: !!this.model.get('series_uuid'),
+        isSeriesHead: !!this.model.get('series_head'),
       })
     } else {
       const msg = I18n.t(
@@ -461,44 +496,22 @@ export default class EditCalendarEventView extends Backbone.View {
     return this.saveEvent(eventData)
   }
 
-  renderWhichEditDialog(eventData) {
-    const modalNode = document.getElementById('which_edit_modal')
-    const params = {}
-    Object.keys(eventData).forEach(key => (params[`calendar_event[${key}]`] = eventData[key]))
-
-    return renderUpdateCalendarEventDialog(modalNode, {
-      event: this.model.attributes,
-      params,
-      isOpen: true,
-      onCancel: () => ReactDOM.unmountComponentAtNode(modalNode),
-      onUpdated: () => this.redirectWithMessage(I18n.t('event_saved', 'Event Saved Successfully')),
-      onError: response => {
-        showFlashAlert({
-          message: response.message,
-          err: null,
-          type: 'error',
-        })
-        ReactDOM.unmountComponentAtNode(modalNode)
-      },
-    })
-  }
-
-  saveEvent(eventData) {
+  async saveEvent(eventData) {
     RichContentEditor.closeRCE(this.$('textarea'))
 
     if (ENV?.FEATURES?.calendar_series && this.model.get('series_uuid')) {
-      return this.renderWhichEditDialog(eventData)
+      const which = await renderUpdateCalendarEventDialog(this.model.attributes)
+      if (which === undefined) return
+      this.model.set('which', which)
     }
 
     return this.$el.disableWhileLoading(
       this.model.save(eventData, {
         success: () => this.redirectWithMessage(I18n.t('event_saved', 'Event Saved Successfully')),
-        error: (_model, response, _options) =>
-          showFlashAlert({
-            message: response.responseText,
-            err: null,
-            type: 'error',
-          }),
+        error: (model, response, _options) => {
+          CommonEventShowError(JSON.parse(response.responseText))
+        },
+        skipDefaultError: true,
       })
     )
   }

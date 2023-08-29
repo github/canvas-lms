@@ -373,6 +373,7 @@ it('does not render the attempt select if peerReviewModeEnabled is set to true',
     ...props.submission,
     assignedAssessments: [
       {
+        assetId: '1',
         anonymousUser: null,
         anonymousId: 'xaU9cd',
         workflowState: 'assigned',
@@ -443,6 +444,7 @@ describe('submission workflow tracker', () => {
       ...props.submission,
       assignedAssessments: [
         {
+          assetId: '1',
           anonymousUser: null,
           anonymousId: 'xaU9cd',
           workflowState: 'assigned',
@@ -724,12 +726,11 @@ describe('Add Comment/View Feedback button', () => {
     })
     props.assignment.env.peerReviewModeEnabled = false
     props.assignment.env.peerReviewAvailable = false
-    const {getByRole} = render(<Header {...props} />)
-    expect(
-      getByRole('button', {
-        name: /After the first attempt, you cannot leave comments until you submit the assignment./,
-      })
-    ).toBeInTheDocument()
+    const {getByText} = render(<Header {...props} />)
+    const screenText = getByText(
+      /After the first attempt, you cannot leave comments until you submit the assignment./
+    )
+    expect(screenText).toBeInTheDocument()
   })
 
   it('does not render additional info button if unsubmitted attempt==1', async () => {
@@ -769,6 +770,7 @@ describe('Add Comment/View Feedback button', () => {
       ...props.submission,
       assignedAssessments: [
         {
+          assetId: '1',
           anonymousUser: null,
           anonymousId: 'xaU9cd',
           workflowState: 'assigned',
@@ -795,6 +797,7 @@ describe('Add Comment/View Feedback button', () => {
       ...props.submission,
       assignedAssessments: [
         {
+          assetId: '1',
           anonymousUser: null,
           anonymousId: 'xaU9cd',
           workflowState: 'assigned',
@@ -810,12 +813,11 @@ describe('Add Comment/View Feedback button', () => {
     const props = await mockAssignmentAndSubmission()
     props.assignment.env.peerReviewModeEnabled = true
     props.assignment.env.peerReviewAvailable = false
-    const {getByRole} = render(<Header {...props} />)
-    expect(
-      getByRole('button', {
-        name: /You cannot leave comments until reviewer and reviewee submits the assignment./,
-      })
-    ).toBeInTheDocument()
+    const {getByText} = render(<Header {...props} />)
+    const screenText = getByText(
+      /You cannot leave comments until reviewer and reviewee submits the assignment./
+    )
+    expect(screenText).toBeInTheDocument()
   })
 })
 
@@ -827,6 +829,7 @@ describe('Peer reviews counter', () => {
       ...props.submission,
       assignedAssessments: [
         {
+          assetId: '1',
           anonymousUser: null,
           anonymousId: 'xaU9cd',
           workflowState: 'assigned',
@@ -856,16 +859,19 @@ describe('Peer reviews counter', () => {
         ...props.submission,
         assignedAssessments: [
           {
+            assetId: '1',
             anonymousId: 'xaU9cd',
             workflowState: 'assigned',
             assetSubmissionType: 'online_text_entry',
           },
           {
+            assetId: '2',
             anonymousId: 'maT9fd',
             workflowState: 'assigned',
             assetSubmissionType: 'online_text_entry',
           },
           {
+            assetId: '3',
             anonymousId: 'vaN9fd',
             workflowState: 'assigned',
             assetSubmissionType: 'online_text_entry',
@@ -904,19 +910,22 @@ describe('Peer reviews counter', () => {
         ...props.submission,
         assignedAssessments: [
           {
-            anonymizedUser: {_id: '1'},
+            assetId: '1',
+            anonymizedUser: {_id: '1', displayName: "Jim"},
             anonymousId: null,
             workflowState: 'assigned',
             assetSubmissionType: 'online_text_entry',
           },
           {
-            anonymizedUser: {_id: '2'},
+            assetId: '2',
+            anonymizedUser: {_id: '2', displayName: "Bob"},
             anonymousId: null,
             workflowState: 'assigned',
             assetSubmissionType: 'online_text_entry',
           },
           {
-            anonymizedUser: {_id: '3'},
+            assetId: '3',
+            anonymizedUser: {_id: '3', displayName: "Tim"},
             anonymousId: null,
             workflowState: 'assigned',
             assetSubmissionType: 'online_text_entry',
@@ -953,11 +962,13 @@ describe('Peer reviews counter', () => {
       ...props.submission,
       assignedAssessments: [
         {
+          assetId: '1',
           anonymousId: 'xaU9cd',
           workflowState: 'assigned',
           assetSubmissionType: 'online_text_entry',
         },
         {
+          assetId: '2',
           anonymousId: 'maT9fd',
           workflowState: 'assigned',
           assetSubmissionType: 'online_text_entry',
@@ -967,5 +978,79 @@ describe('Peer reviews counter', () => {
     const {queryByTestId} = render(<Header {...props} />)
     const assessmentsCount = props.reviewerSubmission.assignedAssessments.length
     expect(queryByTestId('total-counter')).toHaveTextContent(assessmentsCount.toString())
+  })
+
+  describe('required peer reviews link in assignment header with peer review mode disabled', () => {
+    let props
+    beforeAll(async () => {
+      props = await mockAssignmentAndSubmission({
+        Submission: {...SubmissionMocks.submitted},
+      })
+      props.allSubmissions = [props.submission]
+      props.assignment.env.peerReviewModeEnabled = false
+      props.submission.assignedAssessments = [
+        {
+          assetId: '1',
+          anonymizedUser: {_id: '1', displayName: 'Jim'},
+          anonymousId: null,
+          workflowState: 'assigned',
+          assetSubmissionType: null,
+        },
+      ]
+    })
+
+    it('renders the required peer review link with peer reviews assigned', () => {
+      const {queryByTestId} = render(<Header {...props} />)
+      expect(queryByTestId('assignment-student-header')).toHaveTextContent('Required Peer Reviews')
+    })
+
+    it('does not render the required peer review link with the number of peer reviews assigned when no peer reviews are assigned', () => {
+      props.submission.assignedAssessments = []
+      const {queryByTestId} = render(<Header {...props} />)
+      expect(queryByTestId('header-peer-review-link')).toBeNull()
+    })
+  })
+
+  describe('required peer reviews link in assignment header with peer review mode enabled', () => {
+    let props
+    beforeAll(async () => {
+      props = await mockAssignmentAndSubmission()
+      props.assignment.env.peerReviewModeEnabled = true
+    })
+
+    it('renders the required peer review link with peer reviews assigned when both the reviewer and reviewee have submitted to the assignment', () => {
+      props.reviewerSubmission = {
+        ...props.submission,
+        assignedAssessments: [
+          {
+            assetId: '1',
+            anonymousUser: null,
+            anonymousId: 'xaU9cd',
+            workflowState: 'assigned',
+            assetSubmissionType: 'online_text_entry',
+          },
+        ],
+      }
+      const {queryByTestId} = render(<Header {...props} />)
+      expect(queryByTestId('assignment-student-header')).toHaveTextContent('Required Peer Reviews')
+    })
+
+    it('renders the required peer review link with peer reviews assigned when no reviews are ready or reviewer has not submitted to the assignment', () => {
+      props.reviewerSubmission = null
+      props.peerReviewLinkData = {
+        ...props.submission,
+        assignedAssessments: [
+          {
+            assetId: '1',
+            anonymousUser: null,
+            anonymousId: 'xaU9cd',
+            workflowState: 'assigned',
+            assetSubmissionType: null,
+          },
+        ],
+      }
+      const {queryByTestId} = render(<Header {...props} />)
+      expect(queryByTestId('assignment-student-header')).toHaveTextContent('Required Peer Reviews')
+    })
   })
 })

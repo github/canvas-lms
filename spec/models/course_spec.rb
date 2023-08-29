@@ -3704,7 +3704,7 @@ describe Course do
         it "updates all student enrollments with pending and a last update status" do
           @course = course_factory
           make_student_enrollments
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq %w[published error unpublishable error unpublishable unpublishable unpublished unpublished unpublished]
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq %w[published error unpublishable error unpublishable unpublishable unpublished unpublished unpublished]
           expect(@student_enrollments.map(&:grade_publishing_message)).to eq [nil, "cause of this reason", nil, "cause of that reason", nil, nil, nil, nil, nil]
           expect(@student_enrollments.map(&:workflow_state)).to eq (["active"] * 6) + ["inactive"] + (["active"] * 2)
           expect(@student_enrollments.map(&:last_publish_attempt_at)).to eq [nil] * 9
@@ -3713,7 +3713,7 @@ describe Course do
           allow(@plugin).to receive(:enabled?).and_return(true)
           @plugin_settings[:publish_endpoint] = "http://localhost/endpoint"
           @course.publish_final_grades(@user)
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq (["pending"] * 6) + ["unpublished"] + (["pending"] * 2)
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq (["pending"] * 6) + ["unpublished"] + (["pending"] * 2)
           expect(@student_enrollments.map(&:grade_publishing_message)).to eq [nil] * 9
           expect(@student_enrollments.map(&:workflow_state)).to eq (["active"] * 6) + ["inactive"] + (["active"] * 2)
           @student_enrollments.map(&:last_publish_attempt_at).each_with_index do |time, i|
@@ -3878,7 +3878,7 @@ describe Course do
           expect(SSLCommon).to receive(:post_data).with("http://localhost/endpoint", "post1", "test/mime1", {})
           expect(SSLCommon).to receive(:post_data).with("http://localhost/endpoint", "post2", "test/mime2", {})
           @course.send_final_grades_to_endpoint @user
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq %w[unpublishable unpublishable published unpublishable published published unpublished unpublishable published]
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq %w[unpublishable unpublishable published unpublishable published published unpublished unpublishable published]
           expect(@student_enrollments.map(&:grade_publishing_message)).to eq [nil] * 9
         end
 
@@ -3941,7 +3941,7 @@ describe Course do
         it "makes sure grade publishing is enabled" do
           allow(@plugin).to receive(:enabled?).and_return(false)
           expect { @course.send_final_grades_to_endpoint nil }.to raise_error("final grade publishing disabled")
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq (["error"] * 6) + ["unpublished"] + (["error"] * 2)
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq (["error"] * 6) + ["unpublished"] + (["error"] * 2)
           expect(@student_enrollments.map(&:grade_publishing_message)).to eq (["final grade publishing disabled"] * 6) + [nil] + (["final grade publishing disabled"] * 2)
         end
 
@@ -3949,7 +3949,7 @@ describe Course do
           allow(@plugin).to receive(:enabled?).and_return(true)
           @plugin_settings[:publish_endpoint] = ""
           expect { @course.send_final_grades_to_endpoint nil }.to raise_error("endpoint undefined")
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq (["error"] * 6) + ["unpublished"] + (["error"] * 2)
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq (["error"] * 6) + ["unpublished"] + (["error"] * 2)
           expect(@student_enrollments.map(&:grade_publishing_message)).to eq (["endpoint undefined"] * 6) + [nil] + (["endpoint undefined"] * 2)
         end
 
@@ -3962,7 +3962,7 @@ describe Course do
           allow(@plugin).to receive(:enabled?).and_return(true)
           @plugin_settings[:publish_endpoint] = "http://localhost/endpoint"
           expect { @course.send_final_grades_to_endpoint @user }.to raise_error("publishing disallowed for this publishing user")
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq (["error"] * 6) + ["unpublished"] + (["error"] * 2)
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq (["error"] * 6) + ["unpublished"] + (["error"] * 2)
           expect(@student_enrollments.map(&:grade_publishing_message)).to eq (["publishing disallowed for this publishing user"] * 6) + [nil] + (["publishing disallowed for this publishing user"] * 2)
         end
 
@@ -3975,7 +3975,7 @@ describe Course do
           allow(@plugin).to receive(:enabled?).and_return(true)
           @plugin_settings[:publish_endpoint] = "http://localhost/endpoint"
           expect { @course.send_final_grades_to_endpoint @user }.to raise_error("grade publishing requires a grading standard")
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq (["error"] * 6) + ["unpublished"] + (["error"] * 2)
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq (["error"] * 6) + ["unpublished"] + (["error"] * 2)
           expect(@student_enrollments.map(&:grade_publishing_message)).to eq (["grade publishing requires a grading standard"] * 6) + [nil] + (["grade publishing requires a grading standard"] * 2)
         end
 
@@ -3984,7 +3984,7 @@ describe Course do
           @plugin_settings[:publish_endpoint] = "http://localhost/endpoint"
           @plugin_settings[:format_type] = "invalid_Format"
           expect { @course.send_final_grades_to_endpoint @user }.to raise_error("unknown format type: invalid_Format")
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq (["error"] * 6) + ["unpublished"] + (["error"] * 2)
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq (["error"] * 6) + ["unpublished"] + (["error"] * 2)
           expect(@student_enrollments.map(&:grade_publishing_message)).to eq (["unknown format type: invalid_Format"] * 6) + [nil] + (["unknown format type: invalid_Format"] * 2)
         end
 
@@ -4014,7 +4014,7 @@ describe Course do
           expect(SSLCommon).to receive(:post_data).with("http://localhost/endpoint", "post1", "test/mime1", {})
           expect(SSLCommon).to receive(:post_data).with("http://localhost/endpoint", "post2", "test/mime2", {})
           @course.send_final_grades_to_endpoint @user
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq ["unpublishable", published_status, "unpublishable", published_status, published_status, "unpublishable", "unpublished", "unpublishable", published_status]
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq ["unpublishable", published_status, "unpublishable", published_status, published_status, "unpublishable", "unpublished", "unpublishable", published_status]
           expect(@student_enrollments.map(&:grade_publishing_message)).to eq [nil] * 9
         end
 
@@ -4081,7 +4081,7 @@ describe Course do
           expect(SSLCommon).to receive(:post_data).with("http://localhost/endpoint", "post2", "test/mime2", {}).and_raise("waaah fail")
           expect(SSLCommon).to receive(:post_data).with("http://localhost/endpoint", "post3", "test/mime3", {})
           expect { @course.send_final_grades_to_endpoint(@user) }.to raise_error("waaah fail")
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq %w[published published published published error unpublishable unpublished unpublishable error]
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq %w[published published published published error unpublishable unpublished unpublishable error]
           expect(@student_enrollments.map(&:grade_publishing_message)).to eq ([nil] * 4) + ["waaah fail"] + ([nil] * 3) + ["waaah fail"]
         end
 
@@ -4115,7 +4115,7 @@ describe Course do
           expect(SSLCommon).to receive(:post_data).with("http://localhost/endpoint", "post2", "test/mime2", {}).and_raise("waaah fail")
           expect(SSLCommon).to receive(:post_data).with("http://localhost/endpoint", "post3", "test/mime3", {})
           expect { @course.send_final_grades_to_endpoint(@user) }.to raise_error("waaah fail")
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq %w[published error published error error unpublishable unpublished unpublishable error]
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq %w[published error published error error unpublishable unpublished unpublishable error]
           expect(@student_enrollments.map(&:grade_publishing_message)).to eq [nil, "waaah fail", nil, "waaah fail", "waaah fail", nil, nil, nil, "waaah fail"]
         end
 
@@ -4132,7 +4132,7 @@ describe Course do
                                                                            }
                                                                          })
           expect { @course.send_final_grades_to_endpoint(@user) }.to raise_error("waaah fail")
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq %w[error error error error error error unpublished error error]
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq %w[error error error error error error unpublished error error]
           expect(@student_enrollments.map(&:grade_publishing_message)).to eq (["waaah fail"] * 6) + [nil] + (["waaah fail"] * 2)
         end
 
@@ -4163,7 +4163,7 @@ describe Course do
           expect(SSLCommon).to receive(:post_data).with("http://localhost/endpoint", "post1", "test/mime1", { "header_param" => "header_value" })
           expect(SSLCommon).to receive(:post_data).with("http://localhost/endpoint", "post2", "test/mime2", {})
           @course.send_final_grades_to_endpoint(@user)
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq %w[unpublishable published unpublishable published published published unpublished unpublishable unpublishable]
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq %w[unpublishable published unpublishable published published published unpublished unpublishable unpublishable]
         end
 
         it "updates enrollment status if no resource provided" do
@@ -4191,7 +4191,7 @@ describe Course do
                                                                          })
           expect(SSLCommon).not_to receive(:post_data)
           @course.send_final_grades_to_endpoint @user
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq %w[unpublishable published unpublishable published published unpublishable unpublished unpublishable published]
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq %w[unpublishable published unpublishable published published unpublishable unpublished unpublishable published]
           expect(@student_enrollments.map(&:grade_publishing_message)).to eq [nil] * 9
         end
       end
@@ -4368,6 +4368,7 @@ describe Course do
         context "when including final grade overrides" do
           before(:once) do
             @course.update!(grading_standard_id: 0)
+            Account.site_admin.disable_feature!(:custom_gradebook_statuses)
           end
 
           before do
@@ -4375,12 +4376,12 @@ describe Course do
             @course.update!(allow_final_grade_override: true)
           end
 
-          def csv_output
+          def csv_output(include_final_grade_overrides: true)
             @course.generate_grade_publishing_csv_output(
               @ase,
               @user,
               @pseudonym,
-              include_final_grade_overrides: true
+              include_final_grade_overrides:
             )
           end
 
@@ -4419,6 +4420,42 @@ describe Course do
             @ase[1].scores.find_by(course_score: true).update!(final_score: nil, override_score: nil)
             enrollment_ids = csv_output[0][0]
             expect(enrollment_ids).not_to include @ase[1].id
+          end
+
+          context "when including custom grade statuses" do
+            before do
+              Account.site_admin.enable_feature!(:custom_gradebook_statuses)
+              @custom_grade_status = CustomGradeStatus.create!(name: "new status", color: "#000000", root_account_id: @course.root_account_id, created_by: user_model)
+              @ase[1].scores.find_by(course_score: true).update!(final_score: 0, override_score: 100, custom_grade_status: @custom_grade_status)
+            end
+
+            it "includes custom_grade_status in the csv output" do
+              output = csv_output[0][1]
+              expect(output).to include("custom_grade_status")
+              expect(output).to include(
+                "#{@user.id},U1,#{@course.id},,#{@ase[1].course_section_id},,#{@ase[1].user.id},,#{@ase[1].id},active,100.0,A,#{@custom_grade_status.name}\n"
+              )
+            end
+
+            it "does not include custom_grade_status in the csv output if include_final_grade_overrides is disabled" do
+              @course.update!(allow_final_grade_override: false)
+              output = csv_output(include_final_grade_overrides: false)[0][1]
+              expect(output).to include(
+                "#{@user.id},U1,#{@course.id},,#{@ase[1].course_section_id},,#{@ase[1].user.id},,#{@ase[1].id},active,0.0,F\n"
+              )
+              expect(output).not_to include("custom_grade_status")
+              expect(output).not_to include(@custom_grade_status.name)
+            end
+
+            it "does not include custom_grade_status if feature flag is disabled" do
+              Account.site_admin.disable_feature!(:custom_gradebook_statuses)
+              output = csv_output[0][1]
+              expect(output).to include(
+                "#{@user.id},U1,#{@course.id},,#{@ase[1].course_section_id},,#{@ase[1].user.id},,#{@ase[1].id},active,100.0,A\n"
+              )
+              expect(output).not_to include("custom_grade_status")
+              expect(output).not_to include(@custom_grade_status.name)
+            end
           end
         end
 
@@ -4469,7 +4506,7 @@ describe Course do
           make_student_enrollments
           first_time = Time.now.utc
           second_time = first_time + 2.seconds
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq %w[published error unpublishable error unpublishable unpublishable unpublished unpublished unpublished]
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq %w[published error unpublishable error unpublishable unpublishable unpublished unpublished unpublished]
           @student_enrollments[0].grade_publishing_status = "pending"
           @student_enrollments[0].last_publish_attempt_at = first_time
           @student_enrollments[1].grade_publishing_status = "publishing"
@@ -4483,9 +4520,9 @@ describe Course do
           @student_enrollments[5].grade_publishing_status = "unpublished"
           @student_enrollments[5].last_publish_attempt_at = first_time
           @student_enrollments.map(&:save)
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq %w[pending publishing pending publishing published unpublished unpublished unpublished unpublished]
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq %w[pending publishing pending publishing published unpublished unpublished unpublished unpublished]
           @course.expire_pending_grade_publishing_statuses(first_time)
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq %w[error error pending publishing published unpublished unpublished unpublished unpublished]
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq %w[error error pending publishing published unpublished unpublished unpublished unpublished]
         end
       end
 
@@ -8046,6 +8083,100 @@ describe Course do
           expect(@course.restrict_quantitative_data?(@admin)).to be false
         end
       end
+    end
+  end
+
+  describe "#default_grading_standard" do
+    before do
+      @root = Account.default
+      @course = Account.default.courses.build
+      @course.update(root_account_id: @root.id)
+    end
+
+    def default_scheme(context)
+      gs = GradingStandard.new(context:, title: "My Grading Standard", data: { "A" => 0.94, "B" => 0, })
+      gs.save!
+      gs
+    end
+
+    it "returns nil if no grading standards exist" do
+      expect(@course.default_grading_standard).to be_nil
+    end
+
+    it "returns the default grading standard if one exists" do
+      grading_standard = default_scheme(@course)
+      @course.grading_standard = grading_standard
+      @course.save!
+      expect(@course.default_grading_standard).to eq grading_standard
+    end
+
+    it "returns the account default grading standard if no course default exists" do
+      grading_standard = default_scheme(@course.account)
+      @course.account.grading_standard = grading_standard
+      @course.account.save!
+      expect(@course.default_grading_standard).to eq grading_standard
+    end
+  end
+
+  describe "#grading_standard_enabled" do
+    before do
+      @root = Account.default
+      @course = Account.default.courses.build
+      @course.update(root_account_id: @root.id)
+    end
+
+    def default_scheme(context)
+      gs = GradingStandard.new(context:, title: "My Grading Standard", data: { "A" => 0.94, "B" => 0, })
+      gs.save!
+      gs
+    end
+
+    it "returns false if no grading standards exist" do
+      expect(@course.grading_standard_enabled).to be_falsey
+    end
+
+    it "returns true if a grading standard exists" do
+      @course.grading_standard = default_scheme(@course)
+      @course.save!
+      expect(@course.grading_standard_enabled).to be_truthy
+    end
+
+    it "returns true if the account has a grading standard" do
+      @course.account.grading_standard = default_scheme(@course.account)
+      @course.account.save!
+      expect(@course.grading_standard_enabled).to be_truthy
+    end
+  end
+
+  describe "#course_grading_standard_enabled" do
+    before do
+      @root = Account.default
+      @course = Account.default.courses.build
+      @course.update(root_account_id: @root.id)
+    end
+
+    def default_scheme(context)
+      gs = GradingStandard.new(context:, title: "My Grading Standard", data: { "A" => 0.94, "B" => 0, })
+      gs.save!
+      gs
+    end
+
+    it "returns false if no course grading standard" do
+      expect(@course.course_grading_standard_enabled).to be_falsey
+    end
+
+    it "returns true if a course grading standard exists" do
+      @course.grading_standard = default_scheme(@course)
+      @course.save!
+
+      expect(@course.course_grading_standard_enabled).to be_truthy
+    end
+
+    it "returns false even if the account has a grading standard" do
+      @course.account.grading_standard = default_scheme(@course.account)
+      @course.account.save!
+
+      expect(@course.course_grading_standard_enabled).to be_falsey
     end
   end
 

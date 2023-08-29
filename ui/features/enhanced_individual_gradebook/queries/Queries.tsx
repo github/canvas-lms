@@ -67,6 +67,7 @@ export const GRADEBOOK_QUERY = gql`
             dropHighest
             dropLowest
           }
+          sisId
           state
           position
           assignmentsConnection(filter: {gradingPeriodId: null}) {
@@ -149,6 +150,8 @@ export const GRADEBOOK_STUDENT_QUERY = gql`
           userId
           cachedDueDate
           gradingPeriodId
+          deductedPoints
+          enteredGrade
         }
       }
     }

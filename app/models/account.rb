@@ -351,7 +351,7 @@ class Account < ActiveRecord::Base
   add_setting :app_center_access_token
   add_setting :enable_offline_web_export, boolean: true, default: false, inheritable: true
   add_setting :disable_rce_media_uploads, boolean: true, default: false, inheritable: true
-  add_setting :allow_gradebook_show_first_last_names, boolean: true, default: false
+  add_setting :allow_gradebook_show_first_last_names, boolean: true, default: false, inheritable: true
 
   add_setting :strict_sis_check, boolean: true, root_only: true, default: false
   add_setting :lock_all_announcements, default: false, boolean: true, inheritable: true
@@ -493,6 +493,10 @@ class Account < ActiveRecord::Base
 
   def disable_rce_media_uploads?
     disable_rce_media_uploads[:value]
+  end
+
+  def allow_gradebook_show_first_last_names?
+    allow_gradebook_show_first_last_names[:value]
   end
 
   def enable_as_k5_account?
@@ -1288,12 +1292,12 @@ class Account < ActiveRecord::Base
 
   def get_account_role_by_name(role_name)
     role = get_role_by_name(role_name)
-    return role if role&.account_role?
+    role if role&.account_role?
   end
 
   def get_course_role_by_name(role_name)
     role = get_role_by_name(role_name)
-    return role if role&.course_role?
+    role if role&.course_role?
   end
 
   def get_role_by_name(role_name)
@@ -1325,7 +1329,7 @@ class Account < ActiveRecord::Base
 
   def get_role_by_id(role_id)
     role = Role.get_role_by_id(role_id)
-    return role if valid_role?(role)
+    role if valid_role?(role)
   end
 
   def valid_role?(role)

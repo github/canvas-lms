@@ -115,7 +115,7 @@ module Canvas
   end
 
   def self.semver_revision
-    revision&.gsub("-", "")
+    revision&.delete("-")
   end
 
   DEFAULT_RETRY_CALLBACK = lambda do |ex, tries|
@@ -131,9 +131,8 @@ module Canvas
   end
 
   DEFAULT_RETRIABLE_OPTIONS = {
-    interval: ->(attempts) { 0.5 + (4**(attempts - 1)) }, # Sleeps: 0.5, 4.5, 16.5
+    intervals: [0.5, 4.5, 16.5],
     on_retry: DEFAULT_RETRY_CALLBACK,
-    tries: 3,
   }.freeze
   def self.retriable(opts = {}, &)
     if opts[:on_retry]

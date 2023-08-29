@@ -91,6 +91,7 @@ class ViewManager extends React.Component {
     displayedAttempt: null,
     dummyNextSubmission: null,
     submissions: [],
+    reviewerSubmission: [],
   }
 
   static getDerivedStateFromProps(props, state) {
@@ -213,7 +214,7 @@ class ViewManager extends React.Component {
       },
       () => {
         document
-          .querySelector('button[data-test-id=assignments-2-assignment-toggle-details]')
+          .querySelector('button[data-testid=assignments-2-assignment-toggle-details]')
           .focus()
       }
     )

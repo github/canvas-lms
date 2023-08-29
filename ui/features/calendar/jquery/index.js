@@ -26,6 +26,7 @@ import _ from 'underscore'
 import tz from '@canvas/timezone'
 import moment from 'moment'
 import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
+import decodeFromHex from '@canvas/util/decodeFromHex'
 import withinMomentDates from '../momentDateHelper'
 import fcUtil from '@canvas/calendar/jquery/fcUtil'
 import userSettings from '@canvas/user-settings'
@@ -184,6 +185,7 @@ export default class Calendar {
       'CommonEvent/eventsDeletingFromSeries': this.eventsDeletingFromSeries,
       'CommonEvent/eventDeleted': this.eventDeleted,
       'CommonEvent/eventsDeletedFromSeries': this.eventsDeletedFromSeries,
+      'CommonEvent/eventsUpdatedFromSeriesDelete': this.eventsUpdatedFromSeriesDelete,
       'CommonEvent/eventSaving': this.eventSaving,
       'CommonEvent/eventSavingFromSeries': this.eventSavingFromSeries,
       'CommonEvent/eventSaved': this.eventSaved,
@@ -964,6 +966,30 @@ export default class Calendar {
     })
   }
 
+  // When we delete an event + all following from a series
+  // the remaining events get updated with a new rrule
+  eventsUpdatedFromSeriesDelete = ({updatedEvents}) => {
+    const candidateEventsInCalendar = this.calendar.fullCalendar('getEventCache').filter(c => {
+      if (c.eventType === 'calendar_event') {
+        const updatedEventIndex = updatedEvents.findIndex(e => c.calendarEvent.id === e.id)
+        if (updatedEventIndex >= 0) {
+          c.calendarEvent = c.object = updatedEvents[updatedEventIndex]
+          c.series_natural_language = c.calendarEvent.series_natural_language
+          return true
+        }
+      }
+      return false
+    })
+
+    candidateEventsInCalendar.forEach(e => {
+      this.updateEvent(e)
+      $.publish('CommonEvent/eventSaved', e)
+    })
+
+    // this.dataSource.clearCache()
+    // this.calendar.fullCalendar('refetchEvents')
+  }
+
   // When an assignment event is updated, update its related overrides.
   updateOverrides = event => {
     _.each(this.dataSource.cache.contexts[event.contextCode()].events, (override, key) => {
@@ -1234,7 +1260,7 @@ export default class Calendar {
         data = deparam(window.location.hash.substring(1)) || {}
       } else {
         // legacy
-        data = $.parseJSON($.decodeFromHex(window.location.hash.substring(1))) || {}
+        data = $.parseJSON(decodeFromHex(window.location.hash.substring(1))) || {}
       }
     } catch (e) {
       data = {}

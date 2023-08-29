@@ -234,6 +234,7 @@ export const SplitScreenViewContainer = props => {
         !!props.discussionTopic.anonymousState && props.discussionTopic.canReplyAnonymously,
     })
     createDiscussionEntry({variables, optimisticResponse})
+    props.setHighlightEntryId('DISCUSSION_ENTRY_PLACEHOLDER')
   }
 
   const [createDiscussionEntryDraft] = useMutation(CREATE_DISCUSSION_ENTRY_DRAFT, {
@@ -448,7 +449,7 @@ export const SplitScreenViewContainer = props => {
           goToTopic={props.goToTopic}
           isHighlighted={props.highlightEntryId === props.discussionEntryId}
         >
-          {props.RCEOpen && (
+          {props.RCEOpen && props.isTrayFinishedOpening && (
             <View
               display="block"
               background="primary"
@@ -554,7 +555,7 @@ export const SplitScreenViewContainer = props => {
             screenReaderLabel="Close"
             data-testid="splitscreen-container-close-button"
             onClick={() => {
-              if(props.setRCEOpen){
+              if (props.setRCEOpen) {
                 props.setRCEOpen(false)
               }
               if (props.onClose) {
@@ -582,6 +583,7 @@ SplitScreenViewContainer.propTypes = {
   relativeEntryId: PropTypes.string,
   removeDraftFromDiscussionCache: PropTypes.func,
   updateDraftCache: PropTypes.func,
+  isTrayFinishedOpening: PropTypes.bool,
 }
 
 export default SplitScreenViewContainer

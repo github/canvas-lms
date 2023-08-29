@@ -292,6 +292,19 @@ describe AssignmentsController do
         get "edit", params: { course_id: @course.id, id: @assignment.id }
         expect(assigns[:js_env][:COURSE_DEFAULT_GRADING_SCHEME_ID]).to be_nil
       end
+
+      it "sets COURSE_DEFAULT_GRADING_SCHEME_ID to account value if course has none" do
+        Account.site_admin.enable_feature!(:grading_scheme_updates)
+        gs = GradingStandard.new(context: @course.account, title: "My Grading Standard", data: { "A" => 0.94, "B" => 0, })
+        gs.save!
+        @course.account.update_attribute :grading_standard_id, gs.id
+
+        user_session @teacher
+        get "edit", params: { course_id: @course.id, id: @assignment.id }
+
+        expect(@course.account.grading_standard_id).to eq gs.id
+        expect(assigns[:js_env][:COURSE_DEFAULT_GRADING_SCHEME_ID]).to eq gs.id
+      end
     end
 
     context "draft state" do
@@ -1231,22 +1244,6 @@ describe AssignmentsController do
       assert_require_login
     end
 
-    it "sets user_has_google_drive" do
-      user_session(@student)
-      a = @course.assignments.create(title: "some assignment")
-      plugin = Canvas::Plugin.find(:google_drive)
-      plugin_setting = PluginSetting.find_by_name(plugin.id) || PluginSetting.new(name: plugin.id, settings: plugin.default_settings)
-      plugin_setting.posted_settings = {}
-      plugin_setting.save!
-      google_drive_mock = double("google_drive")
-      allow(google_drive_mock).to receive(:authorized?).and_return(true)
-      allow(controller).to receive(:google_drive_connection).and_return(google_drive_mock)
-      get "show", params: { course_id: @course.id, id: a.id }
-
-      expect(response).to be_successful
-      expect(assigns(:user_has_google_drive)).to be true
-    end
-
     it "sets first_annotation_submission to true if it's the first submission and the assignment is annotatable" do
       user_session(@student)
       attachment = attachment_model(content_type: "application/pdf", display_name: "file.pdf", user: @teacher)
@@ -1723,11 +1720,32 @@ describe AssignmentsController do
         @assignment.save!
       end
 
-      it "renders the LTI tool launch associated with assignment" do
-        user_session(@student)
-        subject
-        expect(response).to be_successful
-        expect(assigns[:lti_launch]).to be_present
+      context "with a2_enabled_tool feature flag enabled" do
+        before do
+          Account.site_admin.enable_feature!(:external_tools_for_a2)
+        end
+
+        it "renders the LTI tool launch associated with assignment" do
+          user_session(@student)
+          subject
+          expect(response).to be_successful
+          expect(assigns[:lti_launch]).to be_present
+          expect(assigns[:js_env][:LTI_TOOL]).to eq("true")
+        end
+      end
+
+      context "with a2_enabled_tool feature flag disabled" do
+        before do
+          Account.site_admin.disable_feature!(:external_tools_for_a2)
+        end
+
+        it "renders the LTI tool launch associated with assignment" do
+          user_session(@student)
+          subject
+          expect(response).to be_successful
+          expect(assigns[:lti_launch]).to be_present
+          expect(assigns[:js_env][:LTI_TOOL]).to be_nil
+        end
       end
     end
   end
@@ -2589,31 +2607,6 @@ describe AssignmentsController do
 
         expect(@assignment.reload).not_to be_published
       end
-    end
-  end
-
-  describe "GET list_google_docs" do
-    let(:connection) { double }
-    let(:params) { { course_id: @course.id, id: @assignment.id } }
-
-    before do
-      user_session(@teacher)
-      allow(controller).to receive(:google_drive_connection).and_return(connection)
-      allow_any_instance_of(Assignment).to receive(:allow_google_docs_submission?).and_return(true)
-    end
-
-    it "passes errors through to Canvas::Errors" do
-      allow(connection).to receive(:list_with_extension_filter).and_raise(ArgumentError)
-      expect(Canvas::Errors).to receive(:capture_exception)
-      get "list_google_docs", params:, format: "json"
-      expect(response).to have_http_status(:ok)
-    end
-
-    it "gives appropriate error code to connection errors" do
-      allow(connection).to receive(:list_with_extension_filter).and_raise(GoogleDrive::ConnectionException)
-      get "list_google_docs", params:, format: "json"
-      expect(response).to have_http_status(:gateway_timeout)
-      expect(response.body).to include("Unable to connect to Google Drive")
     end
   end
 end

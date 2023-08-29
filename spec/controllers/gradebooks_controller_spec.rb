@@ -475,6 +475,42 @@ describe GradebooksController do
           expect(assigns[:js_env]).not_to have_key(:effective_final_score)
         end
 
+        describe "final grade override score custom status" do
+          let(:status) { CustomGradeStatus.create!(name: "custom", color: "#000000", root_account_id: @course.root_account, created_by: @teacher) }
+
+          it "does not include the final grade override score custom status id if the ff is off" do
+            Account.site_admin.disable_feature!(:custom_gradebook_statuses)
+            invited_student_enrollment = @course.enroll_user(User.create!, "StudentEnrollment", enrollment_state: "invited")
+            score = invited_student_enrollment.update_override_score(
+              override_score: 95,
+              updating_user: @teacher
+            )
+            score.update!(custom_grade_status_id: status.id)
+            user_session(@teacher)
+            get :grade_summary, params: { course_id: @course.id, id: @student.id }
+            expect(assigns[:js_env]).not_to have_key(:final_override_custom_grade_status_id)
+          end
+
+          it "does not include the final grade override score custom status id if there is no score" do
+            invited_student = @course.enroll_user(User.create!, "StudentEnrollment", enrollment_state: "invited").user
+            user_session(@teacher)
+            get :grade_summary, params: { course_id: @course.id, id: invited_student.id }
+            expect(assigns[:js_env]).not_to have_key(:final_override_custom_grade_status_id)
+          end
+
+          it "includes the final grade override score custom status id if the ff is on and there is a score" do
+            invited_student_enrollment = @course.enroll_user(User.create!, "StudentEnrollment", enrollment_state: "invited")
+            score = invited_student_enrollment.update_override_score(
+              override_score: 95,
+              updating_user: @teacher
+            )
+            score.update!(custom_grade_status_id: status.id)
+            user_session(@teacher)
+            get :grade_summary, params: { course_id: @course.id, id: @student.id }
+            expect(assigns[:js_env]).to have_key(:final_override_custom_grade_status_id)
+          end
+        end
+
         it "takes the effective final score for the grading period, if present" do
           grading_period_group = @course.grading_period_groups.create!
           grading_period = grading_period_group.grading_periods.create!(
@@ -982,6 +1018,20 @@ describe GradebooksController do
         allow(Rails.env).to receive(:development?).and_return(false)
         @admin.set_preference(:gradebook_version, "default")
         get "show", params: { course_id: @course.id, version: "individual" }
+        expect(response).to render_template("gradebooks/gradebook")
+      end
+
+      it "renders enhanced individual gradebook when individual_enhanced & individual_gradebook_enhancements is enabled" do
+        @course.root_account.enable_feature!(:individual_gradebook_enhancements)
+        @admin.set_preference(:gradebook_version, "individual_enhanced")
+        get "show", params: { course_id: @course.id }
+        expect(response).to render_template("layouts/application")
+      end
+
+      it "renders traditional gradebook when individual_gradebook_enhancements is disabled" do
+        @course.root_account.disable_feature!(:individual_gradebook_enhancements)
+        @admin.set_preference(:gradebook_version, "individual_enhanced")
+        get "show", params: { course_id: @course.id }
         expect(response).to render_template("gradebooks/gradebook")
       end
 

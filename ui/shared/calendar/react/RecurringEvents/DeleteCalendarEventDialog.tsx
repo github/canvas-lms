@@ -23,7 +23,7 @@ import {useScope as useI18nScope} from '@canvas/i18n'
 import authenticity_token from '@canvas/authenticity-token'
 import CanvasModal from '@canvas/instui-bindings/react/Modal'
 import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
-import {checkStatus, defaultFetchOptions} from '@instructure/js-utils'
+import {checkStatus, defaultFetchOptions} from '@canvas/util/xhr'
 import {Button} from '@instructure/ui-buttons'
 import {RadioInputGroup, RadioInput} from '@instructure/ui-radio-input'
 import {Spinner} from '@instructure/ui-spinner'
@@ -40,16 +40,21 @@ type Props = {
   readonly onCancel: () => void
   readonly onDeleting: (which: Which) => void
   readonly onDeleted: (deletedEvents: [Event]) => void
+  readonly onUpdated: (updatedEvents: [Event]) => void
   readonly delUrl: string
   readonly isRepeating: boolean
+  readonly isSeriesHead: boolean
 }
+
 const DeleteCalendarEventDialog = ({
   isOpen,
   onCancel,
   onDeleting,
   onDeleted,
+  onUpdated,
   delUrl,
   isRepeating,
+  isSeriesHead,
 }: Props) => {
   const [which, setWhich] = useState<Which>('one')
   const [isDeleting, setIsDeleting] = useState<boolean>(false)
@@ -73,15 +78,31 @@ const DeleteCalendarEventDialog = ({
     })
       .then(checkStatus)
       .then(res => res.json())
-      .then(deletedEvents => {
+      .then(result => {
         setIsDeleting(false)
-        onDeleted(deletedEvents)
+        const sortedEvents = {
+          deleted: [],
+          updated: [],
+        }
+        const returnedEvents = Array.isArray(result) ? result : [result]
+        returnedEvents.reduce((runningResult, currentValue) => {
+          if (currentValue.workflow_state === 'deleted') {
+            runningResult.deleted.push(currentValue)
+          } else {
+            runningResult.updated.push(currentValue)
+          }
+          return runningResult
+        }, sortedEvents)
+        onDeleted(sortedEvents.deleted)
+        if (sortedEvents.updated.length > 0) {
+          onUpdated(sortedEvents.updated)
+        }
       })
       .catch(_err => {
         setIsDeleting(false)
         showFlashAlert({message: I18n.t('Delete failed'), type: 'error'})
       })
-  }, [delUrl, onDeleted, onDeleting, which])
+  }, [delUrl, onDeleted, onDeleting, onUpdated, which])
 
   const renderFooter = useCallback((): JSX.Element => {
     const tiptext = I18n.t('Wait for delete to complete')
@@ -119,7 +140,9 @@ const DeleteCalendarEventDialog = ({
       >
         <RadioInput value="one" label={I18n.t('This event')} />
         <RadioInput value="all" label={I18n.t('All events')} />
-        <RadioInput value="following" label={I18n.t('This and all following events')} />
+        {!isSeriesHead && (
+          <RadioInput value="following" label={I18n.t('This and all following events')} />
+        )}
       </RadioInputGroup>
     )
   }

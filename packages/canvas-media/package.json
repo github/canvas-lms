@@ -1,6 +1,6 @@
 {
   "name": "@instructure/canvas-media",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "A component that will handle upload/record and displaying of media",
   "author": "Instructure, Inc.",
   "main": "lib/index.js",
@@ -20,7 +20,8 @@
     "build:watch": "yarn run clean:es && yarn run build:es --watch",
     "clean": "rm -rf lib && yarn run clean:es && rm -rf coverage",
     "clean:es": "rm -rf es",
-    "prepublishOnly": "yarn build && yarn test"
+    "prepublishOnly": "yarn build && yarn test",
+    "publishToNpm": "scripts/publish_to_npm.sh"
   },
   "repository": {
     "type": "git",

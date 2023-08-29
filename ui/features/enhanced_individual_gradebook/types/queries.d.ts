@@ -72,6 +72,7 @@ export type AssignmentGroupConnection = {
     drop_highest?: number
     never_drop?: string[]
   }
+  sisId: string | null
   state: string
   position: number
   assignmentsConnection: {
@@ -148,6 +149,7 @@ export type GradebookStudentDetails = {
   loginId: string
   name: string
   hiddenName: string
+  sortableName: string
 }
 
 export type GradebookUserSubmissionDetails = {
@@ -168,6 +170,8 @@ export type GradebookUserSubmissionDetails = {
   redoRequest: boolean
   cachedDueDate: string | null
   gradingPeriodId?: string
+  deductedPoints: null | string | number
+  enteredGrade: string | null
 }
 
 export type GradebookStudentQueryResponse = {

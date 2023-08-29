@@ -85,23 +85,23 @@ class MediaObject < ActiveRecord::Base
         ((self.user && self.user == user) || context&.grants_right?(user, :manage_content))
     end
     can :add_captions and can :delete_captions
-    ##################### End legacy permission block ##########################
 
     given do |user|
       !context_root_account(user).feature_enabled?(:granular_permissions_manage_course_content) &&
-        Account.site_admin.feature_enabled?(:media_links_use_attachment_id) && attachment.grants_right?(user, :update)
+        Account.site_admin.feature_enabled?(:media_links_use_attachment_id) && attachment&.grants_right?(user, :update)
     end
     can :add_captions and can :delete_captions
+    ##################### End legacy permission block ##########################
 
     given do |user|
       context_root_account(user).feature_enabled?(:granular_permissions_manage_course_content) &&
-        (attachment.present? ? attachment.grants_right?(user, :update) : context&.grants_right?(user, :manage_course_content_add))
+        (attachment.present? ? attachment.grants_right?(user, :update) : (context&.grants_right?(user, :manage_course_content_add) || (self.user && self.user == user)))
     end
     can :add_captions
 
     given do |user|
       context_root_account(user).feature_enabled?(:granular_permissions_manage_course_content) &&
-        (attachment.present? ? attachment.grants_right?(user, :update) : context&.grants_right?(user, :manage_course_content_delete))
+        (attachment.present? ? attachment.grants_right?(user, :update) : (context&.grants_right?(user, :manage_course_content_delete) || (self.user && self.user == user)))
     end
     can :delete_captions
   end
@@ -217,7 +217,7 @@ class MediaObject < ActiveRecord::Base
     client = CanvasKaltura::ClientV3.new
     client.startSession(CanvasKaltura::SessionType::ADMIN)
     res = client.mediaUpdate(media_id, name: user_entered_title)
-    unless res[:error]
+    unless res.nil? || res[:error]
       self.title = user_entered_title
       save
     end

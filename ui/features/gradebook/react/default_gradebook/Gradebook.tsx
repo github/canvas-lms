@@ -5005,7 +5005,7 @@ class Gradebook extends React.Component<GradebookProps, GradebookState> {
           <IconButton
             renderIcon={IconSettingsSolid}
             ref={this.gradebookSettingsModalButton}
-            data-test-id="gradebook-settings-button"
+            data-testid="gradebook-settings-button"
             color="secondary"
             onClick={() => this.gradebookSettingsModal?.current?.open()}
             screenReaderLabel={I18n.t('Gradebook Settings')}
@@ -5071,7 +5071,7 @@ class Gradebook extends React.Component<GradebookProps, GradebookState> {
           >
             <MultiSelectSearchInput
               id="student-names-filter"
-              data-test-id="students-filter-select"
+              data-testid="students-filter-select"
               disabled={students.length === 0 || !this._gridHasRendered()}
               label={I18n.t('Student Names')}
               customMatcher={this.studentSearchMatcher}
@@ -5083,7 +5083,7 @@ class Gradebook extends React.Component<GradebookProps, GradebookState> {
           <div id="gradebook-assignment-search" style={{flex: 1}}>
             <MultiSelectSearchInput
               id="assignments-filter"
-              data-test-id="assignments-filter-select"
+              data-testid="assignments-filter-select"
               disabled={assignments.length === 0 || !this._gridHasRendered()}
               label={I18n.t('Assignment Names')}
               customMatcher={assignmentSearchMatcher}
@@ -5138,8 +5138,24 @@ class Gradebook extends React.Component<GradebookProps, GradebookState> {
         {this.options.custom_grade_statuses_enabled && (
           <TotalGradeOverrideTrayProvider
             customGradeStatuses={this.options.custom_grade_statuses}
-            navigateDown={() => this.gradebookGrid?.grid?.navigateDown()}
-            navigateUp={() => this.gradebookGrid?.grid?.navigateUp()}
+            handleDismiss={(manualDismiss: boolean) => {
+              this.gradebookGrid?.gridSupport?.helper.focus()
+              if (manualDismiss) {
+                this.gradebookGrid?.gridSupport?.helper.beginEdit()
+              }
+            }}
+            handleOnGradeChange={(studentId, grade) =>
+              this.finalGradeOverrides?.updateGrade(studentId, grade)
+            }
+            navigateDown={() => {
+              this.gradebookGrid?.grid?.navigateDown()
+              this.gradebookGrid?.gridSupport?.helper.commitCurrentEdit()
+            }}
+            navigateUp={() => {
+              this.gradebookGrid?.grid?.navigateUp()
+              this.gradebookGrid?.gridSupport?.helper.commitCurrentEdit()
+            }}
+            pointsBasedGradingSchemesFeatureEnabled={!!ENV.POINTS_BASED_GRADING_SCHEMES_ENABLED}
             selectedGradingPeriodId={this.gradingPeriodId}
           />
         )}

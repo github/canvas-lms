@@ -620,6 +620,19 @@ describe Enrollment do
         @enrollment.scores.find_by(grading_period: period).update!(override_score: 71.0)
         expect(@enrollment.override_grade(grading_period_id: period.id)).to eq "C-"
       end
+
+      it "optionally accepts a score to use" do
+        period_group = @course.grading_period_groups.create!
+        period = period_group.grading_periods.create!(
+          close_date: 1.day.from_now,
+          end_date: 1.day.from_now,
+          start_date: 1.day.ago,
+          title: "period"
+        )
+        score = @enrollment.scores.find_by(grading_period: period)
+        score.update!(override_score: 71.0)
+        expect(@enrollment.override_grade(score:)).to eq "C-"
+      end
     end
 
     describe "override_score" do
@@ -664,6 +677,19 @@ describe Enrollment do
         )
         @enrollment.scores.find_by(grading_period: period).update!(override_score: 71.0)
         expect(@enrollment.override_score(grading_period_id: period.id)).to be 71.0
+      end
+
+      it "optionally accepts a score to use" do
+        period_group = @course.grading_period_groups.create!
+        period = period_group.grading_periods.create!(
+          close_date: 1.day.from_now,
+          end_date: 1.day.from_now,
+          start_date: 1.day.ago,
+          title: "period"
+        )
+        score = @enrollment.scores.find_by(grading_period: period)
+        score.update!(override_score: 71.0)
+        expect(@enrollment.override_score(score:)).to eq 71.0
       end
     end
 
@@ -3021,6 +3047,49 @@ describe Enrollment do
         expect(pe.workflow_state).to eql se.workflow_state
         expect(pe.associated_user_id).to eql se.user_id
       end
+    end
+  end
+
+  describe "temporary enrollments" do
+    before(:once) do
+      Account.default.enable_feature!(:temporary_enrollments)
+      @source_user = user_factory(active_all: true)
+      @temporary_enrollment_recipient = user_factory(active_all: true)
+      temporary_enrollment_recipient2 = user_factory(active_all: true)
+      @course1 = course_with_teacher(active_all: true, user: @source_user).course
+      @recipient_temp_enrollment = @course1.enroll_user(
+        @temporary_enrollment_recipient,
+        "TeacherEnrollment",
+        { role: teacher_role, temporary_enrollment_source_user_id: @source_user.id }
+      )
+      course2 = course_with_teacher(active_all: true, user: @source_user).course
+      @recipient2_temp_enrollment = course2.enroll_user(
+        temporary_enrollment_recipient2,
+        "TeacherEnrollment",
+        { role: teacher_role, temporary_enrollment_source_user_id: @source_user.id }
+      )
+    end
+
+    it "retrieves temporary enrollments for recipient" do
+      expect(Enrollment.temporary_enrollments_for_recipient(@temporary_enrollment_recipient).take)
+        .to eq(@recipient_temp_enrollment)
+    end
+
+    it "retrieves temporary enrollments for course and recipient" do
+      expect(Enrollment.temporary_enrollments_for_course_and_recipient(
+        @course1, @temporary_enrollment_recipient
+      ).take).to eq(@recipient_temp_enrollment)
+    end
+
+    it "retrieves temporary enrollment recipients for source user" do
+      expect(Enrollment.temporary_enrollment_recipients_for_source_user(@source_user).sort)
+        .to eq([@recipient_temp_enrollment, @recipient2_temp_enrollment].sort)
+    end
+
+    it "returns a boolean value if self is a temporary enrollment" do
+      @recipient2_temp_enrollment.update!(temporary_enrollment_source_user_id: nil)
+      expect(@recipient_temp_enrollment.temporary_enrollment?).to be_truthy
+      expect(@recipient2_temp_enrollment.temporary_enrollment?).to be_falsey
     end
   end
 

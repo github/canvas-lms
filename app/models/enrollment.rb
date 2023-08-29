@@ -298,6 +298,35 @@ class Enrollment < ActiveRecord::Base
 
   scope :not_fake, -> { where("enrollments.type<>'StudentViewEnrollment'") }
 
+  scope :temporary_enrollment_recipients_for_source_user, lambda { |user|
+    joins(:course)
+      .where(temporary_enrollment_source_user_id: user,
+             workflow_state: "active",
+             courses: { workflow_state: %w[available claimed created] })
+  }
+
+  scope :temporary_enrollments_for_recipient, lambda { |user|
+    joins(:course)
+      .where(user_id: user, courses: { workflow_state: "available" })
+      .where.not(temporary_enrollment_source_user_id: nil)
+  }
+
+  scope :active_temporary_enrollments_for_recipient_by_date, lambda { |user|
+    joins(:course)
+      .where(user_id: user, workflow_state: "active", courses: { workflow_state: "available" })
+      .where.not(temporary_enrollment_source_user_id: nil)
+      .joins(:enrollment_state).where(enrollment_states: { state: "active" })
+  }
+
+  scope :temporary_enrollments_for_course_and_recipient, lambda { |course, user|
+    joins(:course)
+      .where(course_id: course,
+             user_id: user,
+             workflow_state: "active",
+             courses: { workflow_state: "available" })
+      .where.not(temporary_enrollment_source_user_id: nil)
+  }
+
   def self.readable_types
     # with enough use, even translations can add up
     RequestCache.cache("enrollment_readable_types") do
@@ -1107,6 +1136,12 @@ class Enrollment < ActiveRecord::Base
     end
   end
 
+  def effective_final_grade_custom_status_id(id_opts = nil)
+    score = find_score(id_opts)
+
+    score.custom_grade_status_id if score&.overridden? && course.allow_final_grade_override?
+  end
+
   def override_grade(id_opts = nil)
     return nil unless course.allow_final_grade_override? && course.grading_standard_enabled?
 
@@ -1159,6 +1194,9 @@ class Enrollment < ActiveRecord::Base
 
   def find_score(id_opts = nil)
     id_opts ||= Score.params_for_course
+    given_score = id_opts.delete(:score)
+    return given_score if given_score
+
     valid_keys = %i[course_score grading_period grading_period_id assignment_group assignment_group_id]
     return nil if id_opts.except(*valid_keys).any?
 
@@ -1190,7 +1228,12 @@ class Enrollment < ActiveRecord::Base
   end
 
   def self.typed_enrollment(type)
-    return nil unless %w[StudentEnrollment StudentViewEnrollment TeacherEnrollment TaEnrollment ObserverEnrollment DesignerEnrollment].include?(type)
+    return nil unless %w[StudentEnrollment
+                         StudentViewEnrollment
+                         TeacherEnrollment
+                         TaEnrollment
+                         ObserverEnrollment
+                         DesignerEnrollment].include?(type)
 
     type.constantize
   end
@@ -1212,6 +1255,10 @@ class Enrollment < ActiveRecord::Base
     else
       include_future ? student? : participating_student?
     end
+  end
+
+  def temporary_enrollment?
+    read_attribute(:temporary_enrollment_source_user_id).present?
   end
 
   def observer?

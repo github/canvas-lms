@@ -1554,6 +1554,13 @@ describe Assignment do
       expect(new_assignment3.title).to eq "Wiki Assignment Copy 3"
     end
 
+    it "does not duplicate the sis_source_id" do
+      assignment = @course.assignments.create!(sis_source_id: "abc")
+      new_assignment = assignment.duplicate
+      expect(new_assignment).to be_valid
+      expect(new_assignment.sis_source_id).to be_nil
+    end
+
     it "does not duplicate grades_published_at" do
       assignment = @course.assignments.create!(title: "whee", points_possible: 10)
       assignment.grades_published_at = Time.zone.now
@@ -2101,6 +2108,30 @@ describe Assignment do
         expect(representatives[1].name).to eql(group_two.name)
         expect(representatives[2].name).to eql(group_one.name)
         expect(representatives[3].name).to eql(@initial_student.name)
+      end
+    end
+
+    context "differentiated assignments and deactivated students" do
+      before do
+        @student_enrollment = @enrollment
+        @assignment = @course.assignments.create!(assignment_valid_attributes.merge(only_visible_to_overrides: true))
+        create_adhoc_override_for_assignment(@assignment, @student_enrollment.user)
+        @student_enrollment.deactivate
+      end
+
+      it "excludes deactivated students by default" do
+        representatives = @assignment.representatives(user: @teacher)
+        expect(representatives).not_to include @initial_student
+      end
+
+      it "includes deactivated students if passed ignore_student_visibility" do
+        representatives = @assignment.representatives(user: @teacher, ignore_student_visibility: true)
+        expect(representatives).to include @initial_student
+      end
+
+      it "excludes deactivated students if the includes param does not have :inactive" do
+        representatives = @assignment.representatives(user: @teacher, includes: [:completed], ignore_student_visibility: true)
+        expect(representatives).not_to include @initial_student
       end
     end
   end
@@ -8161,6 +8192,7 @@ describe Assignment do
     before do
       allow(@course).to receive(:feature_enabled?) { false }
       allow(@course).to receive(:feature_enabled?).with(:assignments_2_student) { true }
+      Account.site_admin.disable_feature!(:external_tools_for_a2)
     end
 
     let(:assignment) do
@@ -8203,6 +8235,17 @@ describe Assignment do
         assignment.submission_types = type
         expect(assignment).to be_a2_enabled
       end
+    end
+
+    it "returns true if when LTI external tool feature flag is enabled" do
+      Account.site_admin.enable_feature!(:external_tools_for_a2)
+
+      assignment.build_wiki_page
+      assignment.build_discussion_topic
+      assignment.build_quiz
+      assignment.submission_types = "external_tool"
+
+      expect(assignment).to be_a2_enabled
     end
 
     describe "peer reviews enabled" do
@@ -10801,7 +10844,7 @@ describe Assignment do
       Assignment.create!(course: @course, name: "some assignment", sis_source_id: "BLAH")
       expect do
         Assignment.create!(course: @course, name: "some assignment", sis_source_id: "BLAH")
-      end.to raise_error(ActiveRecord::RecordNotUnique)
+      end.to raise_error(ActiveRecord::RecordInvalid)
     end
   end
 

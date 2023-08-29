@@ -458,6 +458,10 @@ module Api::V1::Assignment
                            (submission.nil? || submission.attempts_left.nil? || submission.attempts_left > 0)
     end
 
+    if opts[:include_ab_guid]
+      hash["ab_guid"] = assignment.ab_guid.presence || assignment.ab_guid_through_rubric
+    end
+
     hash["restrict_quantitative_data"] = assignment.restrict_quantitative_data?(user, true) || false
 
     hash
@@ -734,6 +738,14 @@ module Api::V1::Assignment
       assignment.assignment_group = assignment.context.assignment_groups.where(id: ag_id).first
     end
 
+    if update_params.key?("ab_guid")
+      assignment.ab_guid.clear
+      ab_guids = update_params.delete("ab_guid").presence
+      Array(ab_guids).each do |guid|
+        assignment.ab_guid << guid if guid.present?
+      end
+    end
+
     if update_params.key?("group_category_id") && !assignment.group_category_deleted_with_submissions?
       gc_id = update_params.delete("group_category_id").presence
       assignment.group_category = assignment.context.group_categories.where(id: gc_id).first
@@ -925,7 +937,7 @@ module Api::V1::Assignment
   # the current user is an observer
   def current_user_and_observed(opts = { include_observed: false })
     user_and_observees = Array(@current_user)
-    if opts[:include_observed] && @context_enrollment && @context_enrollment.observer?
+    if opts[:include_observed] && @current_user.enrollments.of_observer_type.active.where(course: @context).exists?
       user_and_observees.concat(ObserverEnrollment.observed_students(@context, @current_user).keys)
     end
     user_and_observees
@@ -1151,7 +1163,8 @@ module Api::V1::Assignment
       { "allowed_extensions" => strong_anything },
       { "integration_data" => strong_anything },
       { "external_tool_tag_attributes" => strong_anything },
-      ({ "submission_types" => strong_anything } if should_update_submission_types)
+      ({ "submission_types" => strong_anything } if should_update_submission_types),
+      { "ab_guid" => strong_anything },
     ].compact
   end
 

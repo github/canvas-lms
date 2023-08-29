@@ -92,6 +92,7 @@ export type GradebookOptions = {
   groupWeightingScheme?: string | null
   finalGradeOverrideEnabled?: boolean | null
   pointsBasedGradingSchemesFeatureEnabled: boolean
+  proxySubmissionEnabled: boolean
   publishToSisEnabled?: boolean | null
   publishToSisUrl?: string | null
   reorderCustomColumnsUrl?: string | null
@@ -130,6 +131,7 @@ export type SortableStudent = UserConnection & {
   sections: string[]
   hiddenName?: string
   state: string
+  sortableName: string
 }
 
 export enum ApiCallStatus {

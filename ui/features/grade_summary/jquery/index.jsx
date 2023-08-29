@@ -44,6 +44,7 @@ import SubmissionCommentsTray from '../react/SubmissionCommentsTray'
 import ClearBadgeCountsButton from '../react/ClearBadgeCountsButton'
 import {scoreToPercentage, scoreToScaledPoints} from '@canvas/grading/GradeCalculationHelper'
 import useStore from '../react/stores'
+import replaceTags from '@canvas/util/replaceTags'
 
 const I18n = useI18nScope('gradingGradeSummary')
 
@@ -149,7 +150,7 @@ const GradeSummary = {
     const assignmentId = GradeSummary.getAssignmentId($assignment)
 
     if (shouldUpdate) {
-      const url = $.replaceTags(
+      const url = replaceTags(
         $('.update_submission_url').attr('href'),
         'assignment_id',
         assignmentId
@@ -529,6 +530,10 @@ function calculateTotals(calculatedGrades, currentOrFinal, groupWeightingScheme)
   $finalGradeRow.find('.grade').text(finalGrade)
   $finalGradeRow.find('.score_teaser').text(teaserText)
 
+  if (overrideScorePresent() && ENV?.final_override_custom_grade_status_id) {
+    $finalGradeRow.find('.status').html('').append(`<span class='submission-custom-grade-status-pill-${ENV.final_override_custom_grade_status_id}'></span>`)
+  }
+
   const pointsPossibleText = finalGradePointsPossibleText(groupWeightingScheme, scoreAsPoints)
   $finalGradeRow.find('.points_possible').text(pointsPossibleText)
 
@@ -712,7 +717,7 @@ function getSubmissionCommentsTrayProps(assignmentId) {
   const matchingSubmission = ENV.submissions.find(x => x.assignment_id === assignmentId)
   const {submission_comments, assignment_url: assignmentUrl} = matchingSubmission
   const attempts = submission_comments.reduce((attemptsMessages, comment) => {
-    const currentAttempt = comment.attempt ?? 1
+    const currentAttempt = comment.attempt < 1 ? 1 : comment.attempt
 
     if (attemptsMessages[currentAttempt]) {
       attemptsMessages[currentAttempt].push(comment)
@@ -948,11 +953,7 @@ function setup() {
       .triggerHandler('change')
 
     bindShowAllDetailsButton($ariaAnnouncer)
-    const statusMap = ENV.custom_grade_statuses?.reduce((statusMap, status) => {
-      statusMap[status.id] = status
-      return statusMap
-    }, {}) ?? []
-    StatusPill.renderPills(statusMap)
+    StatusPill.renderPills(ENV.custom_grade_statuses)
   })
 }
 

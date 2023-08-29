@@ -28,6 +28,8 @@ import * as FinalGradeOverrideHooks from '../../hooks/useFinalGradeOverrideCusto
 describe('TotalGradeOverrideTray Tests', () => {
   const navigateUp = jest.fn()
   const navigateDown = jest.fn()
+  const handleDismiss = jest.fn()
+  const handleOnGradeChange = jest.fn()
   const getComponent = (props: Partial<TotalGradeOverrideTrayProps> = {}) => {
     const trayProps: TotalGradeOverrideTrayProps = {
       customGradeStatuses: [
@@ -35,9 +37,12 @@ describe('TotalGradeOverrideTray Tests', () => {
         {id: '2', color: '#FFFFFF', name: 'Custom Status 2'},
         {id: '3', color: '#EEEEEE', name: 'Custom Status 3'},
       ],
+      handleDismiss,
+      handleOnGradeChange,
       selectedGradingPeriodId: '0',
       navigateDown,
       navigateUp,
+      pointsBasedGradingSchemesFeatureEnabled: true,
       ...props,
     }
 
@@ -240,6 +245,38 @@ describe('TotalGradeOverrideTray Tests', () => {
       expect(
         updatedFinalGradeOverrides['1'].gradingPeriodGrades?.['2']?.customGradeStatusId
       ).toEqual('1')
+    })
+
+    it('calls handleDismiss with true when the button is clicked', () => {
+      const {getByText} = getComponent()
+      const cancelButton = getByText('Close total grade override tray')
+
+      fireEvent.click(cancelButton)
+
+      expect(handleDismiss).toHaveBeenCalledWith(true)
+    })
+  })
+
+  describe('grade override textbox tests', () => {
+    it('correctly renders final grade override textbox value', () => {
+      const {getByDisplayValue} = getComponent()
+      const textbox = getByDisplayValue('0.5%')
+
+      expect(textbox).toBeInTheDocument()
+    })
+
+    it('calls handleOnGradeChange when the textbox value changes', () => {
+      const {getByDisplayValue} = getComponent()
+      const textbox = getByDisplayValue('0.5%')
+
+      fireEvent.change(textbox, {target: {value: '0.6%'}})
+      fireEvent.blur(textbox)
+
+      expect(handleOnGradeChange).toHaveBeenCalled()
+      const args = handleOnGradeChange.mock.calls[0]
+      const [studentId, gradeChanges] = args
+      expect(studentId).toEqual('1')
+      expect(gradeChanges.grade.percentage).toEqual(0.6)
     })
   })
 })

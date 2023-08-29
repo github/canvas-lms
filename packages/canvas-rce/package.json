@@ -1,6 +1,6 @@
 {
   "name": "@instructure/canvas-rce",
-  "version": "5.7.0",
+  "version": "5.8.0",
   "description": "A component wrapping Canvas's usage of Tinymce",
   "main": "es/index.js",
   "scripts": {
@@ -45,7 +45,7 @@
     "clean": "rm -rf lib && yarn clean:es && rm -rf coverage && yarn demo:clean",
     "clean:es": "rm -rf es",
     "generate-svgs": "yarn build:es && node --experimental-modules scripts/generateSvgs.js && prettier --write src/rce/plugins/instructure_equation/MathIcon/svgs.js",
-    "publishToNpm": "scripts/publishToNpm.sh"
+    "publishToNpm": "scripts/publish_to_npm.sh"
   },
   "keywords": [
     "canvas",
@@ -77,7 +77,7 @@
     "@instructure/canvas-theme": "7",
     "@instructure/debounce": "^7",
     "@instructure/emotion": "^8.38.1",
-    "@instructure/js-utils": "*",
+    "@instructure/filter-console-messages": "*",
     "@instructure/k5uploader": "*",
     "@instructure/media-capture": "~8.4.1-rc.16",
     "@instructure/ui-a11y-content": "^7",
@@ -133,6 +133,7 @@
     "aphrodite": "^2",
     "axios": "^0.21.1",
     "bloody-offset": "0.0.0",
+    "crypto-es": "^2.0.4",
     "classnames": "^2.2.5",
     "concurrently": "^4",
     "format-message": "^6",

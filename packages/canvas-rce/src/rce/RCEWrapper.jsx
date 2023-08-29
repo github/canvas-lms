@@ -67,6 +67,7 @@ import {rceWrapperPropTypes} from './RCEWrapperProps'
 import {insertPlaceholder, placeholderInfoFor, removePlaceholder} from '../util/loadingPlaceholder'
 import {transformRceContentForEditing} from './transformContent'
 import {IconMoreSolid} from '@instructure/ui-icons/es/svg'
+import EncryptedStorage from '../util/encrypted-storage'
 import buildStyle from './style'
 
 const RestoreAutoSaveModal = React.lazy(() => import('./RestoreAutoSaveModal'))
@@ -1010,7 +1011,72 @@ class RCEWrapper extends React.Component {
 
     this.fixToolbarKeyboardNavigation()
 
+    this.forwardPostMessages()
+
     this.props.onInitted?.(editor)
+  }
+
+  static editorFrameName = 'active_rce_frame'
+
+  /**
+   * Forwards postMessages from child frames, like LTI tools
+   * embedded in the editor, to the parent frame.
+   * Also forwards response postMessages from the parent
+   * back to the child frame that sent it.
+   *
+   * Initializes message listener.
+   */
+  forwardPostMessages = () => {
+    const windowReferences = {}
+    const rceWindow = this.editor.getWin()
+    // explicitly assign name for reference by parent window
+    rceWindow.name = `${RCEWrapper.editorFrameName}_${this.id}`
+
+    rceWindow.addEventListener(
+      'message',
+      this.forwardPostMessagesHandler(rceWindow, windowReferences)
+    )
+  }
+
+  /**
+   * Forwards postMessages from child frames, like LTI tools
+   * embedded in the editor, to the parent frame.
+   * Also forwards response postMessages from the parent
+   * back to the child frame that sent it.
+   * Requires that the message data is an object, since it attaches
+   * `toolOrigin` to it. Uses `toolOrigin` on response messages
+   * to determine which child frame should get the message.
+   *
+   * Actual handler function with parameters passed for testing.
+   */
+  forwardPostMessagesHandler = (rceWindow, windowReferences) => e => {
+    let message
+    try {
+      message = typeof e.data === 'string' ? JSON.parse(e.data) : e.data
+    } catch (err) {
+      // unparseable message may not be meant for our handlers
+      return false
+    }
+
+    if (e.origin === rceWindow.origin) {
+      // message is from Canvas window, forward to tool
+      const targetOrigin = message.toolOrigin
+      if (!targetOrigin) {
+        return false
+      }
+
+      const targetWindow = windowReferences[targetOrigin]
+      delete message.toolOrigin
+
+      targetWindow?.postMessage(message, targetOrigin)
+    } else {
+      // message is from tool, forward to Canvas window
+      windowReferences[e.origin] = e.source
+      message.toolOrigin = e.origin
+      message.frameName = rceWindow.name
+
+      rceWindow.parent.postMessage(message, rceWindow.origin)
+    }
   }
 
   /**
@@ -1151,7 +1217,7 @@ class RCEWrapper extends React.Component {
 
   /* ********** autosave support *************** */
   initAutoSave = editor => {
-    this.storage = window.localStorage
+    this.storage = new EncryptedStorage(this.props.userCacheKey ?? '')
     if (this.storage) {
       editor.on('change Undo Redo', this.doAutoSave)
       editor.on('blur', this.doAutoSave)
@@ -1234,7 +1300,7 @@ class RCEWrapper extends React.Component {
   getAutoSaved(key) {
     let autosaved = null
     try {
-      autosaved = this.storage && JSON.parse(this.storage.getItem(key))
+      autosaved = this.storage && this.storage.getItem(key)
     } catch (_ex) {
       this.storage.removeItem(this.autoSaveKey)
     }
@@ -1273,13 +1339,7 @@ class RCEWrapper extends React.Component {
 
       const content = editor.getContent({no_events: true})
       try {
-        this.storage.setItem(
-          this.autoSaveKey,
-          JSON.stringify({
-            autosaveTimestamp: Date.now(),
-            content,
-          })
-        )
+        this.storage.setItem(this.autoSaveKey, content)
       } catch (ex) {
         if (!retry) {
           // probably failed because there's not enough space

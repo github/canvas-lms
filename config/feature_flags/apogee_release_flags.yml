@@ -217,7 +217,7 @@ individual_gradebook_enhancements:
     to Individual Gradebook
   environments:
     ci:
-      state: on # enable for automated testings builds and local testing
+      state: allowed_on # enable for automated testings builds and local testing
     development:
       state: allowed_on # enable for local development
 hide_zero_point_quizzes_option:
@@ -296,7 +296,17 @@ default_account_grading_scheme:
   state: hidden
   applies_to: SiteAdmin
   display_name: Default Grading Scheme for Accounts
-  description: Allow administrators to set a default grading scheme for accounts. This grading scheme will be the default for all courses in the account, but individual courses can overwrite with their own default.
+  description: Allow administrators to set a default grading scheme for accounts. This grading scheme will be the default for all courses in the account, but individual courses can overwrite it with their own default.
+  environments:
+    ci:
+      state: allowed_on # enable for automated testing builds and local testing
+    development:
+      state: allowed_on # enable for local development
+external_tools_for_a2:
+  state: hidden
+  display_name: External tools in Assignment Enhancements
+  description: Allow for Assignment Enhancements to be used for external LTI tools
+  applies_to: SiteAdmin
   environments:
     ci:
       state: allowed_on # enable for automated testing builds and local testing

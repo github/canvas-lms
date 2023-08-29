@@ -27,7 +27,7 @@ describe "recurring events" do
   include_context "in-process server selenium tests"
   include Calendar2Common
   include CalendarPage
-  include CalendarRecurrenceModelPage
+  include CalendarRecurrenceModalPage
   include CalendarEditPage
 
   context "calendar event modal" do
@@ -108,6 +108,7 @@ describe "recurring events" do
     end
 
     it "creates daily recurring event and verifies on month view calendar" do
+      skip("LF-578 - needs update to ajax time to work properly")
       get "/calendar2#view_name=month&view_start=2023-07-01"
       create_new_calendar_event
       newdate = "July 20, 2023"
@@ -125,9 +126,11 @@ describe "recurring events" do
   context "calendar event modal interactions with custom recurring modal" do
     before :once do
       course_with_teacher(active_all: true, new_user: true)
+      @course.update!(name: "Programming 101")
     end
 
     before do
+      @course.update!(conclude_at: "April 12, 2024", restrict_enrollments_to_course_dates: true)
       user_session(@teacher)
     end
 
@@ -137,6 +140,27 @@ describe "recurring events" do
 
       select_frequency_option("Custom")
       expect(custom_recurrence_modal).to be_displayed
+    end
+
+    it "shows course end date in custom modal" do
+      get "/calendar2"
+      create_new_calendar_event
+
+      select_event_calendar("Programming 101")
+      select_frequency_option("Custom")
+      expect(custom_recurrence_text).to include("Course ends April 12, 2024")
+    end
+
+    it "shows course term end date in custom modal" do
+      @term = Account.default.enrollment_terms.create(name: "Fall", end_at: "April 12, 2024")
+      @course.update!(enrollment_term: @term, restrict_enrollments_to_course_dates: false)
+
+      get "/calendar2"
+      create_new_calendar_event
+
+      select_event_calendar("Programming 101")
+      select_frequency_option("Custom")
+      expect(custom_recurrence_text).to include("Course ends April 12, 2024")
     end
 
     it "makes custom change and returns to modal and new value in frequency field" do
@@ -203,6 +227,7 @@ describe "recurring events" do
     end
 
     it "creates recurring event and verifies monthly calendar" do
+      skip("LF-578: Skipping due to performance issues")
       get "/courses/#{@course.id}/calendar_events/new"
       wait_for_ajaximations
       wait_for_calendar_rce
@@ -210,8 +235,9 @@ describe "recurring events" do
       enter_calendar_start_date(newdate)
       select_frequency_option("Daily")
       click_create_event_button
-
+      wait_for_ajaximations
       get "/calendar2#view_name=month&view_start=2023-07-01"
+      wait_for_ajaximations
       expect(all_events_in_month_view.length).to eq(17)
     end
 
@@ -279,6 +305,7 @@ describe "recurring events" do
     end
 
     before do
+      @course.update!(conclude_at: "April 12, 2024", restrict_enrollments_to_course_dates: true)
       user_session(@teacher)
     end
 
@@ -290,6 +317,29 @@ describe "recurring events" do
       enter_calendar_start_date(newdate)
       select_frequency_option("Custom")
       expect(custom_recurrence_modal).to be_displayed
+    end
+
+    it "shows course end date in custom modal" do
+      get "/courses/#{@course.id}/calendar_events/new"
+      wait_for_ajaximations
+      wait_for_calendar_rce
+      newdate = "July 20, 2023"
+      enter_calendar_start_date(newdate)
+      select_frequency_option("Custom")
+      expect(custom_recurrence_text).to include("Course ends April 12, 2024")
+    end
+
+    it "shows course term end date in custom modal" do
+      @term = Account.default.enrollment_terms.create(name: "Fall", end_at: "April 12, 2024")
+      @course.update!(enrollment_term: @term, restrict_enrollments_to_course_dates: false)
+
+      get "/courses/#{@course.id}/calendar_events/new"
+      wait_for_ajaximations
+      wait_for_calendar_rce
+      newdate = "July 20, 2023"
+      enter_calendar_start_date(newdate)
+      select_frequency_option("Custom")
+      expect(custom_recurrence_text).to include("Course ends April 12, 2024")
     end
 
     it "makes custom change and returns to modal and new value in frequency field" do
@@ -577,6 +627,200 @@ describe "recurring events" do
       click_done_button
 
       expect(frequency_picker_value).to eq("Every 2 years on Jul 20 until Aug 30, 2027")
+    end
+  end
+
+  context "update recurring events" do
+    before :once do
+      course_with_teacher(active_all: true, new_user: true)
+    end
+
+    before do
+      user_session(@teacher)
+      today = Date.today
+      start_at = Date.new(today.year, today.month, 15)
+      create_calendar_event_series(@course, "event in a series", start_at)
+    end
+
+    it "updates all events from series head" do
+      get "/calendar"
+
+      wait_for_ajaximations
+      events = events_in_a_series
+      expect(events.length).to eq 3
+
+      events[0].click
+      click_edit_event_button
+      expect(frequency_picker_value).to eq("Daily, 3 times")
+
+      select_frequency_option("Custom")
+      enter_recurrence_end_count(2)
+      click_done_button
+
+      expect(frequency_picker_value).to eq("Daily, 2 times")
+
+      click_submit_button
+      event_series_all_events.click
+      click_edit_confirm_button
+      wait_for_ajaximations
+
+      events = events_in_a_series
+      expect(events.length).to eq 2
+    end
+
+    it "updates one event in the series" do
+      get "/calendar"
+
+      wait_for_ajaximations
+      events = events_in_a_series
+      expect(events.length).to eq 3
+
+      events[1].click
+      click_edit_event_button
+      expect(frequency_picker_value).to eq("Daily, 3 times")
+
+      enter_event_title("updated event title")
+
+      click_submit_button
+      event_series_this_event.click
+      click_edit_confirm_button
+      wait_for_ajaximations
+
+      events = events_in_a_series
+      # events_in_a_series returns all events with the original title
+      expect(events.length).to eq 2
+    end
+
+    it "updates this and following events in the series" do
+      get "/calendar"
+
+      wait_for_ajaximations
+      events = events_in_a_series
+      expect(events.length).to eq 3
+
+      events[1].click
+      click_edit_event_button
+      expect(frequency_picker_value).to eq("Daily, 3 times")
+
+      enter_event_title("updated event title")
+
+      click_submit_button
+      event_series_following_events.click
+      click_edit_confirm_button
+      wait_for_ajaximations
+
+      events = events_in_a_series
+      # events_in_a_series returns all events with the original title
+      expect(events.length).to eq 1
+    end
+
+    it "cancels update of events in the series" do
+      get "/calendar"
+
+      wait_for_ajaximations
+      events = events_in_a_series
+      expect(events.length).to eq 3
+
+      events[1].click
+      click_edit_event_button
+      expect(frequency_picker_value).to eq("Daily, 3 times")
+
+      enter_event_title("updated event title")
+
+      click_submit_button
+      event_series_following_events.click
+      click_close_edit_button
+      wait_for_ajaximations
+
+      events = events_in_a_series
+      # events_in_a_series returns all events with the original title
+      expect(events.length).to eq 3
+    end
+
+    it "updates the event calendar correctly" do
+      get "/calendar"
+
+      wait_for_ajaximations
+      events = events_in_a_series
+      events.each do |e|
+        e.click
+        expect(event_details_modal.text).to include("Unnamed Course")
+        click_event_details_modal_close_button
+      end
+
+      events[1].click
+      click_edit_event_button
+
+      select_event_calendar("nobody@example.com")
+
+      click_submit_button
+      event_series_all_events.click
+      click_edit_confirm_button
+      wait_for_ajaximations
+
+      events = events_in_a_series
+
+      events.each do |e|
+        e.click
+        expect(event_details_modal.text).to include("nobody@example.com")
+        click_event_details_modal_close_button
+      end
+    end
+
+    it "goes to edit update page after change" do
+      get "/calendar"
+
+      wait_for_ajaximations
+      events = events_in_a_series
+      expect(events.length).to eq 3
+
+      events[1].click
+      click_edit_event_button
+      expect(frequency_picker_value).to eq("Daily, 3 times")
+
+      enter_event_title("updated event title")
+
+      click_more_options_button
+      wait_for_ajaximations
+      wait_for_calendar_rce
+
+      expect(element_value_for_attr(calendar_event_title, "value")).to eq("updated event title")
+      click_update_event_button
+      event_series_following_events.click
+      click_edit_confirm_button
+      wait_for_ajaximations
+
+      events = events_in_a_series
+      # events_in_a_series returns all events with the original title
+      expect(events.length).to eq 1
+    end
+
+    it "cancels edit from update page" do
+      get "/calendar"
+      wait_for_ajaximations
+      events = events_in_a_series
+      expect(events.length).to eq 3
+
+      events[1].click
+      click_edit_event_button
+      expect(frequency_picker_value).to eq("Daily, 3 times")
+
+      enter_event_title("updated event title")
+      click_more_options_button
+      wait_for_ajaximations
+      wait_for_calendar_rce
+      expect(element_value_for_attr(calendar_event_title, "value")).to eq("updated event title")
+
+      click_update_event_button
+      event_series_following_events.click
+      click_close_edit_button
+      wait_for_ajaximations
+      click_update_cancel_button
+      wait_for_ajaximations
+
+      events = events_in_a_series
+      # events_in_a_series returns all events with the original title
+      expect(events.length).to eq 3
     end
   end
 end

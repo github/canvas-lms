@@ -90,6 +90,7 @@ async function makeProps(opts = {}) {
 }
 
 describe('ViewManager', () => {
+  const originalEnv = window.ENV
   beforeEach(() => {
     window.ENV = {
       context_asset_string: 'test_1',
@@ -99,6 +100,10 @@ describe('ViewManager', () => {
       PREREQS: {},
       current_user_roles: ['user', 'student'],
     }
+  })
+
+  afterEach(() => {
+    window.ENV = originalEnv
   })
 
   describe('New Attempt Button', () => {
@@ -112,7 +117,7 @@ describe('ViewManager', () => {
         )
         const newAttemptButton = getByText('New Attempt')
         fireEvent.click(newAttemptButton)
-        expect(getByDisplayValue('Attempt 2')).toBeInTheDocument()
+        expect(getByDisplayValue('Attempt 2')).not.toBeNull()
       })
 
       it('by not displaying the new attempt button on a dummy submission', async () => {
@@ -124,7 +129,7 @@ describe('ViewManager', () => {
         )
         const newAttemptButton = getByText('New Attempt')
         fireEvent.click(newAttemptButton)
-        expect(queryByText('New Attempt')).not.toBeInTheDocument()
+        expect(queryByText('New Attempt')).toBeNull()
       })
     })
 
@@ -136,7 +141,7 @@ describe('ViewManager', () => {
             <ViewManager {...props} />
           </MockedProvider>
         )
-        expect(queryByText('New Attempt')).not.toBeInTheDocument()
+        expect(queryByText('New Attempt')).toBeNull()
       })
     })
 
@@ -148,7 +153,7 @@ describe('ViewManager', () => {
             <ViewManager {...props} />
           </MockedProvider>
         )
-        expect(queryByText('New Attempt')).not.toBeInTheDocument()
+        expect(queryByText('New Attempt')).toBeNull()
       })
 
       it('is displayed on the latest submitted attempt', async () => {
@@ -158,7 +163,7 @@ describe('ViewManager', () => {
             <ViewManager {...props} />
           </MockedProvider>
         )
-        expect(queryByText('New Attempt')).toBeInTheDocument()
+        expect(queryByText('New Attempt')).not.toBeNull()
       })
 
       it('sets focus on the assignment toggle details when clicked', async () => {
@@ -179,7 +184,7 @@ describe('ViewManager', () => {
 
         await waitFor(() => {
           expect(document.querySelector).toHaveBeenCalledWith(
-            'button[data-test-id=assignments-2-assignment-toggle-details]'
+            'button[data-testid=assignments-2-assignment-toggle-details]'
           )
           expect(mockElement.focus).toHaveBeenCalled()
         })
@@ -192,7 +197,7 @@ describe('ViewManager', () => {
             <ViewManager {...props} />
           </MockedProvider>
         )
-        expect(queryByText('New Attempt')).toBeInTheDocument()
+        expect(queryByText('New Attempt')).not.toBeNull()
       })
 
       it('is not displayed if the enrollment state is something other than active', async () => {
@@ -204,7 +209,7 @@ describe('ViewManager', () => {
             <ViewManager {...props} />
           </MockedProvider>
         )
-        expect(queryByText('New Attempt')).not.toBeInTheDocument()
+        expect(queryByText('New Attempt')).toBeNull()
       })
     })
   })
@@ -217,7 +222,7 @@ describe('ViewManager', () => {
           <ViewManager {...props} />
         </MockedProvider>
       )
-      expect(getByDisplayValue('Attempt 2')).toBeInTheDocument()
+      expect(getByDisplayValue('Attempt 2')).not.toBeNull()
     })
   })
 })

@@ -40,7 +40,7 @@ import {ScreenReaderContent} from '@instructure/ui-a11y-content'
 
 const I18n = useI18nScope('enhanced_individual_gradebook')
 
-type Props = {
+export type AssignmentInformationComponentProps = {
   assignment?: AssignmentConnection
   assignmentGroupInvalid?: boolean
   students?: SortableStudent[]
@@ -56,7 +56,7 @@ export default function AssignmentInformation({
   students = [],
   submissions = [],
   handleSetGrades,
-}: Props) {
+}: AssignmentInformationComponentProps) {
   const {gradedSubmissions, scores} = useMemo(
     () => ({
       gradedSubmissions: submissions.filter(s => s.score !== null && s.score !== undefined),
@@ -93,6 +93,23 @@ export default function AssignmentInformation({
     const submissionTypesOnAllowlist = _.intersection(submissionTypes, allowList)
     return hasSubmittedSubmissions && _.some(submissionTypesOnAllowlist)
   }
+
+  const translatedSubmissionTypes: {[key: string]: any} = {
+    discussion_topic: I18n.t('Discussion topic'),
+    online_quiz: I18n.t('Online quiz'),
+    on_paper: I18n.t('On paper'),
+    none: I18n.t('None'),
+    external_tool: I18n.t('External tool'),
+    online_text_entry: I18n.t('Online text entry'),
+    online_url: I18n.t('Online URL'),
+    online_upload: I18n.t('Online upload'),
+    media_recording: I18n.t('Media recording'),
+    student_annotation: I18n.t('Student annotation'),
+  }
+
+  const readableSubmissionTypes = submissionTypes
+    ?.map(snakeCase => translatedSubmissionTypes[snakeCase])
+    .join(', ')
 
   const speedGraderUrl = () => {
     return `${contextUrl}/gradebook/speed_grader?assignment_id=${assignment.id}`
@@ -154,7 +171,7 @@ export default function AssignmentInformation({
           <View as="div" className="pad-box no-sides" data-testid="assignment-submission-info">
             <View as="p">
               <View as="strong">
-                {I18n.t('Submission types:')} {assignment.submissionTypes}
+                {I18n.t('Submission types:')} {readableSubmissionTypes}
               </View>
             </View>
             <View as="p">
@@ -243,7 +260,7 @@ function AssignmentActions({
 
   return (
     <>
-      {!gradebookOptions.customOptions.hideStudentNames && (
+      {!gradebookOptions.customOptions.hideStudentNames && !assignment.anonymizeStudents && (
         <View as="div" className="pad-box no-sides">
           <Button
             color="secondary"
@@ -268,6 +285,7 @@ function AssignmentActions({
             color="secondary"
             onClick={() => setShowSetDefaultGradeModal(true)}
             data-testid="default-grade-button"
+            disabled={assignment.moderatedGrading && !assignment.gradesPublished}
           >
             {I18n.t('Set default grade')}
           </Button>

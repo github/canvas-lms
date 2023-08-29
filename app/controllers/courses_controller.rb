@@ -2473,7 +2473,7 @@ class CoursesController < ApplicationController
 
   def confirm_action
     params[:event] ||= (@context.claimed? || @context.created? || @context.completed?) ? "delete" : "conclude"
-    return unless authorized_action(@context, @current_user, permission_for_event(params[:event]))
+    authorized_action(@context, @current_user, permission_for_event(params[:event]))
   end
 
   def conclude_user
@@ -3835,7 +3835,7 @@ class CoursesController < ApplicationController
   end
 
   def link_validator
-    return unless authorized_action(@context, @current_user, [:manage_content, *RoleOverride::GRANULAR_MANAGE_COURSE_CONTENT_PERMISSIONS])
+    authorized_action(@context, @current_user, [:manage_content, *RoleOverride::GRANULAR_MANAGE_COURSE_CONTENT_PERMISSIONS])
     # render view
   end
 
@@ -3954,7 +3954,7 @@ class CoursesController < ApplicationController
       Canvas::ICU.collation_key(course_enrollments.first.course.nickname_for(@current_user))
     end
     enrollments_by_course = Api.paginate(enrollments_by_course, self, paginate_url) if api_request?
-    courses = enrollments_by_course.map(&:first).map(&:course)
+    courses = enrollments_by_course.map { |ces| ces.first.course }
     preloads = %i[account root_account]
     preload_teachers(courses) if includes.include?("teachers")
     preloads << :grading_standard if includes.include?("total_scores")
@@ -4143,6 +4143,7 @@ class CoursesController < ApplicationController
       :restrict_quantitative_data,
       :grading_standard,
       :grading_standard_enabled,
+      :course_grading_standard_enabled,
       :locale,
       :integration_id,
       :hide_final_grades,

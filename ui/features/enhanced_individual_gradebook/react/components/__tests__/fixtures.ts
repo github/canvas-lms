@@ -18,6 +18,7 @@
 
 import {MockedResponse} from '@apollo/react-testing'
 import {GRADEBOOK_QUERY, GRADEBOOK_STUDENT_QUERY} from '../../../queries/Queries'
+import {GradebookOptions, GradebookSortOrder} from '../../../types'
 
 export const DEFAULT_ENV = {
   active_grading_periods: [],
@@ -134,6 +135,8 @@ const GRADEBOOK_STUDENT_QUERY_MOCK_RESPONSE = {
             userId: '5',
             cachedDueDate: '2023-05-12T23:59:59-06:00',
             gradingPeriodId: '1',
+            deductedPoints: null,
+            enteredGrade: '68%',
           },
         ],
       },
@@ -162,4 +165,21 @@ export const setupGraphqlMocks = (overrides: MockedResponse[] = []): MockedRespo
     },
     ...overrides,
   ]
+}
+
+export const defaultGradebookOptions: GradebookOptions = {
+  contextUrl: '/courses/1',
+  sortOrder: GradebookSortOrder.Alphabetical,
+  customOptions: {
+    includeUngradedAssignments: false,
+    hideStudentNames: false,
+    showConcludedEnrollments: false,
+    showNotesColumn: false,
+    showTotalGradeAsPoints: false,
+    allowFinalGradeOverride: false,
+  },
+  gradingStandardScalingFactor: 1,
+  gradingStandardPointsBased: false,
+  pointsBasedGradingSchemesFeatureEnabled: false,
+  proxySubmissionEnabled: false,
 }

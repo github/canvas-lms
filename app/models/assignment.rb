@@ -134,6 +134,7 @@ class Assignment < ActiveRecord::Base
   belongs_to :grader_section, class_name: "CourseSection", optional: true
   belongs_to :final_grader, class_name: "User", optional: true
   has_many :active_groups, -> { merge(GroupCategory.active).merge(Group.active) }, through: :group_category, source: :groups
+  has_many :assigned_students, through: :submissions, source: :user
 
   belongs_to :duplicate_of, class_name: "Assignment", optional: true, inverse_of: :duplicates
   has_many :duplicates, class_name: "Assignment", inverse_of: :duplicate_of, foreign_key: "duplicate_of_id"
@@ -208,6 +209,7 @@ class Assignment < ActiveRecord::Base
   validates :lti_context_id, presence: true, uniqueness: true
   validates :grader_count, numericality: true
   validates :allowed_attempts, numericality: { greater_than: 0 }, unless: proc { |a| a.allowed_attempts == -1 }, allow_nil: true
+  validates :sis_source_id, uniqueness: { scope: :root_account_id }, allow_nil: true
 
   with_options unless: :moderated_grading? do
     validates :graders_anonymous_to_graders, absence: true
@@ -329,12 +331,13 @@ class Assignment < ActiveRecord::Base
     result.ignores.clear
     result.moderated_grading_selections.clear
     result.grades_published_at = nil
-    %i[migration_id
-       lti_context_id
-       turnitin_id
-       discussion_topic
+    %i[discussion_topic
+       integration_data
        integration_id
-       integration_data].each do |attr|
+       lti_context_id
+       migration_id
+       sis_source_id
+       turnitin_id].each do |attr|
       result.send(:"#{attr}=", nil)
     end
     result.peer_review_count = 0
@@ -598,6 +601,11 @@ class Assignment < ActiveRecord::Base
     write_attribute(:allowed_extensions, new_value)
   end
 
+  # ensure a root_account_id is set before validation so that we can
+  # properly validate sis_source_id uniqueness by root_account_id
+  before_validation :set_root_account_id, on: :create
+  before_create :set_muted
+
   before_save :ensure_post_to_sis_valid,
               :process_if_quiz,
               :default_values,
@@ -611,8 +619,6 @@ class Assignment < ActiveRecord::Base
   def delete_observer_alerts
     observer_alerts.in_batches(of: 10_000).delete_all
   end
-
-  before_create :set_root_account_id, :set_muted
 
   after_save  :update_submissions_and_grades_if_details_changed,
               :update_grading_period_grades,
@@ -762,6 +768,11 @@ class Assignment < ActiveRecord::Base
     end
     AssignmentGroup.where(id: assignment_group_id).update_all(updated_at: Time.zone.now.utc) if assignment_group_id
     true
+  end
+
+  def ab_guid_through_rubric
+    # ab_guid is an academic benchmark guid - it can be saved on the assignmenmt itself, or accessed through this association
+    rubric&.learning_outcome_alignments&.map { |loa| loa.learning_outcome.vendor_guid }&.compact || []
   end
 
   def update_student_submissions(updating_user)
@@ -2560,8 +2571,8 @@ class Assignment < ActiveRecord::Base
   # for group assignments, returns a single "student" for each
   # group's submission.  the students name will be changed to the group's
   # name.  for non-group assignments this just returns all visible users
-  def representatives(user:, includes: [:inactive], group_id: nil, section_id: nil, &block)
-    return visible_students_for_speed_grader(user:, includes:, group_id:, section_id:) unless grade_as_group?
+  def representatives(user:, includes: [:inactive], group_id: nil, section_id: nil, ignore_student_visibility: false, &block)
+    return visible_students_for_speed_grader(user:, includes:, group_id:, section_id:, ignore_student_visibility:) unless grade_as_group?
 
     submissions = self.submissions.to_a
     user_ids_with_submissions = submissions.select(&:has_submission?).to_set(&:user_id)
@@ -2587,7 +2598,7 @@ class Assignment < ActiveRecord::Base
     enrollment_priority = { "active" => 1, "inactive" => 2 }
     enrollment_priority.default = 100
 
-    visible_student_ids = visible_students_for_speed_grader(user:, includes:).to_set(&:id)
+    visible_student_ids = visible_students_for_speed_grader(user:, includes:, ignore_student_visibility:).to_set(&:id)
 
     reps_and_others = groups_and_ungrouped(user, includes:).filter_map do |group_name, group_info|
       group_students = group_info[:users]
@@ -2636,7 +2647,7 @@ class Assignment < ActiveRecord::Base
   # using this method instead of students_with_visibility so we
   # can add the includes and students_visible_to/participating_students scopes.
   # group_id and section_id filters may optionally be supplied.
-  def visible_students_for_speed_grader(user:, includes: [:inactive], group_id: nil, section_id: nil)
+  def visible_students_for_speed_grader(user:, includes: [:inactive], group_id: nil, section_id: nil, ignore_student_visibility: false)
     @visible_students_for_speed_grader ||= {}
     @visible_students_for_speed_grader[[user.global_id, includes, group_id]] ||= begin
       student_scope = if user.present?
@@ -2644,7 +2655,15 @@ class Assignment < ActiveRecord::Base
                       else
                         context.participating_students
                       end
-      students = students_with_visibility(student_scope).order_by_sortable_name.distinct
+
+      student_scope = if ignore_student_visibility
+                        student_scope.where(id: assigned_students)
+                      else
+                        students_with_visibility(student_scope)
+                      end
+
+      students = student_scope.order_by_sortable_name.distinct
+
       if group_id.present?
         students = students.joins(:group_memberships)
                            .where(group_memberships: { group_id:, workflow_state: :accepted })
@@ -3166,7 +3185,7 @@ class Assignment < ActiveRecord::Base
   end
 
   def annotated_document?
-    !!submission_types&.match?(/student_annotation/)
+    !!submission_types&.include?("student_annotation")
   end
 
   def readable_submission_type(submission_type)
@@ -3925,7 +3944,9 @@ class Assignment < ActiveRecord::Base
 
   def a2_enabled?
     return false unless course.feature_enabled?(:assignments_2_student)
-    return false if external_tool? || quiz? || discussion_topic? || wiki_page? || (peer_reviews? && !course.feature_enabled?(:peer_reviews_for_a2))
+    return false if quiz? || discussion_topic? || wiki_page?
+    return false if peer_reviews? && !course.feature_enabled?(:peer_reviews_for_a2)
+    return false if external_tool? && !Account.site_admin.feature_enabled?(:external_tools_for_a2)
 
     true
   end

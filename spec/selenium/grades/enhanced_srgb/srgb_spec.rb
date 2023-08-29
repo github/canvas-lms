@@ -86,20 +86,19 @@ describe "Screenreader Gradebook" do
   end
 
   it "can select a student" do
-    skip "unskip w/ EVAL-3356 BUG student select showing first name first instead of last name"
     simple_setup
     simple_grade
     EnhancedSRGB.visit(@course.id)
     student_dropdown_options = ["No Student Selected", @students[0].sortable_name, @students[1].sortable_name]
     expect(EnhancedSRGB.student_dropdown_options).to eq(student_dropdown_options)
 
-    click_option '[data-testid="content-selection-student-select"]', @students[0].sortable_name
-    assignment_points = ["(#{@grade_array[0]} / 20)", "(#{@grade_array[2]} / 20)"]
-    expect(ff("#student_information .assignment-subtotal-grade .points").map(&:text)).to eq(assignment_points)
+    click_option(EnhancedSRGB.student_dropdown, @students[0].sortable_name)
+    assignment_points = ["75% (#{@grade_array[0]} / 20)", "55.0% (#{@grade_array[2]} / 20)"]
+    expect(EnhancedSRGB.assign_subtotal_grade.map(&:text)).to eq(assignment_points)
 
-    click_option '[data-testid="content-selection-student-select"]', @students[1].sortable_name
-    assignment_points = ["(#{@grade_array[1]} / 20)", "(#{@grade_array[3]} / 20)"]
-    expect(ff("#student_information .assignment-subtotal-grade .points").map(&:text)).to eq(assignment_points)
+    click_option(EnhancedSRGB.student_dropdown, @students[1].sortable_name)
+    assignment_points = ["60% (#{@grade_array[1]} / 20)", "15% (#{@grade_array[3]} / 20)"]
+    expect(EnhancedSRGB.assign_subtotal_grade.map(&:text)).to eq(assignment_points)
   end
 
   it "can select a student using buttons" do
@@ -119,29 +118,29 @@ describe "Screenreader Gradebook" do
     EnhancedSRGB.next_student.click
     expect(EnhancedSRGB.next_student.attribute("disabled")).to be_truthy
     expect(EnhancedSRGB.student_information_name).to include_text(@students[2].name)
-    # expect(EnhancedSRGB.previous_student).to eq driver.switch_to.active_element
-    # uncomment w/ EVAL-3363 BUG focus does not switch to previous button when you are on the last student
+    expect(EnhancedSRGB.previous_student).to eq driver.switch_to.active_element
 
     # click twice to go back to first student
     EnhancedSRGB.previous_student.click
     EnhancedSRGB.previous_student.click
     expect(EnhancedSRGB.student_information_name).to include_text(@students[0].name)
-    # expect(EnhancedSRGB.next_student).to eq driver.switch_to.active_element
-    # uncomment w/ EVAL-3363 BUG focus does not switch to next button when you are on the last student
+    EnhancedSRGB.previous_student.click
+    expect(EnhancedSRGB.next_student).to eq driver.switch_to.active_element
   end
 
   it "can select an assignment using buttons" do
     simple_setup
     EnhancedSRGB.visit(@course.id)
-    EnhancedSRGB.select_assignment(@assign1)
 
     expect(EnhancedSRGB.previous_assignment.attribute("disabled")).to be_truthy
     expect(EnhancedSRGB.next_assignment.attribute("disabled")).not_to be_truthy
 
     EnhancedSRGB.next_assignment.click
+    EnhancedSRGB.next_assignment.click
     expect(EnhancedSRGB.previous_assignment.attribute("disabled")).not_to be_truthy
     expect(EnhancedSRGB.next_assignment.attribute("disabled")).to be_truthy
 
+    EnhancedSRGB.previous_assignment.click
     EnhancedSRGB.previous_assignment.click
     expect(EnhancedSRGB.previous_assignment.attribute("disabled")).to be_truthy
   end
@@ -160,7 +159,7 @@ describe "Screenreader Gradebook" do
   it "sets default grade" do
     simple_setup(2)
     EnhancedSRGB.visit(@course.id)
-    click_option(EnhancedSRGB.student_dropdown, @students[0].name) # fix w/ EVAL-3356 BUG student select showing first name first instead of last name
+    click_option(EnhancedSRGB.student_dropdown, @students[0].sortable_name)
     EnhancedSRGB.select_assignment(@assign1)
 
     EnhancedSRGB.default_grade.click
@@ -173,7 +172,6 @@ describe "Screenreader Gradebook" do
   end
 
   it "can select an assignment" do
-    skip "unskip in EVAL-2852 submission types are shown in snake case instead of human readable"
     a1 = basic_percent_setup
     a2 = @course.assignments.create!(
       title: "Test 2",

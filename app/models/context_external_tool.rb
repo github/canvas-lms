@@ -77,6 +77,28 @@ class ContextExternalTool < ActiveRecord::Base
   scope :disabled, -> { where(workflow_state: DISABLED_STATE) }
   scope :quiz_lti, -> { where(tool_id: QUIZ_LTI) }
 
+  STANDARD_EXTENSION_KEYS = [
+    :canvas_icon_class,
+    :custom_fields,
+    :default,
+    :display_type,
+    :enabled,
+    :icon_svg_path_64,
+    :icon_url,
+    :message_type,
+    :prefer_sis_email,
+    :required_permissions,
+    :selection_height,
+    :selection_width,
+    :text,
+    :labels,
+    :windowTarget,
+    :url,
+    :target_link_uri,
+    :root_account_only,
+    [:visibility, ->(v) { %w[members admins public].include?(v) || v.nil? }].freeze,
+  ].freeze
+
   CUSTOM_EXTENSION_KEYS = {
     file_menu: [:accept_media_types].freeze,
     editor_button: [:use_tray].freeze
@@ -263,14 +285,6 @@ class ContextExternalTool < ActiveRecord::Base
     RUBY
   end
 
-  def self.tool_for_assignment(assignment)
-    tag = assignment.external_tool_tag
-    return unless tag
-
-    launch_url = assignment.external_tool_tag.url
-    find_external_tool(launch_url, assignment.context)
-  end
-
   def deployment_id
     "#{id}:#{Lti::Asset.opaque_identifier_for(context)}"[0..254]
   end
@@ -311,6 +325,17 @@ class ContextExternalTool < ActiveRecord::Base
     { enabled: true }.with_indifferent_access.merge(settings[type])
   end
 
+  # Returns array of either <symbol tope> or array [<symbol type>, <validator block>]
+  def self.extension_keys_for_placement(type)
+    extension_keys = STANDARD_EXTENSION_KEYS
+
+    if (custom_keys = CUSTOM_EXTENSION_KEYS[type])
+      extension_keys += custom_keys
+    end
+
+    extension_keys
+  end
+
   def set_extension_setting(type, hash)
     if !hash || !hash.is_a?(Hash)
       settings.delete type
@@ -321,38 +346,10 @@ class ContextExternalTool < ActiveRecord::Base
     hash = hash.with_indifferent_access
     hash[:enabled] = Canvas::Plugin.value_to_boolean(hash[:enabled]) if hash[:enabled]
 
-    extension_keys = %i[
-      canvas_icon_class
-      custom_fields
-      default
-      display_type
-      enabled
-      icon_svg_path_64
-      icon_url
-      message_type
-      prefer_sis_email
-      required_permissions
-      selection_height
-      selection_width
-      text
-      labels
-      windowTarget
-      url
-      target_link_uri
-      root_account_only
-    ]
-
-    if (custom_keys = CUSTOM_EXTENSION_KEYS[type])
-      extension_keys += custom_keys
-    end
-    extension_keys += {
-      visibility: ->(v) { %w[members admins public].include?(v) || v.nil? }
-    }.to_a
-
     # merge with existing settings so that no caller can complain
     settings[type] = (settings[type] || {}).with_indifferent_access unless placement_inactive?(type)
 
-    extension_keys.each do |key, validator|
+    ContextExternalTool.extension_keys_for_placement(type).each do |key, validator|
       if hash.key?(key) && (!validator || validator.call(hash[key]))
         if placement_inactive?(type)
           settings[:inactive_placements][type][key] = hash[key]
@@ -990,6 +987,13 @@ class ContextExternalTool < ActiveRecord::Base
       (Utils::HashUtils.sort_nested_data(settings_was) != Utils::HashUtils.sort_nested_data(settings))
   end
 
+  def self.from_assignment(assignment)
+    tag = assignment.external_tool_tag
+    return unless tag
+
+    from_content_tag(tag, assignment.context)
+  end
+
   def self.from_content_tag(tag, context)
     return nil if tag.blank? || context.blank?
 
@@ -1004,8 +1008,9 @@ class ContextExternalTool < ActiveRecord::Base
     # no matches found.
     find_external_tool(
       tag.url,
-      context
-    ) || tag.content
+      context,
+      content&.id
+    )
   end
 
   def self.contexts_to_search(context, include_federated_parent: false)

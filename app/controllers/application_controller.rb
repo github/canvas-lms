@@ -319,6 +319,7 @@ class ApplicationController < ActionController::Base
         @js_env[:K5_SUBJECT_COURSE] = @context.is_a?(Course) && @context.elementary_subject_course?
         @js_env[:LOCALE_TRANSLATION_FILE] = ::Canvas::Cdn.registry.url_for("javascripts/translations/#{@js_env[:LOCALES].first}.json")
         @js_env[:ACCOUNT_ID] = effective_account_id(@context)
+        @js_env[:user_cache_key] = Base64.encode64("#{@current_user.uuid}vyfW=;[p-0?:{P_=HUpgraqe;njalkhpvoiulkimmaqewg") if @current_user&.workflow_state
       end
     end
 
@@ -360,6 +361,9 @@ class ApplicationController < ActionController::Base
     permanent_page_links
     developer_key_page_checkboxes
     improved_no_results_messaging
+    differentiated_modules
+    enhanced_course_creation_account_fetching
+    instui_for_import_page
   ].freeze
   JS_ENV_ROOT_ACCOUNT_FEATURES = %i[
     product_tours
@@ -898,7 +902,6 @@ class ApplicationController < ActionController::Base
     if !files_domain? && Setting.get("block_html_frames", "true") == "true" && !@embeddable
       append_to_header("Content-Security-Policy", "frame-ancestors 'self' #{csp_frame_ancestors&.uniq&.join(" ")};")
     end
-    headers["Strict-Transport-Security"] = "max-age=31536000" if request.ssl?
     RequestContext::Generator.store_request_meta(request, @context, @sentry_trace)
     true
   end
@@ -911,7 +914,7 @@ class ApplicationController < ActionController::Base
     if session[:pending_otp] && params[:controller] != "login/otp"
       return render plain: "Please finish logging in", status: :forbidden if request.xhr?
 
-      reset_session
+      destroy_session
       redirect_to login_url
     end
   end
@@ -1924,11 +1927,6 @@ class ApplicationController < ActionController::Base
       errors = exception.record.errors
       errors.set_reporter(:hash, Api::Errors::Reporter)
       data = errors.to_hash
-    when Api::Error
-      errors = ActiveModel::BetterErrors::Errors.new(nil)
-      errors.error_collection.add(:base, exception.error_id, message: exception.message)
-      errors.set_reporter(:hash, Api::Errors::Reporter)
-      data = errors.to_hash
     when ActiveRecord::RecordNotFound
       data = { errors: [{ message: "The specified resource does not exist." }] }
     when AuthenticationMethods::AccessTokenError
@@ -2020,7 +2018,7 @@ class ApplicationController < ActionController::Base
   def content_tag_redirect(context, tag, error_redirect_symbol, tag_type = nil)
     url_params = (tag.tag_type == "context_module") ? { module_item_id: tag.id } : {}
     if tag.content_type == "Assignment"
-      use_edit_url = params[:build].nil? && @context.grants_right?(@current_user, :manage) && tag.quiz_lti
+      use_edit_url = params[:build].nil? && @context.grants_any_right?(@current_user, :manage_assignments, :manage_assignments_edit) && tag.quiz_lti
       url_params[:quiz_lti] = true if use_edit_url
       redirect_symbol = use_edit_url ? :edit_context_assignment_url : :context_assignment_url
       redirect_to named_context_url(context, redirect_symbol, tag.content_id, url_params)
@@ -2072,7 +2070,7 @@ class ApplicationController < ActionController::Base
         @resource_title = @tag.title
       end
       @resource_url = @tag.url
-      @tool = ContextExternalTool.find_external_tool(tag.url, context, tag.content_id)
+      @tool = ContextExternalTool.from_content_tag(tag, context)
 
       @assignment&.prepare_for_ags_if_needed!(@tool)
 
@@ -2965,16 +2963,6 @@ class ApplicationController < ActionController::Base
     end
 
     @google_drive_connection = GoogleDrive::Connection.new(refresh_token, access_token, ApplicationController.google_drive_timeout)
-  end
-
-  def google_drive_client(refresh_token = nil, access_token = nil)
-    settings = Canvas::Plugin.find(:google_drive).try(:settings) || {}
-    client_secrets = {
-      client_id: settings[:client_id],
-      client_secret: settings[:client_secret_dec],
-      redirect_uri: settings[:redirect_uri]
-    }.with_indifferent_access
-    GoogleDrive::Client.create(client_secrets, refresh_token, access_token)
   end
 
   def user_has_google_drive

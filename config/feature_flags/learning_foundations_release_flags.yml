@@ -46,6 +46,8 @@ media_links_use_attachment_id:
     instead of the original
   applies_to: SiteAdmin
   environments:
+    ci:
+      state: allowed_on
     development:
       state: allowed_on
 
@@ -113,6 +115,12 @@ create_course_subaccount_picker:
     "Manually Created Courses" sub-account, when enabled, this feature allows
     people who can manually create courses to put those courses into any sub-account
     where they have enrollments.
+
+enhanced_course_creation_account_fetching:
+  applies_to: SiteAdmin
+  state: hidden
+  display_name: 'Use a new endpoint for fetching course creation accounts'
+  description: Use new improved logic to fetch all accounts a user can create courses in.
 
 calendar_series:
   applies_to: SiteAdmin
@@ -230,4 +238,12 @@ improved_no_results_messaging:
   description: |-
     If enabled, the course link tray will display more helpful messaging
     if there are no results for a given resource type.
+  applies_to: SiteAdmin
+
+differentiated_modules:
+  state: hidden
+  display_name: Differentiated Modules
+  description: |-
+    If enabled, modules and module items become assignable to specific
+    individuals and groups.
   applies_to: SiteAdmin

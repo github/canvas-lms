@@ -32,6 +32,14 @@ class EnhancedSRGB
       f('[data-testid="student_and_assignment_grade_input"]')
     end
 
+    def submission_late_penalty_label
+      f('[data-testid="submission_late_penalty_label"]')
+    end
+
+    def late_penalty_final_grade_label
+      f('[data-testid="late_penalty_final_grade_label"]')
+    end
+
     def excuse_checkbox
       f("#excuse_assignment")
     end
@@ -77,7 +85,7 @@ class EnhancedSRGB
     end
 
     def submit_for_student_button
-      f("#proxy_upload_trigger")
+      f('[data-testid="proxy-submission-button"]')
     end
 
     def notes_field
@@ -145,7 +153,7 @@ class EnhancedSRGB
     end
 
     def assign_subtotal_grade
-      f('td[data-testid="subtotal-grade"]')
+      ff('td[data-testid="subtotal-grade"]')
     end
 
     def secondary_id_label
@@ -301,7 +309,7 @@ class EnhancedSRGB
     end
 
     def select_student(student)
-      click_option(student_dropdown, student.name) # Change with EVAL-3356
+      click_option(student_dropdown, student.sortable_name)
     end
 
     def student_dropdown_options

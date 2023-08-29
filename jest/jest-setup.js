@@ -19,7 +19,7 @@
 import CoreTranslations from '../public/javascripts/translations/en.json'
 import Enzyme from 'enzyme'
 import Adapter from 'enzyme-adapter-react-16'
-import {filterUselessConsoleMessages} from '@instructure/js-utils'
+import filterUselessConsoleMessages from '@instructure/filter-console-messages'
 import rceFormatMessage from '@instructure/canvas-rce/es/format-message'
 import {up as configureDateTime} from '../ui/boot/initializers/configureDateTime'
 import {up as configureDateTimeMomentParser} from '../ui/boot/initializers/configureDateTimeMomentParser'
@@ -233,4 +233,12 @@ if (!('structuredClone' in window)) {
   Object.defineProperty(window, 'structuredClone', {
     value: obj => JSON.parse(JSON.stringify(obj)),
   })
+}
+
+if (typeof window.URL.createObjectURL === 'undefined') {
+  Object.defineProperty(window.URL, 'createObjectURL', {value: () => 'http://example.com/whatever'})
+}
+
+if (typeof window.URL.revokeObjectURL === 'undefined') {
+  Object.defineProperty(window.URL, 'revokeObjectURL', {value: () => undefined})
 }

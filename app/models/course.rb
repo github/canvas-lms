@@ -231,6 +231,7 @@ class Course < ActiveRecord::Base
   has_many :grading_periods, through: :grading_period_groups
   has_many :usage_rights, as: :context, inverse_of: :context, class_name: "UsageRights", dependent: :destroy
 
+  has_many :custom_grade_statuses, -> { active }, through: :root_account
   has_many :sis_post_grades_statuses
 
   has_many :progresses, as: :context, inverse_of: :context
@@ -2278,6 +2279,7 @@ class Course < ActiveRecord::Base
 
   def generate_grade_publishing_csv_output(enrollments, publishing_user, publishing_pseudonym, include_final_grade_overrides: false)
     ActiveRecord::Associations.preload(enrollments, { user: :pseudonyms })
+    custom_gradebook_statuses_enabled = Account.site_admin.feature_enabled?(:custom_gradebook_statuses) && include_final_grade_overrides
 
     enrollment_ids = []
 
@@ -2296,7 +2298,12 @@ class Course < ActiveRecord::Base
         score
       ]
       column_names << "grade" if grading_standard_enabled?
+      column_names << "custom_grade_status" if custom_gradebook_statuses_enabled
       csv << column_names
+
+      if include_final_grade_overrides
+        custom_grade_status_map = custom_grade_statuses.pluck(:id, :name).to_h
+      end
 
       enrollments.each do |enrollment|
         next if include_final_grade_overrides && !enrollment.effective_final_score
@@ -2307,6 +2314,11 @@ class Course < ActiveRecord::Base
         if include_final_grade_overrides
           grade = enrollment.effective_final_grade
           score = enrollment.effective_final_score
+
+          if custom_gradebook_statuses_enabled
+            custom_grade_status_id = enrollment.effective_final_grade_custom_status_id
+            custom_grade_status_name = custom_grade_status_map[custom_grade_status_id]
+          end
         else
           grade = enrollment.computed_final_grade
           score = enrollment.computed_final_score
@@ -2331,6 +2343,7 @@ class Course < ActiveRecord::Base
             score
           ]
           row << grade if grading_standard_enabled?
+          row << custom_grade_status_name if custom_gradebook_statuses_enabled
           csv << row
         end
       end
@@ -2467,12 +2480,14 @@ class Course < ActiveRecord::Base
 
   def enroll_user(user, type = "StudentEnrollment", opts = {})
     enrollment_state = opts[:enrollment_state]
-    enrollment_state ||= "active" if type == "ObserverEnrollment" && user.registered?
+    if (type == "ObserverEnrollment" || opts[:temporary_enrollment_source_user_id]) && user.registered?
+      enrollment_state ||= "active"
+    end
     section = opts[:section]
     limit_privileges_to_course_section = opts[:limit_privileges_to_course_section] || false
     associated_user_id = opts[:associated_user_id]
     temporary_enrollment_source_user_id =
-      account.feature_enabled?(:temporary_enrollments) ? opts[:temporary_enrollment_source_user_id] : nil
+      root_account.feature_enabled?(:temporary_enrollments) ? opts[:temporary_enrollment_source_user_id] : nil
 
     role = opts[:role] || shard.activate { Enrollment.get_built_in_role_for_type(type, root_account_id: self.root_account_id) }
 
@@ -2492,7 +2507,7 @@ class Course < ActiveRecord::Base
                                     type:,
                                     role_id: role,
                                     associated_user_id:)
-      if account.feature_enabled?(:temporary_enrollments)
+      if root_account.feature_enabled?(:temporary_enrollments)
         scope = scope.where(temporary_enrollment_source_user_id:)
       end
       e = if opts[:allow_multiple_enrollments]
@@ -2594,6 +2609,11 @@ class Course < ActiveRecord::Base
     end
   end
 
+  def course_grading_standard_enabled
+    !!grading_standard_id
+  end
+  alias_method :course_grading_standard_enabled?, :course_grading_standard_enabled
+
   def grading_standard_enabled
     !!grading_standard_id || account.grading_standard_enabled?
   end
@@ -2606,6 +2626,7 @@ class Course < ActiveRecord::Base
       self.grading_standard = self.grading_standard_id = nil
     end
   end
+  alias_method :course_grading_standard_enabled=, :grading_standard_enabled=
 
   def readable_default_wiki_editing_roles
     roles = default_wiki_editing_roles || "teachers"
