@@ -32,7 +32,6 @@ import {View} from '@instructure/ui-view'
 import {Text} from '@instructure/ui-text'
 // @ts-expect-error
 import {TextArea} from '@instructure/ui-text-area'
-import {TextInput} from '@instructure/ui-text-input'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
 import {Link} from '@instructure/ui-link'
 import {Avatar} from '@instructure/ui-avatar'
@@ -47,10 +46,11 @@ import {
   GradebookStudentDetails,
   GradebookUserSubmissionDetails,
 } from '../../../types'
-import {submitterPreviewText, outOfText} from '../../../utils/gradebookUtils'
+import {submitterPreviewText, passFailStatusOptions} from '../../../utils/gradebookUtils'
 import FriendlyDatetime from '@canvas/datetime/react/components/FriendlyDatetime'
 import {usePostComment} from '../../hooks/useComments'
 import {showFlashError} from '@canvas/alerts/react/FlashAlert'
+import DefaultGradeInput from './DefaultGradeInput'
 
 const I18n = useI18nScope('enhanced_individual_gradebook')
 
@@ -264,6 +264,7 @@ function SubmissionGradeForm({
   onGradeChange,
 }: SubmissionGradeFormProps) {
   const [gradeInput, setGradeInput] = useState<string>('')
+  const [passFailStatusIndex, setPassFailStatusIndex] = useState<number>(0)
   const {submit, submitScoreError, submitScoreStatus, savedSubmission} = useSubmitScore()
 
   useEffect(() => {
@@ -276,12 +277,29 @@ function SubmissionGradeForm({
 
   useEffect(() => {
     if (submission) {
+      if (assignment?.gradingType === 'pass_fail') {
+        const index = passFailStatusOptions.findIndex(
+          passFailStatusOption =>
+            passFailStatusOption.value === submission.grade ||
+            (passFailStatusOption.value === 'EX' && submission.excused)
+        )
+        if (index !== -1) {
+          setPassFailStatusIndex(index)
+        } else {
+          setPassFailStatusIndex(0)
+        }
+      }
       setGradeInput(submission.excused ? I18n.t('EX') : submission.grade ?? '-')
     }
-  }, [submission])
+  }, [assignment, submission])
 
   const submitGrade = async () => {
     await submit(assignment, submission, gradeInput, submitScoreUrl)
+  }
+
+  const handleChangePassFailStatus = (event: React.SyntheticEvent, data: {value: string}) => {
+    setGradeInput(data.value)
+    setPassFailStatusIndex(passFailStatusOptions.findIndex(option => option.value === data.value))
   }
 
   return (
@@ -289,21 +307,18 @@ function SubmissionGradeForm({
       <Flex>
         <FlexItem shouldGrow={true} shouldShrink={true}>
           <Text>{I18n.t('Grade:')} </Text>
-          <View as="span" margin="0 x-small 0 x-small">
-            <TextInput
-              renderLabel={<ScreenReaderContent>{I18n.t('Student Grade')}</ScreenReaderContent>}
-              display="inline-block"
-              width="4rem"
-              value={gradeInput}
-              disabled={
-                submitScoreStatus === ApiCallStatus.PENDING ||
-                (assignment.moderatedGrading && !assignment.gradesPublished)
-              }
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGradeInput(e.target.value)}
-              data-testid="submission-details-grade-input"
-            />
-          </View>
-          <Text>{outOfText(assignment, submission)}</Text>
+          <DefaultGradeInput
+            assignment={assignment}
+            submission={submission}
+            passFailStatusIndex={passFailStatusIndex}
+            gradeInput={gradeInput}
+            submitScoreStatus={submitScoreStatus}
+            context="submission_details_grade"
+            elementWrapper="span"
+            margin="0 x-small 0 x-small"
+            handleSetGradeInput={setGradeInput}
+            handleChangePassFailStatus={handleChangePassFailStatus}
+          />
         </FlexItem>
         <FlexItem align="start">
           <Button

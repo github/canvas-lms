@@ -20,11 +20,9 @@ import React, {useCallback, useEffect, useState} from 'react'
 import {showFlashError, showFlashSuccess} from '@canvas/alerts/react/FlashAlert'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import LoadingIndicator from '@canvas/loading-indicator'
-import {ScreenReaderContent} from '@instructure/ui-a11y-content'
 import {Button} from '@instructure/ui-buttons'
 import {Pill} from '@instructure/ui-pill'
 import {Text} from '@instructure/ui-text'
-import {TextInput} from '@instructure/ui-text-input'
 import {View} from '@instructure/ui-view'
 import {
   ApiCallStatus,
@@ -37,8 +35,9 @@ import {useSubmitScore} from '../../hooks/useSubmitScore'
 import {useGetComments} from '../../hooks/useComments'
 import SubmissionDetailModal, {GradeChangeApiUpdate} from './SubmissionDetailModal'
 import ProxyUploadModal from '@canvas/proxy-submission/react/ProxyUploadModal'
-import {outOfText, submitterPreviewText} from '../../../utils/gradebookUtils'
+import {submitterPreviewText, passFailStatusOptions} from '../../../utils/gradebookUtils'
 import GradeFormatHelper from '@canvas/grading/GradeFormatHelper'
+import DefaultGradeInput from './DefaultGradeInput'
 
 const I18n = useI18nScope('enhanced_individual_gradebook')
 
@@ -51,6 +50,7 @@ export type GradingResultsComponentProps = {
   loadingStudent: boolean
   currentStudentHiddenName: string
   onSubmissionSaved: (submission: GradebookUserSubmissionDetails) => void
+  dropped: boolean
 }
 
 export default function GradingResults({
@@ -62,12 +62,14 @@ export default function GradingResults({
   loadingStudent,
   currentStudentHiddenName,
   onSubmissionSaved,
+  dropped,
 }: GradingResultsComponentProps) {
   const submission = studentSubmissions?.find(s => s.assignmentId === assignment?.id)
   const [gradeInput, setGradeInput] = useState<string>('')
   const [excusedChecked, setExcusedChecked] = useState<boolean>(false)
   const [modalOpen, setModalOpen] = useState<boolean>(false)
   const [proxyUploadModalOpen, setProxyUploadModalOpen] = useState<boolean>(false)
+  const [passFailStatusIndex, setPassFailStatusIndex] = useState<number>(0)
 
   const {submit, submitExcused, submitScoreError, submitScoreStatus, savedSubmission} =
     useSubmitScore()
@@ -78,10 +80,22 @@ export default function GradingResults({
 
   useEffect(() => {
     if (submission) {
+      if (assignment?.gradingType === 'pass_fail') {
+        const index = passFailStatusOptions.findIndex(
+          passFailStatusOption =>
+            passFailStatusOption.value === submission.grade ||
+            (passFailStatusOption.value === 'EX' && submission.excused)
+        )
+        if (index !== -1) {
+          setPassFailStatusIndex(index)
+        } else {
+          setPassFailStatusIndex(0)
+        }
+      }
       setExcusedChecked(submission.excused)
       setGradeInput(submission.excused ? I18n.t('Excused') : submission.enteredGrade ?? '-')
     }
-  }, [submission])
+  }, [assignment, submission])
 
   const handleGradeChange = useCallback(
     (updateEvent: GradeChangeApiUpdate) => {
@@ -168,6 +182,15 @@ export default function GradingResults({
     await submit(assignment, submission, gradeInput, submitScoreUrl)
   }
 
+  const handleSetGradeInput = (input: string) => {
+    setGradeInput(input)
+  }
+
+  const handleChangePassFailStatus = (event: React.SyntheticEvent, data: {value: string}) => {
+    setGradeInput(data.value)
+    setPassFailStatusIndex(passFailStatusOptions.findIndex(option => option.value === data.value))
+  }
+
   return (
     <>
       <View as="div" data-testid="grading-results">
@@ -191,26 +214,17 @@ export default function GradingResults({
                 {submitterPreviewText(submission)}
               </Text>
             </View>
-
-            <View as="div" className="grade" margin="0 0 small 0">
-              <TextInput
-                display="inline-block"
-                width="14rem"
-                value={gradeInput}
-                disabled={
-                  submitScoreStatus === ApiCallStatus.PENDING ||
-                  (assignment.moderatedGrading && !assignment.gradesPublished)
-                }
-                renderLabel={<ScreenReaderContent>{I18n.t('Student Grade')}</ScreenReaderContent>}
-                data-testid="student_and_assignment_grade_input"
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGradeInput(e.target.value)}
-                onBlur={() => submitGrade()}
-              />
-              <View as="span" margin="0 0 0 small">
-                {outOfText(assignment, submission)}
-              </View>
-            </View>
-
+            <DefaultGradeInput
+              assignment={assignment}
+              submission={submission}
+              passFailStatusIndex={passFailStatusIndex}
+              gradeInput={gradeInput}
+              submitScoreStatus={submitScoreStatus}
+              context="student_and_assignment_grade"
+              handleSetGradeInput={handleSetGradeInput}
+              handleSubmitGrade={submitGrade}
+              handleChangePassFailStatus={handleChangePassFailStatus}
+            />
             <View as="div">
               {submission.late && (
                 <>
@@ -279,7 +293,11 @@ export default function GradingResults({
                 </label>
               </div>
             )}
-
+            {dropped && (
+              <p className="dropped muted" data-testid="dropped-assignment-message">
+                This grade is currently dropped for this student.
+              </p>
+            )}
             <View as="div" className="span4" margin="medium 0 0 0" width="14.6rem">
               <Button
                 data-testid="submission-details-button"

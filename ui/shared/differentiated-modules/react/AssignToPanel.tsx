@@ -17,7 +17,26 @@
  */
 
 import React from 'react'
+import {Flex} from '@instructure/ui-flex'
+import Footer from './Footer'
 
-export default function AssignToPanel() {
-  return <div>Assign To</div>
+// Doing this to avoid TS2339 errors-- remove once we're on InstUI 8
+const {Item: FlexItem} = Flex as any
+
+export interface AssignToPanelProps {
+  height: string
+  onDismiss: () => void
+}
+
+export default function AssignToPanel({height, onDismiss}: AssignToPanelProps) {
+  return (
+    <Flex direction="column" justifyItems="space-between" height={height}>
+      <FlexItem shouldGrow={true} padding="small">
+        <div>Assign To</div>
+      </FlexItem>
+      <FlexItem>
+        <Footer onDismiss={onDismiss} onUpdate={() => {}} />
+      </FlexItem>
+    </Flex>
+  )
 }

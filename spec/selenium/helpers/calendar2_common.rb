@@ -270,6 +270,7 @@ module Calendar2Common
   end
 
   def test_timed_calendar_event_in_tz(time_zone, start_time = "6:30 AM", end_time = "6:30 PM")
+    puts ">>> TZ #{time_zone}, #{Time.zone}"
     @user.time_zone = time_zone
     @user.save!
     @date = @user.time_zone.now.beginning_of_day
@@ -579,8 +580,12 @@ module Calendar2Common
     f("button[type='submit']")
   end
 
+  def more_options_title_field
+    f("#calendar_event_title")
+  end
+
   def more_options_date_field
-    f("input[placeHolder='Date']")
+    f("#calendar_event_date")
   end
 
   def more_options_start_time_field
@@ -597,6 +602,10 @@ module Calendar2Common
 
   def more_options_submit_button
     f("button[type='submit']")
+  end
+
+  def more_options_error_box
+    f(".errorBox:not(#error_box_template)")
   end
 
   def event_content

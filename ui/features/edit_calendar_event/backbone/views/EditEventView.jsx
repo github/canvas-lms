@@ -40,7 +40,10 @@ import FrequencyPicker, {
 } from '@canvas/calendar/react/RecurringEvents/FrequencyPicker/FrequencyPicker'
 import Course from '@canvas/courses/backbone/models/Course'
 import {renderUpdateCalendarEventDialog} from '@canvas/calendar/react/RecurringEvents/UpdateCalendarEventDialog'
-import {RRULEToFrequencyOptionValue} from '@canvas/calendar/react/RecurringEvents/FrequencyPicker/utils'
+import {
+  RRULEToFrequencyOptionValue,
+  updateRRuleForNewDate,
+} from '@canvas/calendar/react/RecurringEvents/FrequencyPicker/utils'
 import {CommonEventShowError} from '@canvas/calendar/jquery/CommonEvent/CommonEvent'
 import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
 
@@ -119,6 +122,12 @@ export default class EditCalendarEventView extends Backbone.View {
         !!(attrs.start_at && attrs.start_at.equals(attrs.end_at)) &&
         attrs.start_at.equals(attrs.start_at.clearTime())
       this.model.set(attrs)
+      this.frequency = attrs.rrule
+        ? RRULEToFrequencyOptionValue(
+            moment.tz(attrs.start_date, 'MMM D, YYYY', ENV.TIMEZONE),
+            attrs.rrule
+          )
+        : 'not-repeat'
       this.render()
 
       // populate inputs with params passed through the url
@@ -218,6 +227,7 @@ export default class EditCalendarEventView extends Backbone.View {
   _handleFrequencyChange(newFrequency, newRRule) {
     if (newFrequency !== 'custom') {
       this.model.set('rrule', newRRule)
+      this.frequency = newFrequency
       this.renderRecurringEventFrequencyPicker()
     }
   }
@@ -226,14 +236,9 @@ export default class EditCalendarEventView extends Backbone.View {
     if (ENV.FEATURES.calendar_series) {
       const pickerNode = document.getElementById('recurring_event_frequency_picker')
       const start = this.$el.find('[name="start_date"]').val()
-      const eventStart = start ? moment.tz(start, ENV.TIMEZONE) : moment('invalid')
+      const eventStart = start ? moment.tz(start, 'MMM D, YYYY', ENV.TIMEZONE) : moment('invalid')
 
       const rrule = this.model.get('rrule')
-      const freq =
-        rrule && eventStart.isValid()
-          ? RRULEToFrequencyOptionValue(eventStart, rrule)
-          : 'not-repeat'
-
       const date = eventStart.isValid() ? eventStart.toISOString(true) : undefined
 
       let courseEndAt
@@ -253,7 +258,7 @@ export default class EditCalendarEventView extends Backbone.View {
               interaction={eventStart.isValid() ? 'enabled' : 'disabled'}
               locale={ENV.LOCALE || 'en'}
               timezone={ENV.TIMEZONE}
-              initialFrequency={freq}
+              initialFrequency={this.frequency}
               rrule={rrule}
               width="fit"
               onChange={this.handleFrequencyChange}
@@ -271,6 +276,11 @@ export default class EditCalendarEventView extends Backbone.View {
     this.renderRecurringEventFrequencyPicker()
 
     this.$el.find('[name="start_date"]').on('change', () => {
+      const start = this.$el.find('[name="start_date"]').val()
+      const eventStart = start ? moment.tz(start, 'MMM D, YYYY', ENV.TIMEZONE) : moment('invalid')
+      if (eventStart.isValid() && this.model.get('rrule') && this.frequency !== 'saved-custom') {
+        this.model.set('rrule', updateRRuleForNewDate(eventStart, this.model.get('rrule')))
+      }
       this.renderRecurringEventFrequencyPicker()
     })
 
@@ -493,7 +503,43 @@ export default class EditCalendarEventView extends Backbone.View {
       eventData.web_conference = ''
     }
 
+    if (!this.validateFormData(eventData)) {
+      return false
+    }
+
     return this.saveEvent(eventData)
+  }
+
+  validateFormData({title, start_at}) {
+    // Form data:
+    // blackout_date, description, end_at, important_dates, location_address,
+    // location_name, start_at, title
+    const errors = []
+    if (title.length === 0) {
+      errors.push({
+        field: $('#calendar_event_title'),
+        text: I18n.t('errors.title_required', 'You must enter a title'),
+      })
+    }
+    if (!start_at) {
+      errors.push({
+        field: $('#calendar_event_date'),
+        text: I18n.t('errors.start_date_required', 'You must enter a date'),
+      })
+    }
+    if (errors.length) {
+      let offset
+      errors.forEach(err => {
+        const errorBox = err.field.errorBox(err.text)
+        offset ||= errorBox.offset()
+      })
+      if (offset) {
+        // Scrolls to the the uppermost field, in this page title field could be it.
+        $('html,body').scrollTo({top: offset.top, left: 0})
+      }
+      return false
+    }
+    return true
   }
 
   async saveEvent(eventData) {

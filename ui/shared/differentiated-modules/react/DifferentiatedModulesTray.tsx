@@ -16,16 +16,17 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, {useState, useEffect} from 'react'
+import React, {useState, useEffect, useMemo} from 'react'
 import {Tray} from '@instructure/ui-tray'
 import {View} from '@instructure/ui-view'
 import {Flex} from '@instructure/ui-flex'
-import {CloseButton, Button} from '@instructure/ui-buttons'
+import {CloseButton} from '@instructure/ui-buttons'
 import {Heading} from '@instructure/ui-heading'
 import {Spinner} from '@instructure/ui-spinner'
 import {Tabs} from '@instructure/ui-tabs'
 // @ts-expect-error
 import {IconModuleSolid} from '@instructure/ui-icons'
+import {calculatePanelHeight} from '../utils/panelHelpers'
 import {useScope as useI18nScope} from '@canvas/i18n'
 
 const I18n = useI18nScope('differentiated_modules')
@@ -36,8 +37,11 @@ const {Item: FlexItem} = Flex as any
 export interface DifferentiatedModulesTrayProps {
   open: boolean
   onDismiss: () => void
+  moduleId?: string
   initialTab?: 'settings' | 'assign-to'
   assignOnly?: boolean
+  moduleName?: string
+  unlockAt?: string
 }
 
 const SettingsPanel = React.lazy(() => import('./SettingsPanel'))
@@ -46,8 +50,10 @@ const AssignToPanel = React.lazy(() => import('./AssignToPanel'))
 export default function DifferentiatedModulesTray({
   open,
   onDismiss,
+  moduleId = '',
   initialTab = 'assign-to',
   assignOnly = true,
+  ...settingsProps
 }: DifferentiatedModulesTrayProps) {
   const [selectedTab, setSelectedTab] = useState(initialTab)
 
@@ -55,6 +61,8 @@ export default function DifferentiatedModulesTray({
     if (!open) setSelectedTab(initialTab)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
+
+  const panelHeight = useMemo(() => calculatePanelHeight(!assignOnly), [assignOnly])
 
   function Header() {
     return (
@@ -86,7 +94,7 @@ export default function DifferentiatedModulesTray({
     return (
       <React.Suspense fallback={<Fallback />}>
         {assignOnly ? (
-          <AssignToPanel />
+          <AssignToPanel height={panelHeight} onDismiss={onDismiss} />
         ) : (
           <Tabs
             onRequestTabChange={(_e: Event, {id}: {id: 'settings' | 'assign-to'}) =>
@@ -98,16 +106,23 @@ export default function DifferentiatedModulesTray({
               data-testid="settings-panel"
               renderTitle={I18n.t('Settings')}
               isSelected={selectedTab === 'settings'}
+              padding="none"
             >
-              <SettingsPanel moduleName="Temporary Placeholder" />
+              <SettingsPanel
+                height={panelHeight}
+                onDismiss={onDismiss}
+                moduleId={moduleId}
+                {...settingsProps}
+              />
             </Tabs.Panel>
             <Tabs.Panel
               id="assign-to"
               data-testid="assign-to-panel"
               renderTitle={I18n.t('Assign To')}
               isSelected={selectedTab === 'assign-to'}
+              padding="none"
             >
-              <AssignToPanel />
+              <AssignToPanel height={panelHeight} onDismiss={onDismiss} />
             </Tabs.Panel>
           </Tabs>
         )}
@@ -115,30 +130,10 @@ export default function DifferentiatedModulesTray({
     )
   }
 
-  function Footer() {
-    return (
-      <View as="div" padding="small" background="secondary" borderWidth="small none none none">
-        <Flex as="div" justifyItems="end">
-          <FlexItem>
-            <Button onClick={onDismiss}>{I18n.t('Cancel')}</Button>
-          </FlexItem>
-          <FlexItem margin="0 0 0 small">
-            <Button color="primary">{I18n.t('Update Module')}</Button>
-          </FlexItem>
-        </Flex>
-      </View>
-    )
-  }
-
   return (
     <Tray open={open} label={I18n.t('Edit Module Settings')} placement="end" size="regular">
-      <Flex direction="column" justifyItems="space-between" height="100vh">
-        <FlexItem overflowX="hidden" shouldGrow={true}>
-          <Header />
-          <Body />
-        </FlexItem>
-        <Footer />
-      </Flex>
+      <Header />
+      <Body />
     </Tray>
   )
 }

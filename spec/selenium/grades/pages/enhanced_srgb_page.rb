@@ -40,6 +40,14 @@ class EnhancedSRGB
       f('[data-testid="late_penalty_final_grade_label"]')
     end
 
+    def pass_fail_grade_select
+      f('[data-testid="student_and_assignment_grade_select"]')
+    end
+
+    def out_of_text
+      f('[data-testid="student_and_assignment_grade_out_of_text"]')
+    end
+
     def excuse_checkbox
       f("#excuse_assignment")
     end
@@ -77,7 +85,7 @@ class EnhancedSRGB
     end
 
     def submission_details_grade_input
-      f('[data-testid="submission-details-grade-input"]')
+      f('[data-testid="submission_details_grade_input"]')
     end
 
     def submission_details_assignment_name
@@ -190,6 +198,10 @@ class EnhancedSRGB
 
     def default_grade_close_button
       f('[data-testid="default-grade-close-button"]')
+    end
+
+    def dropped_message
+      f('[data-testid="dropped-assignment-message"]')
     end
 
     def curve_grade_button

@@ -24,12 +24,19 @@ import PropTypes from 'prop-types'
 import {Table} from '@instructure/ui-table'
 
 import {GradeSummaryContext} from './context'
-import {getGradingPeriodID, sortAssignments, listDroppedAssignments} from './utils'
+import {
+  getGradingPeriodID,
+  sortAssignments,
+  listDroppedAssignments,
+  filteredAssignments,
+} from './utils'
+import {calculateCourseGrade} from './gradeCalculatorConversions'
 
 import {totalRow} from './AssignmentTableRows/TotalRow'
 import {assignmentGroupRow} from './AssignmentTableRows/AssignmentGroupRow'
 import {gradingPeriodRow} from './AssignmentTableRows/GradingPeriodRow'
 import {assignmentRow} from './AssignmentTableRows/AssignmentRow'
+import {scoreDistributionRow} from './AssignmentTableRows/ScoreDistributionRow'
 
 const I18n = useI18nScope('grade_summary')
 
@@ -40,6 +47,19 @@ const headers = [
   {key: 'score', value: I18n.t('Score'), id: nanoid(), alignment: 'center', width: '10%'},
 ]
 
+const getCurrentOrFinalGrade = (
+  allGradingPeriods,
+  calculateOnlyGradedAssignments,
+  current,
+  final
+) => {
+  if (allGradingPeriods) {
+    return calculateOnlyGradedAssignments ? current : final
+  } else {
+    return current
+  }
+}
+
 const AssignmentTable = ({
   queryData,
   layout,
@@ -49,6 +69,16 @@ const AssignmentTable = ({
 }) => {
   const {assignmentSortBy} = React.useContext(GradeSummaryContext)
   const [calculateOnlyGradedAssignments, setCalculateOnlyGradedAssignments] = useState(true)
+
+  const courseGrades = calculateCourseGrade(
+    queryData?.relevantGradingPeriodGroup,
+    queryData?.assignmentGroupsConnection?.nodes,
+    filteredAssignments(queryData, calculateOnlyGradedAssignments),
+    calculateOnlyGradedAssignments,
+    queryData?.applyGroupWeights
+  )
+
+  const [openAssignmentDetailIds, setOpenAssignmentDetailIds] = useState([])
 
   const [droppedAssignments, setDroppedAssignments] = useState(
     listDroppedAssignments(queryData, getGradingPeriodID() === '0', true)
@@ -90,32 +120,67 @@ const AssignmentTable = ({
         </Table.Row>
       </Table.Head>
       <Table.Body>
-        {sortAssignments(assignmentSortBy, queryData?.assignmentsConnection?.nodes)?.map(
-          assignment => {
+        {sortAssignments(assignmentSortBy, queryData?.assignmentsConnection?.nodes)
+          ?.map(assignment => {
             const modifiedAssignment = {
               ...assignment,
               dropped: droppedAssignments.includes(assignment),
             }
 
-            return assignmentRow(
-              modifiedAssignment,
-              queryData,
-              setShowTray,
-              setSelectedSubmission,
-              handleReadStateChange
-            )
-          }
-        )}
+            return [
+              assignmentRow(
+                modifiedAssignment,
+                queryData,
+                setShowTray,
+                setSelectedSubmission,
+                handleReadStateChange,
+                setOpenAssignmentDetailIds,
+                openAssignmentDetailIds
+              ),
+              openAssignmentDetailIds.includes(modifiedAssignment._id) &&
+              modifiedAssignment?.scoreStatistic
+                ? scoreDistributionRow(
+                    modifiedAssignment,
+                    setOpenAssignmentDetailIds,
+                    openAssignmentDetailIds
+                  )
+                : null,
+            ]
+          })
+          .flat()}
         {getGradingPeriodID() !== '0'
           ? queryData?.assignmentGroupsConnection?.nodes?.map(assignmentGroup => {
-              return assignmentGroupRow(assignmentGroup, queryData, calculateOnlyGradedAssignments)
+              return assignmentGroupRow(
+                assignmentGroup,
+                queryData,
+                calculateOnlyGradedAssignments,
+                calculateOnlyGradedAssignments
+                  ? courseGrades?.assignmentGroups[assignmentGroup._id]?.current
+                  : courseGrades?.assignmentGroups[assignmentGroup._id]?.current
+              )
             })
           : queryData?.gradingPeriodsConnection?.nodes?.map(gradingPeriod => {
               return gradingPeriod.displayTotals
-                ? gradingPeriodRow(gradingPeriod, queryData, calculateOnlyGradedAssignments)
+                ? gradingPeriodRow(
+                    gradingPeriod,
+                    queryData,
+                    calculateOnlyGradedAssignments,
+                    calculateOnlyGradedAssignments
+                      ? courseGrades?.gradingPeriods[gradingPeriod._id].current
+                      : courseGrades?.gradingPeriods[gradingPeriod._id].current
+                  )
                 : null
             })}
-        {totalRow(queryData, calculateOnlyGradedAssignments)}
+        {totalRow(
+          queryData,
+          calculateOnlyGradedAssignments,
+          getCurrentOrFinalGrade(
+            getGradingPeriodID() === '0',
+            calculateOnlyGradedAssignments,
+            courseGrades?.current,
+            courseGrades?.final
+          )
+        )}
       </Table.Body>
     </Table>
   )

@@ -1,19 +1,4 @@
 GIT
-  remote: https://github.com/erickguan/ffi-icu.git
-  revision: 0c6f8b201f3994fa10c741ff5dbb146cb83f4a9d
-  ref: 0c6f8b201f3994fa10c741ff5dbb146cb83f4a9d
-  specs:
-    ffi-icu (0.4.0)
-      ffi (~> 1.0, >= 1.0.9)
-
-GIT
-  remote: https://github.com/instructure/week-of-month.git
-  revision: b3013639e9474f302b5a6f27e4e45313e8d24902
-  ref: b3013639e9474f302b5a6f27e4e45313e8d24902
-  specs:
-    week_of_month (1.2.5)
-
-GIT
   remote: https://github.com/kreynolds/cassandra-cql.git
   revision: 02b5abbe441a345c051a180327932566fd66bb36
   ref: 02b5abbe441a345c051a180327932566fd66bb36
@@ -32,22 +17,6 @@ GIT
       rspec-core
       rspec_junit_formatter
       sentry-ruby
-
-GIT
-  remote: https://github.com/rails-api/active_model_serializers.git
-  revision: 61882e1e4127facfe92e49057aec71edbe981829
-  ref: 61882e1e4127facfe92e49057aec71edbe981829
-  specs:
-    active_model_serializers (0.9.0.alpha1)
-      activemodel (>= 3.2)
-
-GIT
-  remote: https://github.com/rda1902/spring-commands-rubocop.git
-  revision: 818acb74130ac95adf9e8733986d45c168e4a5f3
-  ref: 818acb74130ac95adf9e8733986d45c168e4a5f3
-  specs:
-    spring-commands-rubocop (0.3.0)
-      spring (>= 1.0, < 5.0)
 
 GIT
   remote: https://github.com/twitter/thrift_client.git
@@ -357,6 +326,9 @@ GEM
       rails-html-sanitizer (~> 1.1, >= 1.2.0)
     active_model-better_errors (1.6.7)
       activemodel (>= 3.0)
+    active_model_serializers (0.9.9)
+      activemodel (>= 3.2)
+      concurrent-ruby (~> 1.0)
     active_record_query_trace (1.8.2)
       activerecord (>= 6.0.0)
     activejob (7.0.7.2)
@@ -555,6 +527,8 @@ GEM
     ffi-compiler (1.0.1)
       ffi (>= 1.0.0)
       rake
+    ffi-icu (0.5.1)
+      ffi (~> 1.0, >= 1.0.9)
     find_a_port (1.0.1)
     flakey_spec_catcher (0.12.1)
       rspec (~> 3.10)
@@ -566,14 +540,14 @@ GEM
     gepub (1.0.15)
       nokogiri (>= 1.8.2, < 2.0)
       rubyzip (> 1.1.1, < 2.4)
-    gergich (2.1.1)
+    gergich (2.1.2)
       httparty (~> 0.17)
       sqlite3 (~> 1.4)
     git (1.18.0)
       addressable (~> 2.8)
       rchardet (~> 1.8)
-    globalid (1.1.0)
-      activesupport (>= 5.0)
+    globalid (1.2.1)
+      activesupport (>= 6.1)
     globby (0.1.2)
     google-apis-core (0.11.1)
       addressable (~> 2.5, >= 2.5.1)
@@ -663,8 +637,9 @@ GEM
     instructure-happymapper (0.5.10)
       nokogiri (~> 1.5)
     io-console (0.6.0)
-    irb (1.7.4)
-      reline (>= 0.3.6)
+    irb (1.8.1)
+      rdoc
+      reline (>= 0.3.8)
     iso8601 (0.13.0)
     jira_ref_parser (1.0.1)
     jmespath (1.6.2)
@@ -775,7 +750,7 @@ GEM
       rack (>= 1.2, < 4)
       snaky_hash (~> 2.0)
       version_gem (~> 1.1)
-    oj (3.16.0)
+    oj (3.16.1)
     once-ler (2.0.1)
       activerecord (>= 6.0, < 7.1)
       rspec (>= 3.6)
@@ -809,7 +784,7 @@ GEM
       diff-lcs (~> 1.4)
       expgen (~> 0.1)
       rainbow (~> 3.1.1)
-    pact_broker-client (1.68.0)
+    pact_broker-client (1.70.0)
       dig_rb (~> 1.0)
       httparty (>= 0.21.0, < 1.0.0)
       rake (~> 13.0)
@@ -828,7 +803,7 @@ GEM
       hashery (~> 2.0)
       ruby-rc4
       ttfunk
-    pg (1.5.3)
+    pg (1.5.4)
     pg_query (4.2.3)
       google-protobuf (>= 3.22.3)
     prawn (2.4.0)
@@ -851,6 +826,8 @@ GEM
     pry-byebug (3.10.1)
       byebug (~> 11.0)
       pry (>= 0.13, < 0.15)
+    psych (5.1.0)
+      stringio
     public_suffix (5.0.3)
     puma (6.3.1)
       nio4r (~> 2.0)
@@ -903,6 +880,8 @@ GEM
       nokogiri (>= 1.5.6, < 2.0)
     rchardet (1.8.0)
     rdiscount (2.2.7.1)
+    rdoc (6.5.0)
+      psych (>= 4.0.0)
     redcarpet (3.6.0)
     redis (4.1.4)
     redis-scripting (1.0.1)
@@ -919,7 +898,7 @@ GEM
     retriable (3.1.2)
     rexml (3.2.6)
     ritex (1.0.1)
-    rotp (6.2.2)
+    rotp (6.3.0)
     rqrcode (2.2.0)
       chunky_png (~> 1.0)
       rqrcode_core (~> 1.0)
@@ -955,7 +934,7 @@ GEM
       rspec-core (>= 2, < 4, != 2.12.0)
     rss (0.3.0)
       rexml
-    rubocop (1.56.1)
+    rubocop (1.56.2)
       base64 (~> 0.1.1)
       json (~> 2.3)
       language_server-protocol (>= 3.17.0)
@@ -1016,7 +995,7 @@ GEM
       nokogiri (>= 1.12.0)
     scrypt (3.0.7)
       ffi-compiler (>= 1.0, < 2.0)
-    selenium-webdriver (4.11.0)
+    selenium-webdriver (4.12.0)
       rexml (~> 3.2, >= 3.2.5)
       rubyzip (>= 1.2.2, < 3.0)
       websocket (~> 1.0)
@@ -1060,6 +1039,8 @@ GEM
       spring (>= 0.9.1)
     spring-commands-rspec (1.0.4)
       spring (>= 0.9.1)
+    spring-commands-rubocop (0.4.0)
+      spring (>= 1.0)
     sqlite3 (1.6.4)
       mini_portile2 (~> 2.8.0)
     sqlite3 (1.6.4-aarch64-linux)
@@ -1073,6 +1054,7 @@ GEM
       axe-core-rspec (~> 4.1)
       axe-core-selenium (~> 4.1)
       rspec (~> 3.8)
+    stringio (3.0.8)
     swearjar (1.4.0)
     switchman (3.5.9)
       activerecord (>= 6.1.4, < 7.1)
@@ -1130,7 +1112,7 @@ GEM
       coercible (~> 1.0)
       descendants_tracker (~> 0.0, >= 0.0.3)
     wcag_color_contrast (0.1.0)
-    webmock (3.18.1)
+    webmock (3.19.1)
       addressable (>= 2.8.0)
       crack (>= 0.3.2)
       hashdiff (>= 0.4.0, < 2.0.0)
@@ -1158,21 +1140,17 @@ DEPENDENCIES
   academic_benchmarks (= 1.1.2)
   account_reports!
   active_model-better_errors (= 1.6.7)
-  active_model_serializers (= 0.9.0alpha1)!
+  active_model_serializers (~> 0.9.9)
   active_record_query_trace (~> 1.8)
-  activerecord-pg-extensions (= 0.4.4)
   activesupport-suspend_callbacks!
   acts_as_list!
   addressable (~> 2.8)
   adheres_to_policy!
-  after_transaction_commit (= 2.2.2)
   apollo-federation (~> 3.8)
   attachment_fu!
   authlogic (= 6.4.2)
   autoextend!
-  aws-sdk-dynamodb (~> 1.83)
   aws-sdk-kinesis (~> 1.45)
-  aws-sdk-kms (~> 1.63)
   aws-sdk-s3 (~> 1.119)
   aws-sdk-sns (~> 1.60)
   aws-sdk-sqs (~> 1.53)
@@ -1184,7 +1162,6 @@ DEPENDENCIES
   brakeman (~> 6.0)
   broadcast_policy!
   browser (~> 5.3)
-  builder (= 3.2.4)
   bundler (~> 2.2)
   business_time (= 0.13.0)
   byebug (= 11.1.3)
@@ -1222,7 +1199,6 @@ DEPENDENCIES
   database_cleaner (~> 2.0)
   db-query-matchers (= 0.11.0)
   ddtrace (~> 1.13)
-  digest-murmurhash (= 1.1.1)
   diigo!
   diplomat (~> 2.6)
   docx (~> 0.8)
@@ -1233,23 +1209,18 @@ DEPENDENCIES
   escape_code (= 0.2)
   event_stream!
   factory_bot (= 6.2.1)
-  faraday (~> 2.7)
-  ffi (~> 1.15)
-  ffi-icu (= 0.4.0)!
+  ffi-icu (~> 0.5)
   flakey_spec_catcher (~> 0.12)
-  folio-pagination (= 0.0.12)
   gepub (= 1.0.15)
-  gergich (= 2.1.1)
+  gergich (~> 2.1)
   google_drive!
   graphql (~> 1.12.7)
   graphql-batch (~> 0.5)
   guardrail (= 3.0.2)
-  hashery (= 2.1.2)
   headless (= 2.3.1)
   highline (~> 2.0)
   html_text_helper!
   httparty (~> 0.21)
-  i18n (~> 1.12)
   i18n_extraction!
   i18n_tasks!
   i18nliner (~> 0.2.4)
@@ -1262,8 +1233,6 @@ DEPENDENCIES
   inst_access (= 0.1.2)
   inst_statsd (~> 3.0)
   irb (~> 1.7)
-  jira_ref_parser (= 1.0.1)
-  json (~> 2.6.1)
   json-jwt (~> 1.13)
   json-schema (~> 4.0)
   json_schemer (~> 2.0)
@@ -1275,7 +1244,6 @@ DEPENDENCIES
   lti-advantage!
   lti_outbound!
   luminosity_contrast (= 0.2.1)
-  mail (~> 2.8)
   marginalia (= 1.11.1)
   matrix (= 0.4.2)
   mime-types (~> 3.5)
@@ -1283,11 +1251,7 @@ DEPENDENCIES
   moodle_importer!
   multi_json (= 1.15.0)
   net-http (~> 0.1)
-  net-imap (~> 0.3)
   net-ldap (~> 0.18)
-  net-pop (~> 0.1)
-  net-smtp (~> 0.3)
-  nokogiri (~> 1.14)
   oauth (~> 1.1)
   oauth2 (~> 2.0)
   oj (~> 3.16)
@@ -1307,18 +1271,14 @@ DEPENDENCIES
   pry-byebug (= 3.10.1)
   puma (~> 6.3)
   qti_exporter!
-  rack (~> 2.2)
   rack-brotli (~> 1.2)
   rails (~> 7.0.4)
   rails-controller-testing (= 1.0.5)
-  rails-dom-testing (~> 2.1)
   rails-observers (= 0.1.5)
-  rake (~> 13.0)
   ratom-nokogiri (= 0.10.11)
   redcarpet (~> 3.6)
   redis (= 4.1.4)
   redis-scripting (= 1.0.1)
-  regexp_parser (~> 2.8)
   request_context!
   respondus_soap_endpoint!
   retriable (~> 3.1)
@@ -1330,7 +1290,6 @@ DEPENDENCIES
   rspec-collection_matchers (= 1.2.0)
   rspec-rails (~> 6.0)
   rspec_around_all (= 0.2.0)
-  rspec_junit_formatter
   rspecq!
   rss (~> 0.3)
   rubocop-canvas!
@@ -1346,18 +1305,15 @@ DEPENDENCIES
   saml2 (= 3.1.2)
   sanitize (~> 6.0)
   scrypt (= 3.0.7)
-  selenium-webdriver (~> 4.11.0)
+  selenium-webdriver (~> 4.12)
   sentry-inst_jobs (~> 5.10)
   sentry-rails (~> 5.10)
   shoulda-matchers (~> 5.3)
-  simple_oauth (= 0.3.1)
-  simplecov (~> 0.22)
   simplecov-rcov (~> 0.3)
   simply_versioned!
-  spring (~> 4.0)
   spring-commands-parallel-rspec (= 1.1.0)
   spring-commands-rspec (= 1.0.4)
-  spring-commands-rubocop (= 0.3.0)!
+  spring-commands-rubocop (~> 0.4)
   stackprof (~> 0.2)
   stormbreaker (~> 1.0)
   stringify_ids!
@@ -1374,7 +1330,6 @@ DEPENDENCIES
   vericite_api (= 1.5.3)
   wcag_color_contrast (= 0.1.0)
   webmock (~> 3.18)
-  week_of_month (= 1.2.5)!
   workflow!
   yard (~> 0.9)
   yard-appendix (= 0.1.8)
@@ -1383,4 +1338,4 @@ RUBY VERSION
    ruby 3.1.2p20
 
 BUNDLED WITH
-   2.3.26
+   2.4.19
