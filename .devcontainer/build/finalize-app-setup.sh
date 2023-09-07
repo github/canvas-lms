@@ -9,6 +9,7 @@ cp .devcontainer/config/cache_store.yml config/cache_store.yml
 cp .devcontainer/config/redis.yml config/redis.yml
 cp .devcontainer/config/dynamic_settings.yml config/dynamic_settings.yml
 
+sudo chown -R $USER /usr/local/rvm/gems/
 bundle install
 yarn install
 
