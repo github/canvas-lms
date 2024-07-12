@@ -22,7 +22,7 @@ import {useScope as useI18nScope} from '@canvas/i18n'
 import {ApolloProvider, createClient} from '@canvas/apollo'
 import FriendlyDatetime from '@canvas/datetime/react/components/FriendlyDatetime'
 import type {GradeStatus} from '@canvas/grading/accountGradingStatus'
-import {ApplyTheme} from '@instructure/ui-themeable'
+import {InstUISettingsProvider} from '@instructure/emotion'
 import {Alert} from '@instructure/ui-alerts'
 import {Text} from '@instructure/ui-text'
 import {Heading} from '@instructure/ui-heading'
@@ -116,6 +116,7 @@ export type SubmissionTrayProps = {
   onClose: () => void
   requireStudentGroupForSpeedGrader: boolean
   gradingScheme: null | GradingStandard[]
+  pointsBasedGradingScheme: boolean
   onGradeSubmission: (submission: CamelizedSubmission, gradeInfo: GradeResult) => void
   onRequestClose: () => void
   selectNextAssignment: () => void
@@ -134,6 +135,7 @@ export type SubmissionTrayProps = {
   reloadSubmission: (student: any, submission: any, proxyDetails: any) => void
   customGradeStatuses: GradeStatus[]
   customGradeStatusesEnabled: boolean
+  contentRef?: React.RefObject<HTMLDivElement>
 }
 
 type SubmissionTrayState = {
@@ -253,8 +255,7 @@ export default class SubmissionTray extends React.Component<
           </Alert>
         )}
         <View as="div" textAlign="center">
-          <Button {...buttonProps}>
-            <IconSpeedGraderLine />
+          <Button {...buttonProps} renderIcon={IconSpeedGraderLine}>
             {I18n.t('SpeedGrader')}
           </Button>
         </View>
@@ -386,6 +387,78 @@ export default class SubmissionTray extends React.Component<
       }
     }
 
+    const renderGradeInputForCheckpoints = (
+      hasCheckpoints,
+      props,
+      subAssignmentTag,
+      submission,
+      header
+    ) => {
+      return (
+        hasCheckpoints && (
+          <GradeInput
+            assignment={getSubAssignment(hasCheckpoints, props.assignment, subAssignmentTag)}
+            disabled={props.gradingDisabled}
+            enterGradesAs={props.enterGradesAs}
+            gradingScheme={props.gradingScheme}
+            pointsBasedGradingScheme={props.pointsBasedGradingScheme}
+            pendingGradeInfo={props.pendingGradeInfo}
+            onSubmissionUpdate={props.onGradeSubmission}
+            submission={submission}
+            submissionUpdating={props.submissionUpdating}
+            subAssignmentTag={subAssignmentTag}
+            header={header}
+          />
+        )
+      )
+    }
+
+    const getSubAssignmentSubmission = (hasCheckpoints, submission, subAssignmentTag) => {
+      if (!hasCheckpoints) {
+        return null
+      }
+
+      const subAssignmentSubmission = submission.subAssignmentSubmissions.find(
+        sub => sub.sub_assignment_tag === subAssignmentTag
+      )
+
+      return {
+        ...submission,
+        ...{
+          enteredGrade: subAssignmentSubmission.entered_grade,
+          enteredScore: subAssignmentSubmission.entered_score,
+          grade: subAssignmentSubmission.grade,
+          score: subAssignmentSubmission.score,
+        },
+      }
+    }
+
+    const getSubAssignment = (hasCheckpoints, assignment, subAssignmentTag) => {
+      if (!hasCheckpoints) {
+        return assignment
+      }
+
+      const subAssignment = assignment.checkpoints.find(sub => sub.tag === subAssignmentTag)
+
+      return {
+        ...assignment,
+        pointsPossible: subAssignment.points_possible,
+      }
+    }
+
+    const hasCheckpoints =
+      this.props.assignment.hasSubAssignments && this.props.assignment.checkpoints.length > 0
+    const replyToTopicSubmission = getSubAssignmentSubmission(
+      hasCheckpoints,
+      this.props.submission,
+      'reply_to_topic'
+    )
+    const replyToEntrySubmission = getSubAssignmentSubmission(
+      hasCheckpoints,
+      this.props.submission,
+      'reply_to_entry'
+    )
+
     return (
       <ApolloProvider client={createClient()}>
         <Tray
@@ -417,11 +490,13 @@ export default class SubmissionTray extends React.Component<
                   onRightArrowClick={this.props.selectNextStudent}
                   rightArrowDescription={I18n.t('Next student')}
                 >
-                  <ApplyTheme theme={{mediumPaddingHorizontal: '0', mediumHeight: 'normal'}}>
+                  <InstUISettingsProvider
+                    theme={{mediumPaddingHorizontal: '0', mediumHeight: 'normal'}}
+                  >
                     <Link href={this.props.student.gradesUrl} isWithinText={false}>
                       {name}
                     </Link>
-                  </ApplyTheme>
+                  </InstUISettingsProvider>
                 </Carousel>
 
                 <View as="div" margin="small 0" className="hr" />
@@ -436,11 +511,13 @@ export default class SubmissionTray extends React.Component<
                   onRightArrowClick={this.props.selectNextAssignment}
                   rightArrowDescription={I18n.t('Next assignment')}
                 >
-                  <ApplyTheme theme={{mediumPaddingHorizontal: '0', mediumHeight: 'normal'}}>
+                  <InstUISettingsProvider
+                    theme={{mediumPaddingHorizontal: '0', mediumHeight: 'normal'}}
+                  >
                     <Link href={this.props.assignment.htmlUrl} isWithinText={false}>
                       {this.props.assignment.name}
                     </Link>
-                  </ApplyTheme>
+                  </InstUISettingsProvider>
                 </Carousel>
 
                 {this.props.speedGraderEnabled && this.renderSpeedGraderLink(speedGraderProps)}
@@ -456,7 +533,6 @@ export default class SubmissionTray extends React.Component<
 
               <div style={{overflowY: 'auto', flex: '1 1 auto'}}>
                 {this.props.showSimilarityScore && this.renderSimilarityScore()}
-
                 <SubmissionStatus
                   assignment={this.props.assignment}
                   isConcluded={this.props.student.isConcluded}
@@ -466,50 +542,59 @@ export default class SubmissionTray extends React.Component<
                   isNotCountedForScore={this.props.isNotCountedForScore}
                   submission={this.props.submission}
                 />
-
+                {renderGradeInputForCheckpoints(
+                  hasCheckpoints,
+                  this.props,
+                  'reply_to_topic',
+                  replyToTopicSubmission,
+                  I18n.t('Reply to Topic')
+                )}
+                {renderGradeInputForCheckpoints(
+                  hasCheckpoints,
+                  this.props,
+                  'reply_to_entry',
+                  replyToEntrySubmission,
+                  I18n.t('Required Replies')
+                )}
                 <GradeInput
                   assignment={this.props.assignment}
-                  disabled={this.props.gradingDisabled}
+                  disabled={this.props.gradingDisabled || hasCheckpoints}
                   enterGradesAs={this.props.enterGradesAs}
                   gradingScheme={this.props.gradingScheme}
+                  pointsBasedGradingScheme={this.props.pointsBasedGradingScheme}
                   pendingGradeInfo={this.props.pendingGradeInfo}
                   onSubmissionUpdate={this.props.onGradeSubmission}
                   submission={this.props.submission}
                   submissionUpdating={this.props.submissionUpdating}
+                  header={hasCheckpoints ? I18n.t('Current Total') : undefined}
                 />
-
                 {!!this.props.submission.pointsDeducted && (
                   <View as="div" margin="small 0 0 0">
                     <LatePolicyGrade
                       assignment={this.props.assignment}
                       enterGradesAs={this.props.enterGradesAs}
                       gradingScheme={this.props.gradingScheme}
+                      pointsBasedGradingScheme={this.props.pointsBasedGradingScheme}
                       submission={this.props.submission}
                     />
                   </View>
                 )}
-
                 <View as="div" margin="small 0" className="hr" />
-
-                <View as="div" margin="0 0 small 0">
-                  <div id="SubmissionTray__RadioInputGroup">
-                    <SubmissionTrayRadioInputGroup
-                      assignment={this.props.assignment}
-                      colors={this.props.colors}
-                      customGradeStatuses={this.props.customGradeStatuses}
-                      customGradeStatusesEnabled={this.props.customGradeStatusesEnabled}
-                      disabled={this.props.gradingDisabled}
-                      locale={this.props.locale}
-                      latePolicy={this.props.latePolicy}
-                      submission={this.props.submission}
-                      submissionUpdating={this.props.submissionUpdating}
-                      updateSubmission={this.props.updateSubmission}
-                    />
-                  </div>
+                <View as="div" margin="0 0 small 0" data-testid="SubmissionTray__RadioInputGroup">
+                  <SubmissionTrayRadioInputGroup
+                    assignment={this.props.assignment}
+                    colors={this.props.colors}
+                    customGradeStatuses={this.props.customGradeStatuses}
+                    customGradeStatusesEnabled={this.props.customGradeStatusesEnabled}
+                    disabled={this.props.gradingDisabled}
+                    locale={this.props.locale}
+                    latePolicy={this.props.latePolicy}
+                    submission={this.props.submission}
+                    submissionUpdating={this.props.submissionUpdating}
+                    updateSubmission={this.props.updateSubmission}
+                  />
                 </View>
-
                 <View as="div" margin="small 0" className="hr" />
-
                 <View as="div" padding="xx-small">
                   <div id="SubmissionTray__Comments">
                     {this.renderSubmissionComments(submissionCommentsProps)}

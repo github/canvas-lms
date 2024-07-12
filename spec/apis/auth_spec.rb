@@ -716,7 +716,7 @@ describe "API Authentication", type: :request do
           "access_token" => @token.full_token,
         }
       end
-      expect(Account.default.reload.users).to be_include(u2)
+      expect(Account.default.reload.users).to include(u2)
     end
 
     it "errors if the access token is expired or non-existent" do
@@ -895,7 +895,9 @@ describe "API Authentication", type: :request do
                            "login_id" => "blah@example.com",
                            "title" => nil,
                            "bio" => nil,
+                           "pronunciation" => nil,
                            "primary_email" => "blah@example.com",
+                           "sis_user_id" => nil,
                            "integration_id" => nil,
                            "time_zone" => "Etc/UTC",
                            "locale" => nil,
@@ -925,7 +927,9 @@ describe "API Authentication", type: :request do
                            "login_id" => "blah@example.com",
                            "title" => nil,
                            "bio" => nil,
+                           "pronunciation" => nil,
                            "primary_email" => "blah@example.com",
+                           "sis_user_id" => nil,
                            "integration_id" => nil,
                            "time_zone" => "Etc/UTC",
                            "locale" => nil,
@@ -953,7 +957,9 @@ describe "API Authentication", type: :request do
                            "login_id" => "blah@example.com",
                            "title" => nil,
                            "bio" => nil,
+                           "pronunciation" => nil,
                            "primary_email" => "blah@example.com",
+                           "sis_user_id" => nil,
                            "integration_id" => nil,
                            "time_zone" => "Etc/UTC",
                            "locale" => nil,
@@ -985,8 +991,10 @@ describe "API Authentication", type: :request do
                            "short_name" => "User",
                            "sortable_name" => "User",
                            "login_id" => "blah@example.com",
+                           "sis_user_id" => "1234",
                            "integration_id" => nil,
                            "bio" => nil,
+                           "pronunciation" => nil,
                            "title" => nil,
                            "primary_email" => "blah@example.com",
                            "time_zone" => "Etc/UTC",
@@ -1020,8 +1028,10 @@ describe "API Authentication", type: :request do
                            "short_name" => "User",
                            "sortable_name" => "User",
                            "login_id" => "blah@example.com",
+                           "sis_user_id" => "1234",
                            "integration_id" => "1234",
                            "bio" => nil,
+                           "pronunciation" => nil,
                            "title" => nil,
                            "primary_email" => "blah@example.com",
                            "time_zone" => "Etc/UTC",

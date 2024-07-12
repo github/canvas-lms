@@ -104,7 +104,7 @@ describe SIS::CSV::GroupImporter do
     expect(batch1.roll_back_data.where(previous_workflow_state: "non-existent").count).to eq 1
     expect(batch3.roll_back_data.where(updated_workflow_state: "deleted").count).to eq 2
     batch3.restore_states_for_batch
-    expect(@account.all_groups.where(sis_source_id: "G001").take.workflow_state).to eq "available"
+    expect(@account.all_groups.find_by(sis_source_id: "G001").workflow_state).to eq "available"
   end
 
   it "updates group attributes" do
@@ -143,8 +143,8 @@ describe SIS::CSV::GroupImporter do
       "G001,,Group 1,available,Gc001",
       "G002,,Group 2,available,Gc002"
     )
-    group1 = Group.where(sis_source_id: "G001").take
-    group2 = Group.where(sis_source_id: "G002").take
+    group1 = Group.find_by(sis_source_id: "G001")
+    group2 = Group.find_by(sis_source_id: "G002")
     groups = [group1, group2]
     expect(groups.map(&:account)).to eq [@account, sub]
     expect(groups.map(&:group_category)).to eq GroupCategory.order(:id).to_a
@@ -156,7 +156,7 @@ describe SIS::CSV::GroupImporter do
       "group_id,course_id,name,status",
       "G001,c001,Group 1,available"
     )
-    expect(Group.where(sis_source_id: "G001").take.context).to eq course
+    expect(Group.find_by(sis_source_id: "G001").context).to eq course
   end
 
   it "does not allow changing course_id with group_memberships" do
@@ -201,7 +201,7 @@ describe SIS::CSV::GroupImporter do
       expect(course.groups.count do |g|
         # when a group_category is not defined, the group is
         # automatically assigned to "Student Groups"
-        g.category == "Student Groups"
+        g.group_category.name == "Student Groups"
       end).to eq 3
 
       group_categories = GroupCategory.where(context_id: course_sis_id)
@@ -228,7 +228,7 @@ describe SIS::CSV::GroupImporter do
       expect(course.group_categories.count).to eq 1
       expect(course.groups.count).to eq 3
       expect(course.groups.count do |g|
-        g.category == "Student Groups"
+        g.group_category.name == "Student Groups"
       end).to eq 3
 
       group_categories.each do |gc|
@@ -253,7 +253,7 @@ describe SIS::CSV::GroupImporter do
       expect(new_course.group_categories.count).to eq 1
       expect(new_course.groups.count).to eq 3
       expect(new_course.groups.count do |g|
-        g.category == "Student Groups"
+        g.group_category.name == "Student Groups"
       end).to eq 3
 
       group_categories.each do |gc|
@@ -323,7 +323,7 @@ describe SIS::CSV::GroupImporter do
                            sis_source_id: group_sis_id)
 
       # "Student Groups" is automatically created
-      group_category = GroupCategory.all.first
+      group_category = GroupCategory.first
       # update context_id to mimic an old "Student Groups" group_category
       group_category&.update_attribute(:context_id, 1234)
       expect(group_category&.context_id).to eq 1234

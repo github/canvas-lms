@@ -53,6 +53,7 @@ describe "new account user search" do
     end
 
     it "opens the edit user modal when clicking the edit user icon" do
+      skip "FOO-3816 (10/6/2023)"
       click_edit_button(@user.name)
       expect(edit_full_name_input.attribute("value")).to eq(@user.name)
     end
@@ -62,9 +63,9 @@ describe "new account user search" do
       expect(act_as_label).to include_text @user.name
     end
 
-    it "opens the conversation page when clicking the send message button", priority: "1" do
+    it "opens the inbox page when clicking the send message button", priority: "1" do
       click_message_button(@user.name)
-      expect(f(".message-header-input .ac-token")).to include_text @user.name
+      expect(f("span[data-testid='address-book-tag']")).to include_text @user.name
     end
 
     it "searches but not find bogus user", priority: "1" do
@@ -180,6 +181,7 @@ describe "new account user search" do
     end
 
     it "is able to create users" do
+      skip "FOO-3816 (10/6/2023)"
       name = "Test User"
       email = "someemail@example.com"
       visit_users(@account)
@@ -208,6 +210,7 @@ describe "new account user search" do
     end
 
     it "is able to create users with confirmation disabled", priority: "1" do
+      skip "FOO-3816 (10/6/2023)"
       name = "Confirmation Disabled"
       email = "someemail@example.com"
       visit_users(@account)

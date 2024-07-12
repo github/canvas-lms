@@ -19,8 +19,11 @@
 
 require_relative "../common"
 require_relative "../helpers/basic/settings_specs"
+require_relative "pages/admin_account_page"
 
 describe "root account basic settings" do
+  include AdminSettingsPage
+
   let(:account) { Account.default }
   let(:account_settings_url) { "/accounts/#{account.id}/settings" }
   let(:reports_url) { "/accounts/#{account.id}/reports_tab" }
@@ -33,7 +36,9 @@ describe "root account basic settings" do
     user_session(@admin)
     get account_settings_url
 
-    f("#account_services_avatars").click
+    avatars = f("#account_services_avatars")
+    avatars.location_once_scrolled_into_view
+    avatars.click
     f("#account_settings_enable_gravatar").click
 
     submit_form("#account_settings")
@@ -41,13 +46,15 @@ describe "root account basic settings" do
     expect(Account.default.reload.settings[:enable_gravatar]).to be false
   end
 
-  it "lets admins enable kill_joy on root account settings", ignore_js_errors: true do
+  it "lets admins enable kill_joy on root account settings", :ignore_js_errors do
     account.settings[:kill_joy] = false
     account.save!
 
     user_session(@admin)
     get account_settings_url
-    f("#account_settings_kill_joy").click
+    el = f("#account_settings_kill_joy")
+    el.location_once_scrolled_into_view
+    el.click
     submit_form("#account_settings")
     wait_for_ajaximations
     expect(Account.default.reload.settings[:kill_joy]).to be true
@@ -58,7 +65,7 @@ describe "root account basic settings" do
       account.enable_feature!(:restrict_quantitative_data)
     end
 
-    it "lets admins enable restrict_quantitative_data on root account settings", ignore_js_errors: true do
+    it "lets admins enable restrict_quantitative_data on root account settings", :ignore_js_errors do
       account.settings[:restrict_quantitative_data] = { value: false, locked: false }
       account.save!
 
@@ -66,9 +73,11 @@ describe "root account basic settings" do
       get account_settings_url
 
       # click then close restrict quantitative data helper dialog
-      fj("button:contains('About restrict quantitative data')").click
+      button = fj("button:contains('About restrict quantitative data')")
+      button.location_once_scrolled_into_view
+      button.click
       expect(fj("div.ui-dialog-titlebar:contains('Restrict Quantitative Data')")).to be_present
-      force_click("button.ui-dialog-titlebar-close")
+      force_click(".ui-dialog-titlebar-close")
 
       f("#account_settings_restrict_quantitative_data_value").click
       submit_form("#account_settings")
@@ -77,7 +86,7 @@ describe "root account basic settings" do
     end
 
     context "restrict_quantitative_data enabled" do
-      it "lets admins enable restrict_quantitative_data_lock on root account settings", ignore_js_errors: true do
+      it "lets admins enable restrict_quantitative_data_lock on root account settings", :ignore_js_errors do
         account.settings[:restrict_quantitative_data] = { value: false, locked: false }
         account.save!
 
@@ -90,7 +99,9 @@ describe "root account basic settings" do
         expect(is_checked("#account_settings_restrict_quantitative_data_locked")).to be_falsey
 
         # restrict_quantitative_data true, then locked is enabled
-        f("#account_settings_restrict_quantitative_data_value").click
+        el = f("#account_settings_restrict_quantitative_data_value")
+        el.location_once_scrolled_into_view
+        el.click
         expect(f("#account_settings_restrict_quantitative_data_locked")).to be_enabled
         f("#account_settings_restrict_quantitative_data_locked").click
         expect(is_checked("#account_settings_restrict_quantitative_data_locked")).to be_truthy
@@ -109,16 +120,31 @@ describe "root account basic settings" do
     end
   end
 
-  it "lets admins enable suppress_notifications on root account settings", ignore_js_errors: true do
+  it "lets admins enable suppress_notifications on root account settings", :ignore_js_errors do
     account.settings[:suppress_notifications] = false
     account.save!
 
     user_session(@admin)
     get account_settings_url
-    f("#account_settings_suppress_notifications").click
+    el = f("#account_settings_suppress_notifications")
+    el.location_once_scrolled_into_view
+    el.click
     driver.switch_to.alert.accept
     submit_form("#account_settings")
     expect(Account.default.reload.settings[:suppress_notifications]).to be true
+  end
+
+  it "updates the account's allow_observers_in_appointment_groups setting" do
+    expect(account.allow_observers_in_appointment_groups?).to be false
+
+    user_session(@admin)
+    get account_settings_url
+    expect(is_checked(allow_observers_in_appointments_checkbox)).to be false
+    allow_observers_in_appointments_checkbox.location_once_scrolled_into_view
+    allow_observers_in_appointments_checkbox.click
+    expect_new_page_load { submit_form("#account_settings") }
+    expect(is_checked(allow_observers_in_appointments_checkbox)).to be true
+    expect(account.reload.allow_observers_in_appointment_groups?).to be true
   end
 
   context "editing slack API key" do
@@ -245,6 +271,32 @@ describe "root account basic settings" do
     expect(f("#zero_activity_csv_form")).to contain_css(".ui-datepicker-trigger")
   end
 
+  it "disables report options for provisioning report form when a report hasn't been selected" do
+    course_with_admin_logged_in
+    get account_settings_url + "#tab-reports"
+
+    f("#configure_provisioning_csv").click
+    expect(f("#provisioning_csv_form").find("#parameters_created_by_sis")).to be_disabled
+    expect(f("#provisioning_csv_form").find("#parameters_include_deleted")).to be_disabled
+
+    f("#provisioning_csv_form").find("#parameters_courses").click
+    expect(f("#provisioning_csv_form").find("#parameters_created_by_sis")).to_not be_disabled
+    expect(f("#provisioning_csv_form").find("#parameters_include_deleted")).to_not be_disabled
+  end
+
+  it "disables report options for SIS export report form when a report hasn't been selected" do
+    course_with_admin_logged_in
+    get account_settings_url + "#tab-reports"
+
+    f("#configure_sis_export_csv").click
+    expect(f("#sis_export_csv_form").find("#parameters_created_by_sis")).to be_disabled
+    expect(f("#sis_export_csv_form").find("#parameters_include_deleted")).to be_disabled
+
+    f("#sis_export_csv_form").find("#parameters_users").click
+    expect(f("#sis_export_csv_form").find("#parameters_created_by_sis")).to_not be_disabled
+    expect(f("#sis_export_csv_form").find("#parameters_include_deleted")).to_not be_disabled
+  end
+
   it "changes the default user quota", priority: "1" do
     course_with_admin_logged_in
     group_model(context: @course)
@@ -265,7 +317,7 @@ describe "root account basic settings" do
 
     # ensure the account was updated properly
     account.reload
-    expect(account.default_user_storage_quota).to eq user_quota * 1_048_576
+    expect(account.default_user_storage_quota).to eq user_quota * 1_000_000
 
     # ensure the new value is reflected after a refresh
     get account_settings_url
@@ -285,7 +337,9 @@ describe "root account basic settings" do
     expect(account.settings[:ip_filters]).to be_present # should not have cleared them if we didn't do anything
 
     filter = ff(".ip_filter").detect(&:displayed?)
-    filter.find_element(:css, ".delete_filter_link").click
+    el = filter.find_element(:css, ".delete_filter_link")
+    el.location_once_scrolled_into_view
+    el.click
 
     expect_new_page_load { submit_form("#account_settings") }
 
@@ -335,10 +389,20 @@ describe "root account basic settings" do
         account.save!
 
         get account_settings_url
-        f("input[type='radio'][name='account[settings][teachers_can_create_courses_anywhere]'][value='1'] + label").click
-        f("input[type='checkbox'][name='account[settings][students_can_create_courses]'] + label").click
-        f("input[type='radio'][name='account[settings][students_can_create_courses_anywhere]'][value='0'] + label").click
-        f("input[type='checkbox'][name='account[settings][no_enrollments_can_create_courses]'] + label").click
+        teacher = f("input[type='radio'][name='account[settings][teachers_can_create_courses_anywhere]'][value='1'] + label")
+        scroll_into_view(teacher)
+        teacher.click
+
+        student = f("input[type='checkbox'][name='account[settings][students_can_create_courses]'] + label")
+        scroll_into_view(student)
+        student.click
+
+        radio = f("input[type='radio'][name='account[settings][students_can_create_courses_anywhere]'][value='0'] + label")
+        scroll_into_view(radio)
+        radio.click
+        check = f("input[type='checkbox'][name='account[settings][no_enrollments_can_create_courses]'] + label")
+        scroll_into_view(check)
+        check.click
         expect_new_page_load { submit_form("#account_settings") }
 
         account.reload

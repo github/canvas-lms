@@ -18,11 +18,10 @@
 
 import AnonymousResponseSelector from '@canvas/discussions/react/components/AnonymousResponseSelector/AnonymousResponseSelector'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import React, {useRef, useState, useEffect} from 'react'
+import React, {useRef, useState, useEffect, useContext} from 'react'
 import {Flex} from '@instructure/ui-flex'
 import {Button} from '@instructure/ui-buttons'
 import {Checkbox} from '@instructure/ui-checkbox'
-import {IconCheckMarkLine} from '@instructure/ui-icons'
 import {Responsive} from '@instructure/ui-responsive'
 import {Text} from '@instructure/ui-text'
 import {responsiveQuerySizes, showErrorWhenMessageTooLong} from '../../utils'
@@ -32,24 +31,23 @@ import CanvasRce from '@canvas/rce/react/CanvasRce'
 import {name as mentionsPluginName} from '@canvas/rce/plugins/canvas_mentions/plugin'
 import positionCursor from './PositionCursorHook'
 import {ReplyPreview} from '../ReplyPreview/ReplyPreview'
-import {Spinner} from '@instructure/ui-spinner'
-import {AttachmentDisplay} from '../AttachmentDisplay/AttachmentDisplay'
+import {AttachmentDisplay} from '@canvas/discussions/react/components/AttachmentDisplay/AttachmentDisplay'
+import {DiscussionManagerUtilityContext} from '../../utils/constants'
 
 const I18n = useI18nScope('discussion_posts')
 
 export const DiscussionEdit = props => {
   const rceRef = useRef()
   const [rceContent, setRceContent] = useState(false)
-  const [includeQuotedReply, setIncludeQuotedReply] = useState(!!props.quotedEntry?.previewMessage)
+  const [includeQuotedReply, setIncludeQuotedReply] = useState(!!props.quotedEntry?.message)
   const textAreaId = useRef(`message-body-${props.rceIdentifier}`)
-  const [draftTimeout, setDraftTimeout] = useState(null)
-  const [awaitingChanges, setAwaitingChanges] = useState(false)
   const [anonymousAuthorState, setAnonymousAuthorState] = useState(
     !!props.discussionAnonymousState && props.canReplyAnonymously
   )
 
   const [attachment, setAttachment] = useState(null)
   const [attachmentToUpload, setAttachmentToUpload] = useState(false)
+  const {isGradedDiscussion} = useContext(DiscussionManagerUtilityContext)
 
   const rceMentionsIsEnabled = () => {
     return !!ENV.rce_mentions_in_discussions
@@ -74,31 +72,6 @@ export const DiscussionEdit = props => {
     setAttachment(props.attachment)
   }, [props.value, setRceContent, props.attachment])
 
-  const handleDraftResponse = nextDraft => {
-    if (!ENV.draft_discussions) return
-    if (!nextDraft) return
-
-    setAwaitingChanges(true)
-    if (draftTimeout) {
-      clearTimeout(draftTimeout)
-      setDraftTimeout(
-        setTimeout(() => {
-          setAwaitingChanges(false)
-          props.onSetDraftSaved(false)
-          props.updateDraft(nextDraft)
-        }, 1000)
-      )
-    } else {
-      setDraftTimeout(
-        setTimeout(() => {
-          setAwaitingChanges(false)
-          props.onSetDraftSaved(false)
-          props.updateDraft(nextDraft)
-        }, 1000)
-      )
-    }
-  }
-
   return (
     <div
       style={{
@@ -108,7 +81,7 @@ export const DiscussionEdit = props => {
       }}
       data-testid="DiscussionEdit-container"
     >
-      {props.quotedEntry?.previewMessage && (
+      {props.quotedEntry?.message && (
         <span className="discussions-include-reply">
           <View as="div" margin="0 0 small 0">
             <Checkbox
@@ -121,7 +94,7 @@ export const DiscussionEdit = props => {
               }}
             />
           </View>
-          <ReplyPreview {...props.quotedEntry} />
+          {!props.isEdit && <ReplyPreview {...props.quotedEntry} />}
         </span>
       )}
       {props.discussionAnonymousState && props.canReplyAnonymously && !props.isEdit && (
@@ -148,7 +121,6 @@ export const DiscussionEdit = props => {
             ref={rceRef}
             onContentChange={content => {
               setRceContent(content)
-              handleDraftResponse(content)
             }}
             editorOptions={{
               focus: true,
@@ -157,6 +129,7 @@ export const DiscussionEdit = props => {
             height={300}
             defaultContent={props.value}
             mirroredAttrs={{'data-testid': 'message-body'}}
+            resourceType={props.isAnnouncement ? 'announcement.reply' : 'discussion_topic.reply'}
           />
         </span>
         <Responsive
@@ -220,7 +193,7 @@ export const DiscussionEdit = props => {
                         )
                         props.onSubmit(
                           rceContent,
-                          includeQuotedReply ? props.quotedEntry.id : null,
+                          includeQuotedReply ? props.quotedEntry._id : null,
                           attachment,
                           anonymousAuthorState
                         )
@@ -245,6 +218,10 @@ export const DiscussionEdit = props => {
                     setAttachment={setAttachment}
                     setAttachmentToUpload={setAttachmentToUpload}
                     attachmentToUpload={attachmentToUpload}
+                    responsiveQuerySizes={responsiveQuerySizes}
+                    attachmentFolderId={ENV?.DISCUSSION?.ATTACHMENTS_FOLDER_ID}
+                    checkContextQuota={!isGradedDiscussion}
+                    canAttach={ENV.can_attach_entries}
                   />
                 </View>
                 {rceButtons.reverse()}
@@ -258,32 +235,13 @@ export const DiscussionEdit = props => {
                       setAttachment={setAttachment}
                       setAttachmentToUpload={setAttachmentToUpload}
                       attachmentToUpload={attachmentToUpload}
+                      responsiveQuerySizes={responsiveQuerySizes}
+                      attachmentFolderId={ENV?.DISCUSSION?.ATTACHMENTS_FOLDER_ID}
+                      checkContextQuota={!isGradedDiscussion}
+                      canAttach={ENV.can_attach_entries}
                     />
                   </View>
                 </Flex.Item>
-                {ENV.draft_discussions && (
-                  <Flex.Item shouldGrow={true} textAlign="start">
-                    {props.draftSaved ? (
-                      !awaitingChanges && (
-                        <span>
-                          <Text size="small">{I18n.t('Saved')}</Text>
-                          <View as="span" margin="0 0 0 small">
-                            <IconCheckMarkLine color="success" />
-                          </View>
-                        </span>
-                      )
-                    ) : (
-                      <span>
-                        <Text size="small">{I18n.t('Saving')}</Text>
-                        <Spinner
-                          renderTitle="Saving draft in progress"
-                          margin="0 0 0 small"
-                          size="x-small"
-                        />
-                      </span>
-                    )}
-                  </Flex.Item>
-                )}
                 <Flex.Item shouldGrow={true} textAlign="end">
                   {rceButtons}
                 </Flex.Item>
@@ -301,16 +259,14 @@ DiscussionEdit.propTypes = {
   rceIdentifier: PropTypes.string,
   discussionAnonymousState: PropTypes.string,
   canReplyAnonymously: PropTypes.bool,
-  draftSaved: PropTypes.bool,
   value: PropTypes.string,
   attachment: PropTypes.object,
   onCancel: PropTypes.func.isRequired,
   onSubmit: PropTypes.func.isRequired,
-  onSetDraftSaved: PropTypes.func,
   isEdit: PropTypes.bool,
   quotedEntry: PropTypes.object,
-  updateDraft: PropTypes.func,
   onInit: PropTypes.func,
+  isAnnouncement: PropTypes.bool.isRequired,
 }
 
 DiscussionEdit.defaultProps = {
@@ -318,7 +274,6 @@ DiscussionEdit.defaultProps = {
   isEdit: false,
   quotedEntry: null,
   value: '',
-  updateDraft: () => {},
   onInit: () => {},
 }
 

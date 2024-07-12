@@ -27,7 +27,7 @@ import {
   rowDataIsValid,
   rowDataIsValidNumbers,
 } from './validations/gradingSchemeValidations'
-import {GradingSchemeDataRow} from '@instructure/grading-utils'
+import type {GradingSchemeDataRow} from '@instructure/grading-utils'
 
 const I18n = useI18nScope('GradingSchemes')
 
@@ -46,8 +46,8 @@ export const GradingSchemeValidationAlert: React.FC<ComponentProps> = ({onClose,
 
   return (
     <View
-      elementRef={(current: HTMLDivElement) => {
-        if (current) {
+      elementRef={current => {
+        if (current instanceof HTMLDivElement) {
           current.scrollIntoView()
           current.focus()
         }

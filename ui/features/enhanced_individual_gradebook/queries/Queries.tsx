@@ -21,6 +21,28 @@ import gql from 'graphql-tag'
 export const GRADEBOOK_QUERY = gql`
   query GradebookQuery($courseId: ID!) {
     course(id: $courseId) {
+      rootOutcomeGroup {
+        outcomes {
+          nodes {
+            ... on LearningOutcome {
+              id: _id
+              assessed
+              calculationInt
+              calculationMethod
+              description
+              displayName
+              masteryPoints
+              pointsPossible
+              title
+              ratings {
+                mastery
+                points
+                description
+              }
+            }
+          }
+        }
+      }
       enrollmentsConnection(
         filter: {
           states: [active, invited, completed]
@@ -56,6 +78,7 @@ export const GRADEBOOK_QUERY = gql`
           userId
           state
           gradingPeriodId
+          excused
         }
       }
       assignmentGroupsConnection {
@@ -92,6 +115,7 @@ export const GRADEBOOK_QUERY = gql`
               postManually
               published
               hasSubmittedSubmissions
+              inClosedGradingPeriod
             }
           }
         }
@@ -152,6 +176,8 @@ export const GRADEBOOK_STUDENT_QUERY = gql`
           gradingPeriodId
           deductedPoints
           enteredGrade
+          gradeMatchesCurrentSubmission
+          customGradeStatus
         }
       }
     }

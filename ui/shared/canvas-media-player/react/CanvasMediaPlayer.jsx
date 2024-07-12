@@ -81,13 +81,12 @@ export default function CanvasMediaPlayer(props) {
   const containerRef = useRef(null)
   const mediaPlayerRef = useRef(null)
 
-  const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement
-  const isEmbedded =
-    window.frameElement?.tagName === 'IFRAME' ||
-    window.location !== window.top.location ||
-    !containerRef.current
-
   const boundingBox = useCallback(() => {
+    const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement
+    const isEmbedded =
+      window.frameElement?.tagName === 'IFRAME' ||
+      window.location !== window.top.location ||
+      !containerRef.current
     if (isFullscreen || isEmbedded) {
       return {
         width: window.innerWidth,
@@ -100,7 +99,7 @@ export default function CanvasMediaPlayer(props) {
       width: containerRef.current.clientWidth,
       height: Math.min(containerRef.current.clientHeight, window.innerHeight - 32),
     }
-  }, [isFullscreen, isEmbedded, containerRef])
+  }, [containerRef])
 
   const handleLoadedMetadata = useCallback(
     event => {
@@ -142,7 +141,7 @@ export default function CanvasMediaPlayer(props) {
       let resp
       try {
         setMediaObjNetworkErr(null)
-        resp = await asJson(fetch(url, defaultFetchOptions))
+        resp = await asJson(fetch(url, defaultFetchOptions()))
       } catch (e) {
         // eslint-disable-next-line no-console
         console.warn(`Error getting ${url}`, e.message)
@@ -270,7 +269,15 @@ export default function CanvasMediaPlayer(props) {
           captionPosition="bottom"
           autoShowCaption={auto_cc_track}
           label={getAriaLabel()}
-        />
+        >
+          {/*
+            Adding this overlay gives us the right click menu
+            for the iFrame instead of the right click menu
+            for the media (which helps prevent people from
+            downloading media)
+          */}
+          <MediaPlayer.Overlay />
+        </MediaPlayer>
       ) : (
         renderNoPlayer()
       )}

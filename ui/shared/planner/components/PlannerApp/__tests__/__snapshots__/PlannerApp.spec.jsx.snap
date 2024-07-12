@@ -14,6 +14,7 @@ exports[`PlannerApp always renders today and tomorrow when only items are in the
     margin="x-small 0 0 0"
     overflowX="visible"
     overflowY="visible"
+    overscrollBehavior="auto"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
@@ -21,7 +22,7 @@ exports[`PlannerApp always renders today and tomorrow when only items are in the
   >
     <ShowOnFocusButton
       buttonProps={
-        Object {
+        {
           "onClick": undefined,
         }
       }
@@ -38,7 +39,7 @@ exports[`PlannerApp always renders today and tomorrow when only items are in the
     animatableIndex={1}
     day="2017-04-24"
     isObserving={false}
-    itemsForDay={Array []}
+    itemsForDay={[]}
     key="2017-04-24"
     responsiveSize="large"
     showMissingAssignments={false}
@@ -50,7 +51,7 @@ exports[`PlannerApp always renders today and tomorrow when only items are in the
     animatableIndex={2}
     day="2017-04-25"
     isObserving={false}
-    itemsForDay={Array []}
+    itemsForDay={[]}
     key="2017-04-25"
     responsiveSize="large"
     showMissingAssignments={false}
@@ -71,8 +72,8 @@ exports[`PlannerApp always renders today and tomorrow when only items are in the
     day="2017-04-29"
     isObserving={false}
     itemsForDay={
-      Array [
-        Object {
+      [
+        {
           "dateBucketMoment": "2017-04-28T15:00:00.000Z",
         },
       ]
@@ -110,6 +111,7 @@ exports[`PlannerApp empty day calculation always renders yesterday, today and to
     margin="x-small 0 0 0"
     overflowX="visible"
     overflowY="visible"
+    overscrollBehavior="auto"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
@@ -117,7 +119,7 @@ exports[`PlannerApp empty day calculation always renders yesterday, today and to
   >
     <ShowOnFocusButton
       buttonProps={
-        Object {
+        {
           "onClick": undefined,
         }
       }
@@ -135,8 +137,8 @@ exports[`PlannerApp empty day calculation always renders yesterday, today and to
     day="2017-04-19"
     isObserving={false}
     itemsForDay={
-      Array [
-        Object {
+      [
+        {
           "dateBucketMoment": "2017-04-18T15:00:00.000Z",
         },
       ]
@@ -152,7 +154,7 @@ exports[`PlannerApp empty day calculation always renders yesterday, today and to
     animatableIndex={2}
     day="2017-04-23"
     isObserving={false}
-    itemsForDay={Array []}
+    itemsForDay={[]}
     key="2017-04-23"
     responsiveSize="large"
     showMissingAssignments={false}
@@ -164,7 +166,7 @@ exports[`PlannerApp empty day calculation always renders yesterday, today and to
     animatableIndex={3}
     day="2017-04-24"
     isObserving={false}
-    itemsForDay={Array []}
+    itemsForDay={[]}
     key="2017-04-24"
     responsiveSize="large"
     showMissingAssignments={false}
@@ -176,7 +178,7 @@ exports[`PlannerApp empty day calculation always renders yesterday, today and to
     animatableIndex={4}
     day="2017-04-25"
     isObserving={false}
-    itemsForDay={Array []}
+    itemsForDay={[]}
     key="2017-04-25"
     responsiveSize="large"
     showMissingAssignments={false}
@@ -197,8 +199,8 @@ exports[`PlannerApp empty day calculation always renders yesterday, today and to
     day="2017-04-29"
     isObserving={false}
     itemsForDay={
-      Array [
-        Object {
+      [
+        {
           "dateBucketMoment": "2017-04-28T15:00:00.000Z",
         },
       ]
@@ -236,6 +238,7 @@ exports[`PlannerApp empty day calculation does not render an empty tomorrow when
     margin="x-small 0 0 0"
     overflowX="visible"
     overflowY="visible"
+    overscrollBehavior="auto"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
@@ -243,7 +246,7 @@ exports[`PlannerApp empty day calculation does not render an empty tomorrow when
   >
     <ShowOnFocusButton
       buttonProps={
-        Object {
+        {
           "onClick": undefined,
         }
       }
@@ -261,8 +264,8 @@ exports[`PlannerApp empty day calculation does not render an empty tomorrow when
     day="2017-04-24"
     isObserving={false}
     itemsForDay={
-      Array [
-        Object {
+      [
+        {
           "dateBucketMoment": "2017-04-23T15:00:00.000Z",
         },
       ]
@@ -300,6 +303,7 @@ exports[`PlannerApp empty day calculation merges 3 consecutive empty days in the
     margin="x-small 0 0 0"
     overflowX="visible"
     overflowY="visible"
+    overscrollBehavior="auto"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
@@ -307,7 +311,7 @@ exports[`PlannerApp empty day calculation merges 3 consecutive empty days in the
   >
     <ShowOnFocusButton
       buttonProps={
-        Object {
+        {
           "onClick": undefined,
         }
       }
@@ -325,8 +329,8 @@ exports[`PlannerApp empty day calculation merges 3 consecutive empty days in the
     day="2017-04-24"
     isObserving={false}
     itemsForDay={
-      Array [
-        Object {
+      [
+        {
           "dateBucketMoment": "2017-04-23T15:00:00.000Z",
         },
       ]
@@ -343,8 +347,8 @@ exports[`PlannerApp empty day calculation merges 3 consecutive empty days in the
     day="2017-04-25"
     isObserving={false}
     itemsForDay={
-      Array [
-        Object {
+      [
+        {
           "dateBucketMoment": "2017-04-24T15:00:00.000Z",
         },
       ]
@@ -369,8 +373,8 @@ exports[`PlannerApp empty day calculation merges 3 consecutive empty days in the
     day="2017-04-29"
     isObserving={false}
     itemsForDay={
-      Array [
-        Object {
+      [
+        {
           "dateBucketMoment": "2017-04-28T15:00:00.000Z",
         },
       ]
@@ -408,6 +412,7 @@ exports[`PlannerApp empty day calculation only renders days with items in the pa
     margin="x-small 0 0 0"
     overflowX="visible"
     overflowY="visible"
+    overscrollBehavior="auto"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
@@ -415,7 +420,7 @@ exports[`PlannerApp empty day calculation only renders days with items in the pa
   >
     <ShowOnFocusButton
       buttonProps={
-        Object {
+        {
           "onClick": undefined,
         }
       }
@@ -433,8 +438,8 @@ exports[`PlannerApp empty day calculation only renders days with items in the pa
     day="2017-04-18"
     isObserving={false}
     itemsForDay={
-      Array [
-        Object {
+      [
+        {
           "dateBucketMoment": "2017-04-17T15:00:00.000Z",
         },
       ]
@@ -451,8 +456,8 @@ exports[`PlannerApp empty day calculation only renders days with items in the pa
     day="2017-04-20"
     isObserving={false}
     itemsForDay={
-      Array [
-        Object {
+      [
+        {
           "dateBucketMoment": "2017-04-19T15:00:00.000Z",
         },
       ]
@@ -468,7 +473,7 @@ exports[`PlannerApp empty day calculation only renders days with items in the pa
     animatableIndex={3}
     day="2017-04-23"
     isObserving={false}
-    itemsForDay={Array []}
+    itemsForDay={[]}
     key="2017-04-23"
     responsiveSize="large"
     showMissingAssignments={false}
@@ -480,7 +485,7 @@ exports[`PlannerApp empty day calculation only renders days with items in the pa
     animatableIndex={4}
     day="2017-04-24"
     isObserving={false}
-    itemsForDay={Array []}
+    itemsForDay={[]}
     key="2017-04-24"
     responsiveSize="large"
     showMissingAssignments={false}
@@ -514,6 +519,7 @@ exports[`PlannerApp empty day calculation renders 2 consecutive empty days in th
     margin="x-small 0 0 0"
     overflowX="visible"
     overflowY="visible"
+    overscrollBehavior="auto"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
@@ -521,7 +527,7 @@ exports[`PlannerApp empty day calculation renders 2 consecutive empty days in th
   >
     <ShowOnFocusButton
       buttonProps={
-        Object {
+        {
           "onClick": undefined,
         }
       }
@@ -539,8 +545,8 @@ exports[`PlannerApp empty day calculation renders 2 consecutive empty days in th
     day="2017-04-24"
     isObserving={false}
     itemsForDay={
-      Array [
-        Object {
+      [
+        {
           "dateBucketMoment": "2017-04-23T15:00:00.000Z",
         },
       ]
@@ -557,8 +563,8 @@ exports[`PlannerApp empty day calculation renders 2 consecutive empty days in th
     day="2017-04-25"
     isObserving={false}
     itemsForDay={
-      Array [
-        Object {
+      [
+        {
           "dateBucketMoment": "2017-04-24T15:00:00.000Z",
         },
       ]
@@ -574,7 +580,7 @@ exports[`PlannerApp empty day calculation renders 2 consecutive empty days in th
     animatableIndex={3}
     day="2017-04-26"
     isObserving={false}
-    itemsForDay={Array []}
+    itemsForDay={[]}
     key="2017-04-26"
     responsiveSize="large"
     showMissingAssignments={false}
@@ -586,7 +592,7 @@ exports[`PlannerApp empty day calculation renders 2 consecutive empty days in th
     animatableIndex={4}
     day="2017-04-27"
     isObserving={false}
-    itemsForDay={Array []}
+    itemsForDay={[]}
     key="2017-04-27"
     responsiveSize="large"
     showMissingAssignments={false}
@@ -599,8 +605,8 @@ exports[`PlannerApp empty day calculation renders 2 consecutive empty days in th
     day="2017-04-28"
     isObserving={false}
     itemsForDay={
-      Array [
-        Object {
+      [
+        {
           "dateBucketMoment": "2017-04-27T15:00:00.000Z",
         },
       ]
@@ -638,6 +644,7 @@ exports[`PlannerApp only renders today when the only item is today 1`] = `
     margin="x-small 0 0 0"
     overflowX="visible"
     overflowY="visible"
+    overscrollBehavior="auto"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
@@ -645,7 +652,7 @@ exports[`PlannerApp only renders today when the only item is today 1`] = `
   >
     <ShowOnFocusButton
       buttonProps={
-        Object {
+        {
           "onClick": undefined,
         }
       }
@@ -663,8 +670,8 @@ exports[`PlannerApp only renders today when the only item is today 1`] = `
     day="2017-04-24"
     isObserving={false}
     itemsForDay={
-      Array [
-        Object {
+      [
+        {
           "dateBucketMoment": "2017-04-23T15:00:00.000Z",
         },
       ]
@@ -702,6 +709,7 @@ exports[`PlannerApp renders base component 1`] = `
     margin="x-small 0 0 0"
     overflowX="visible"
     overflowY="visible"
+    overscrollBehavior="auto"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
@@ -709,7 +717,7 @@ exports[`PlannerApp renders base component 1`] = `
   >
     <ShowOnFocusButton
       buttonProps={
-        Object {
+        {
           "onClick": undefined,
         }
       }
@@ -727,8 +735,8 @@ exports[`PlannerApp renders base component 1`] = `
     day="2017-04-24"
     isObserving={false}
     itemsForDay={
-      Array [
-        Object {
+      [
+        {
           "dateBucketMoment": "2017-04-23T15:00:00.000Z",
         },
       ]
@@ -745,8 +753,8 @@ exports[`PlannerApp renders base component 1`] = `
     day="2017-04-25"
     isObserving={false}
     itemsForDay={
-      Array [
-        Object {
+      [
+        {
           "dateBucketMoment": "2017-04-24T15:00:00.000Z",
         },
       ]
@@ -763,8 +771,8 @@ exports[`PlannerApp renders base component 1`] = `
     day="2017-04-26"
     isObserving={false}
     itemsForDay={
-      Array [
-        Object {
+      [
+        {
           "dateBucketMoment": "2017-04-25T15:00:00.000Z",
         },
       ]
@@ -802,6 +810,7 @@ exports[`PlannerApp renders empty component with no assignments 1`] = `
     margin="x-small 0 0 0"
     overflowX="visible"
     overflowY="visible"
+    overscrollBehavior="auto"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
@@ -809,7 +818,7 @@ exports[`PlannerApp renders empty component with no assignments 1`] = `
   >
     <ShowOnFocusButton
       buttonProps={
-        Object {
+        {
           "onClick": undefined,
         }
       }
@@ -841,6 +850,7 @@ exports[`PlannerApp renders loading past spinner when loading past and there are
     margin="x-small 0 0 0"
     overflowX="visible"
     overflowY="visible"
+    overscrollBehavior="auto"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
@@ -848,7 +858,7 @@ exports[`PlannerApp renders loading past spinner when loading past and there are
   >
     <ShowOnFocusButton
       buttonProps={
-        Object {
+        {
           "onClick": undefined,
         }
       }
@@ -881,6 +891,7 @@ exports[`PlannerApp shows only the loading component when the isLoading prop is 
     margin="x-small 0 0 0"
     overflowX="visible"
     overflowY="visible"
+    overscrollBehavior="auto"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
@@ -888,7 +899,7 @@ exports[`PlannerApp shows only the loading component when the isLoading prop is 
   >
     <ShowOnFocusButton
       buttonProps={
-        Object {
+        {
           "onClick": undefined,
         }
       }
@@ -905,6 +916,7 @@ exports[`PlannerApp shows only the loading component when the isLoading prop is 
     key="spinner"
     overflowX="visible"
     overflowY="visible"
+    overscrollBehavior="auto"
     padding="xx-large medium"
     position="static"
     shouldAnimateFocus={true}
@@ -938,6 +950,7 @@ exports[`PlannerApp shows the loading past indicator when loadingPast prop is tr
     margin="x-small 0 0 0"
     overflowX="visible"
     overflowY="visible"
+    overscrollBehavior="auto"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
@@ -945,7 +958,7 @@ exports[`PlannerApp shows the loading past indicator when loadingPast prop is tr
   >
     <ShowOnFocusButton
       buttonProps={
-        Object {
+        {
           "onClick": undefined,
         }
       }
@@ -963,8 +976,8 @@ exports[`PlannerApp shows the loading past indicator when loadingPast prop is tr
     day="2017-04-24"
     isObserving={false}
     itemsForDay={
-      Array [
-        Object {
+      [
+        {
           "dateBucketMoment": "2017-04-23T15:00:00.000Z",
         },
       ]
@@ -981,8 +994,8 @@ exports[`PlannerApp shows the loading past indicator when loadingPast prop is tr
     day="2017-04-25"
     isObserving={false}
     itemsForDay={
-      Array [
-        Object {
+      [
+        {
           "dateBucketMoment": "2017-04-24T15:00:00.000Z",
         },
       ]
@@ -999,8 +1012,8 @@ exports[`PlannerApp shows the loading past indicator when loadingPast prop is tr
     day="2017-04-26"
     isObserving={false}
     itemsForDay={
-      Array [
-        Object {
+      [
+        {
           "dateBucketMoment": "2017-04-25T15:00:00.000Z",
         },
       ]

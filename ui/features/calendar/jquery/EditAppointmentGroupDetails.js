@@ -17,10 +17,10 @@
  */
 
 import $ from 'jquery'
-import _ from 'underscore'
 import fcUtil from '@canvas/calendar/jquery/fcUtil'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import htmlEscape from 'html-escape'
+import _, {some} from 'lodash'
+import htmlEscape from '@instructure/html-escape'
 import commonEventFactory from '@canvas/calendar/jquery/CommonEvent/index'
 import TimeBlockList from './TimeBlockList'
 import editAppointmentGroupTemplate from '../jst/editAppointmentGroup.handlebars'
@@ -30,8 +30,9 @@ import preventDefault from '@canvas/util/preventDefault'
 import {publish as jqueryPublish} from 'jquery-tinypubsub'
 import '@canvas/jquery/jquery.ajaxJSON'
 import '@canvas/jquery/jquery.disableWhileLoading'
-import '@canvas/forms/jquery/jquery.instructure_forms'
+import '@canvas/jquery/jquery.instructure_forms'
 import {CommonEventShowError} from '@canvas/calendar/jquery/CommonEvent/CommonEvent'
+import {unfudgeDateForProfileTimezone} from '@instructure/moment-utils'
 
 const I18n = useI18nScope('EditAppointmentGroupDetails')
 
@@ -47,6 +48,7 @@ export default class EditAppointmentGroupDetails {
       use_group_signup: this.apptGroup.participant_type === 'Group',
       ...this.apptGroup,
     }
+    this.allowObserverOption = false
 
     $(selector).html(
       editAppointmentGroupTemplate({
@@ -105,7 +107,7 @@ export default class EditAppointmentGroupDetails {
       this.form.attr('action', this.apptGroup.url)
 
       // Don't let them change a bunch of fields once it's created
-      this.form.find('.context_id').val(this.apptGroup.context_code).attr('disabled', true)
+      this.form.find('.context_id').val(this.apptGroup.context_code).prop('disabled', true)
       this.form.find('select.context_id').change()
 
       this.disableGroups()
@@ -152,6 +154,7 @@ export default class EditAppointmentGroupDetails {
       const checked = !!jsEvent.target.checked
       this.form.find('.per_appointment_groups_label').toggle(checked)
       this.form.find('.per_appointment_users_label').toggle(!checked)
+      this.toggleObserverSignupVisibility()
       return this.form.find('.group-signup').toggle(checked)
     })
     this.form.find('.group-signup-checkbox').change()
@@ -164,7 +167,7 @@ export default class EditAppointmentGroupDetails {
       $perSlotCheckbox.prop('checked', true)
       $perSlotInput.val(this.apptGroup.participants_per_appointment)
     } else {
-      $perSlotInput.attr('disabled', true)
+      $perSlotInput.prop('disabled', true)
     }
 
     const $maxPerStudentCheckbox = this.form.find('.max-per-student-option')
@@ -180,13 +183,13 @@ export default class EditAppointmentGroupDetails {
         $maxPerStudentInput.val('1')
       }
     } else {
-      $maxPerStudentInput.attr('disabled', true)
+      $maxPerStudentInput.prop('disabled', true)
     }
 
     if (this.apptGroup.workflow_state === 'active') {
       this.form
         .find('#appointment-blocks-active-button')
-        .attr('disabled', true)
+        .prop('disabled', true)
         .prop('checked', true)
     }
 
@@ -211,7 +214,7 @@ export default class EditAppointmentGroupDetails {
     const slotLimit = parseInt(input.val(), 10)
     return this.helpIconShowIf(
       checkbox,
-      _.some(this.apptGroup.appointments, a => a.child_events_count > slotLimit)
+      some(this.apptGroup.appointments, a => a.child_events_count > slotLimit)
     )
   }
 
@@ -228,7 +231,7 @@ export default class EditAppointmentGroupDetails {
       })
     return this.helpIconShowIf(
       checkbox,
-      _.some(apptCounts, (count, _userId) => count > apptLimit)
+      some(apptCounts, (count, _userId) => count > apptLimit)
     )
   }
 
@@ -255,6 +258,8 @@ export default class EditAppointmentGroupDetails {
     return $('#options_help_dialog').dialog({
       title: I18n.t('affect_reservations', 'How will this affect reservations?'),
       width: 400,
+      modal: true,
+      zIndex: 1000,
     })
   }
 
@@ -302,8 +307,8 @@ export default class EditAppointmentGroupDetails {
     }
     this.timeBlockList.blocks().forEach(range => {
       params['appointment_group[new_appointments]'].push([
-        $.unfudgeDateForProfileTimezone(range[0]).toISOString(),
-        $.unfudgeDateForProfileTimezone(range[1]).toISOString(),
+        unfudgeDateForProfileTimezone(range[0]).toISOString(),
+        unfudgeDateForProfileTimezone(range[1]).toISOString(),
       ])
     })
 
@@ -327,6 +332,10 @@ export default class EditAppointmentGroupDetails {
 
     params['appointment_group[participant_visibility]'] =
       data.participant_visibility === '1' ? 'protected' : 'private'
+
+    if (this.allowObserverOption) {
+      params['appointment_group[allow_observer_signup]'] = data.allow_observer_signup
+    }
 
     // get the context/section info from @contextSelector instead
     delete data['context_codes[]']
@@ -356,8 +365,8 @@ export default class EditAppointmentGroupDetails {
       params['appointment_group[min_appointments_per_participant]'] = 1
     }
 
-    const onSuccess = data => {
-      ;(data.new_appointments || []).forEach(eventData => {
+    const onSuccess = data_ => {
+      ;(data_.new_appointments || []).forEach(eventData => {
         const event = commonEventFactory(eventData, this.contexts)
         jqueryPublish('CommonEvent/eventSaved', event)
       })
@@ -421,15 +430,28 @@ export default class EditAppointmentGroupDetails {
     } else {
       this.disableGroups()
     }
+
+    this.toggleObserverSignupVisibility()
+  }
+
+  toggleObserverSignupVisibility = () => {
+    const contextCodes = this.contextSelector?.selectedContexts() || []
+    const groupSignupEnabled = this.form.find('.group-signup-checkbox').is(':checked')
+    const showObserverSignupCheckbox =
+      !groupSignupEnabled &&
+      contextCodes.length > 0 &&
+      contextCodes.every(c => this.contextsHash[c].allow_observers_in_appointment_groups)
+    this.allowObserverOption = showObserverSignupCheckbox
+    this.form.find('#observer-signup-option').toggle(showObserverSignupCheckbox)
   }
 
   disableGroups() {
-    this.form.find('.group-signup-checkbox').attr('disabled', true).prop('checked', false)
+    this.form.find('.group-signup-checkbox').prop('disabled', true).prop('checked', false)
     this.form.find('.group-signup').hide()
   }
 
   enableGroups(contextInfo) {
-    this.form.find('.group-signup-checkbox').attr('disabled', false)
+    this.form.find('.group-signup-checkbox').prop('disabled', false)
     const groupsInfo = {
       cssClass: 'group_category',
       name: 'group_category_id',

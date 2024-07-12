@@ -68,7 +68,7 @@ describe AccessToken do
     end
 
     context "when an access token argument is provided" do
-      subject { AccessToken.authenticate(token.full_token, AccessToken::TOKEN_TYPES.crypted_token, token) }
+      subject { AccessToken.authenticate(token.full_token, :crypted_token, token) }
 
       let(:token) { AccessToken.create!(user: user_model) }
       let(:user) { user_model }
@@ -604,7 +604,7 @@ describe AccessToken do
     end
   end
 
-  describe ".site_admin?" do
+  describe "#site_admin?" do
     specs_require_sharding
     let(:account) { account_model }
     let(:access_token) { AccessToken.create!(user: user_model, developer_key: DeveloperKey.create!(account:)) }
@@ -616,18 +616,125 @@ describe AccessToken do
       AccessToken.site_admin?("token-string")
     end
 
-    describe "#site_admin?" do
-      it "returns false" do
-        @shard2.activate do
-          expect(access_token.site_admin?).to be false
-        end
+    it "normally returns false" do
+      @shard2.activate do
+        expect(access_token.site_admin?).to be false
+      end
+    end
+
+    context "when access token is for site admin" do
+      let(:account) { Account.site_admin }
+
+      it "returns true" do
+        expect(access_token.site_admin?).to be true
+      end
+    end
+  end
+
+  describe "#used!" do
+    let_once(:access_token) { AccessToken.create!(user: user_model, developer_key: DeveloperKey.default) }
+
+    it "updates last_used_at when not set yet" do
+      access_token.used!
+      expect(access_token.last_used_at).not_to be_nil
+      expect(access_token).not_to be_changed
+    end
+
+    it "does not update last_used_at within the threshold" do
+      access_token.used!
+      last_used = access_token.last_used_at
+      access_token.used!
+      expect(access_token.last_used_at).to eq last_used
+    end
+
+    it "updates last used after the threshold" do
+      access_token.used!
+      last_used = access_token.last_used_at
+      Timecop.travel(20.minutes) { access_token.used! }
+      expect(access_token.last_used_at).not_to eq last_used
+    end
+
+    context "when out-of-region" do
+      before do
+        allow(access_token.shard).to receive(:in_current_region?).and_return(false)
+        allow(Rails.env).to receive(:production?).and_return(true)
       end
 
-      context "access token is for site admin" do
-        let(:account) { Account.site_admin }
+      it "simply queues a job" do
+        expect(access_token).to receive(:delay).and_call_original
+        access_token.used!
+        expect(access_token.last_used_at).to be_nil
+      end
 
-        it "returns true" do
-          expect(access_token.site_admin?).to be true
+      it "updates immediately if already in a job" do
+        allow(Delayed::Job).to receive(:in_delayed_job?).and_return(true)
+        expect(access_token).not_to receive(:delay)
+        access_token.used!
+        expect(access_token.last_used_at).not_to be_nil
+      end
+    end
+
+    it "uses save! if there are other changes" do
+      access_token.created_at = 1.day.ago
+      expect(access_token).to receive(:save!).and_call_original
+      access_token.used!
+      expect(access_token.last_used_at).not_to be_nil
+      expect(access_token).not_to be_changed
+    end
+
+    it "skips the update if someone else has changed it" do
+      access_token.used!
+      Timecop.travel(20.minutes) do
+        AccessToken.where(id: access_token).update_all(last_used_at: 1.day.ago)
+        expect(access_token).not_to receive(:save!)
+        expect(AccessToken).to receive(:where).twice.and_call_original
+        access_token.used!
+        expect(access_token).to be_changed
+      end
+    end
+
+    it "normally uses a custom query to skip locks" do
+      expect(access_token).not_to receive(:save!)
+      expect(AccessToken).to receive(:where).twice.and_call_original
+      access_token.used!
+      expect(access_token).not_to be_changed
+    end
+  end
+
+  describe "#queue_developer_key_token_count_increment" do
+    let(:dk) { DeveloperKey.create!(account: account_model) }
+    let(:access_token) { AccessToken.create!(user: user_model, developer_key: dk) }
+
+    it "increments the developer key token count" do
+      access_token = AccessToken.new(user: user_model, developer_key: dk)
+      expect { access_token.queue_developer_key_token_count_increment }.to change { dk.reload.access_token_count }.by(1)
+    end
+
+    it "is called as an after create hook" do
+      access_token = AccessToken.new(user: user_model, developer_key: dk)
+      expect(access_token).to receive(:queue_developer_key_token_count_increment).and_call_original
+      expect do
+        access_token.save!
+      end.to change { dk.reload.access_token_count }.by(1)
+    end
+
+    it "enqueues using a strand that depends on global developer key id" do
+      expect(DeveloperKey).to \
+        receive(:delay_if_production)
+        .with(strand: "developer_key_token_count_increment_#{dk.id}")
+        .and_call_original
+      access_token
+    end
+
+    describe "in a sharded environment" do
+      specs_require_sharding
+
+      let(:dk) { @shard1.activate { DeveloperKey.create!(account: account_model) } }
+
+      it "increments the developer key token count in the correct shard" do
+        @shard2.activate do
+          expect { AccessToken.create!(user: user_model, developer_key: dk) }.to \
+            change { dk.reload.access_token_count }.by(1)
         end
       end
     end

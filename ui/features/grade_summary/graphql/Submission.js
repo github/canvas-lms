@@ -19,40 +19,55 @@
 import gql from 'graphql-tag'
 import {arrayOf, float, string, bool} from 'prop-types'
 
+import {RubricAssessment} from '@canvas/assignments/graphql/student/RubricAssessment'
 import {SubmissionComment} from './SubmissionComment'
 
 export const Submission = {
   fragment: gql`
     fragment Submission on Submission {
       _id
+      customGradeStatus
       gradingStatus
       grade
       score
       gradingPeriodId
+      hasUnreadRubricAssessment
       hideGradeFromStudent
       readState
       late
       updatedAt
       excused
+      studentEnteredScore
+      state
       commentsConnection {
         nodes {
           ...SubmissionComment
         }
       }
+      rubricAssessmentsConnection {
+        nodes {
+          ...RubricAssessment
+        }
+      }
     }
+    ${RubricAssessment.fragment}
     ${SubmissionComment.fragment}
   `,
   shape: {
     _id: string,
+    customGradeStatus: string,
     gradingStatus: string,
     grade: string,
     score: float,
     gradingPeriodId: string,
+    hasUnreadRubricAssessment: bool,
     hideGradeFromStudent: bool,
     readState: string,
     late: bool,
     updatedAt: string,
     excused: bool,
+    studentEnteredScore: string,
+    state: string,
     commentsConnection: arrayOf({
       nodes: arrayOf({
         comment: string,
@@ -63,19 +78,24 @@ export const Submission = {
         },
       }),
     }),
+    rubricAssessmentsConnection: {nods: arrayOf(RubricAssessment.shape)},
   },
   mock: ({
     _id = '1',
+    customGradeStatus = null,
     gradingStatus = 'graded',
-
     grade = 'A-',
     score = 90,
     gradingPeriodId = '1',
+    hasUnreadRubricAssessment = false,
     hideGradeFromStudent = false,
     readState = 'read',
     late = false,
     updatedAt = '2019-01-01T00:00:00Z',
     excused = false,
+    studentEnteredScore = '8',
+    state = 'graded',
+    submittedAt = null,
     commentsConnection = {
       nodes: [
         {
@@ -88,18 +108,26 @@ export const Submission = {
         },
       ],
     },
+    rubricAssessmentsConnection = {
+      nodes: [RubricAssessment.mock()],
+    },
   } = {}) => ({
     _id,
+    customGradeStatus,
     gradingStatus,
     grade,
     score,
     gradingPeriodId,
+    hasUnreadRubricAssessment,
     hideGradeFromStudent,
     readState,
     late,
     updatedAt,
     excused,
+    studentEnteredScore,
+    state,
+    submittedAt,
     commentsConnection,
-    __typename: 'Submission',
+    rubricAssessmentsConnection,
   }),
 }

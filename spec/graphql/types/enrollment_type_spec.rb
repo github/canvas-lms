@@ -31,6 +31,13 @@ describe Types::EnrollmentType do
     expect(enrollment_type.resolve("_id")).to eq enrollment.id.to_s
     expect(enrollment_type.resolve("type")).to eq "StudentEnrollment"
     expect(enrollment_type.resolve("state")).to eq "active"
+    expect(enrollment_type.resolve("sisImportId")).to eq enrollment.sis_batch_id
+    expect(enrollment_type.resolve("limitPrivilegesToCourseSection")).to eq enrollment.limit_privileges_to_course_section
+  end
+
+  it "returns correct value for limitPrivilegesToCourseSection" do
+    Enrollment.limit_privileges_to_course_section!(@course, @student, true)
+    expect(enrollment_type.resolve("limitPrivilegesToCourseSection")).to be true
   end
 
   describe Types::GradesType do

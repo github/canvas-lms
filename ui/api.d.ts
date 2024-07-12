@@ -16,10 +16,6 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-export type Course = Readonly<{
-  id: string
-}>
-
 export type Enrollment = Readonly<{
   associated_user_id: null | string
   course_id: string
@@ -27,7 +23,7 @@ export type Enrollment = Readonly<{
   course_section_id: string
   created_at: string
   end_at: null | string
-  enrollment_state: 'active'
+  enrollment_state: 'active' | 'inactive' | 'completed' | 'invited'
   html_url: string
   id: string
   last_activity_at: null | string
@@ -57,6 +53,7 @@ export type Enrollment = Readonly<{
     unposted_final_score: null | number
     unposted_final_grade: null | number
   }
+  workflow_state: WorkflowState
 }>
 
 export type Student = Readonly<{
@@ -70,18 +67,19 @@ export type Student = Readonly<{
   short_name: string
   sis_import_id: null | string
   sis_user_id: null | string
-  section_ids: string[]
 }> & {
   enrollments: Enrollment[]
   first_name: string
   last_name: string
   name: string
+  index: number
+  section_ids: string[]
 } & Partial<{
+    anonymous_name: string
     computed_current_score: number
     computed_final_score: number
     cssClass: string
     displayName: string
-    index: number
     initialized: boolean
     isConcluded: boolean
     isInactive: boolean
@@ -182,6 +180,8 @@ export type Assignment = Readonly<{
   automatic_peer_reviews: boolean
   can_duplicate: boolean
   course_id: string
+  checkpoints: Checkpoint[]
+  discussion_topic: DiscussionTopic
   due_date_required: boolean
   final_grader_id: null | string
   grade_group_students_individually: boolean
@@ -195,6 +195,7 @@ export type Assignment = Readonly<{
   grading_type: GradingType
   group_category_id: string | null
   has_overrides: boolean
+  has_sub_assignments: boolean
   has_submitted_submissions: boolean
   hide_in_gradebook: boolean
   important_dates: boolean
@@ -306,7 +307,7 @@ export type Attachment = {
   submitted_to_crocodoc?: boolean
   submitter_id: string
   updated_at: string
-  upload_status: string
+  upload_status: 'pending' | 'failed' | 'success'
   url?: string
   view_inline_ping_url?: string
   viewed_at: string
@@ -366,7 +367,7 @@ export type SubmissionType =
 
 export type WorkflowState =
   | 'assigned'
-  | 'complete'
+  | 'completed'
   | 'deleted'
   | 'graded'
   | 'not_graded'
@@ -438,7 +439,10 @@ export type Submission = Readonly<{
   rawGrade: string | null
   submission_comments: SubmissionComment[]
   submitted_at: null | Date
-  turnitin_data?: TurnitinAsset
+  turnitin_data?: TurnitinAsset & {
+    // TODO: refactor to separate out the dynamic object
+    [key: string]: any
+  }
   updated_at: string
   final_provisional_grade?: string
 }
@@ -572,3 +576,99 @@ export type GradingPeriodSetGroup = {
 }
 
 export type LatePolicyStatus = 'missing' | 'late' | 'extended'
+
+// /api/v1/users/self/history
+export type HistoryEntry = Readonly<{
+  asset_code: string
+  asset_name: string
+  asset_icon: string
+  asset_readable_category: string
+  visited_url: string
+  visited_at: string
+  context_name: string
+}>
+
+// '/api/v1/accounts'
+export type Account = Readonly<{
+  id: string
+  name: string
+}>
+
+// '/api/v1/users/self/favorites/courses?include[]=term&exclude[]=enrollments&sort=nickname',
+export type Course = Readonly<{
+  id: string
+  name: string
+  workflow_state: string
+  enrollment_term_id: number
+  term: {
+    name: string
+  }
+  homeroom_course: boolean
+  sis_course_id: string | null
+}>
+
+// '/api/v1/users/self/tabs',
+type TabCountsObj = Readonly<{
+  [key: string]: number | undefined
+}>
+
+export type ProfileTab = Readonly<{
+  id: string
+  label: string
+  html_url: string
+  counts: TabCountsObj
+}>
+
+// '/api/v1/users/self/groups?include[]=can_access',
+export type AccessibleGroup = Readonly<{
+  id: string
+  name: string
+  can_access?: boolean
+  concluded: boolean
+}>
+
+// '/help_links',
+export type HelpLink = Readonly<{
+  id: string
+  url: string
+  text: string
+  subtext?: string
+  feature_headline?: string
+  is_featured?: boolean
+  is_new?: boolean
+  no_new_window?: boolean
+}>
+
+// '/api/v1/release_notes/latest'
+export type ReleaseNote = {
+  id: string
+  title: string
+  description: string
+  url: string
+  date: string
+  new: boolean
+}
+
+export type DiscussionTopic = {
+  reply_to_entry_required_count: number
+}
+
+export type Checkpoint = {
+  due_at: string | null
+  name: string
+  only_visible_to_overrides: boolean
+  overrides: CheckpointOverride[]
+  points_possible: number
+  tag: string
+}
+
+export type CheckpointOverride = {
+  all_day: boolean
+  all_day_date: string
+  assignment_id: string
+  due_at: string
+  id: string
+  student_ids: string[]
+  title: string
+  unassign_item: boolean
+}

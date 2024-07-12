@@ -41,6 +41,12 @@ class RubricsController < ApplicationController
     mastery_scales_js_env
     set_tutorial_js_env
 
+    if @domain_root_account.feature_enabled?(:enhanced_rubrics)
+      js_env breadcrumbs: rubric_breadcrumbs
+
+      return show_rubrics_redesign
+    end
+
     @rubric_associations = @context.rubric_associations.bookmarked.include_rubric.to_a
     @rubric_associations = Canvas::ICU.collate_by(@rubric_associations.select(&:rubric_id).uniq(&:rubric_id)) { |r| r.rubric.title }
     @rubrics = @rubric_associations.map(&:rubric)
@@ -51,13 +57,22 @@ class RubricsController < ApplicationController
     permission = @context.is_a?(User) ? :manage : [:manage_rubrics, :read_rubrics]
     return unless authorized_action(@context, @current_user, permission)
 
-    if params[:id].match?(Api::ID_REGEX)
+    is_enhanced_rubrics = @domain_root_account.feature_enabled?(:enhanced_rubrics)
+
+    if params[:id].match?(Api::ID_REGEX) || is_enhanced_rubrics
       js_env ROOT_OUTCOME_GROUP: get_root_outcome,
              PERMISSIONS: {
                manage_rubrics: @context.grants_right?(@current_user, session, :manage_rubrics)
              },
              OUTCOMES_NEW_DECAYING_AVERAGE_CALCULATION: @domain_root_account.feature_enabled?(:outcomes_new_decaying_average_calculation)
       mastery_scales_js_env
+
+      if is_enhanced_rubrics
+        js_env breadcrumbs: rubric_breadcrumbs
+
+        return show_rubrics_redesign
+      end
+
       @rubric_association = @context.rubric_associations.bookmarked.find_by(rubric_id: params[:id])
       raise ActiveRecord::RecordNotFound unless @rubric_association
 
@@ -65,6 +80,16 @@ class RubricsController < ApplicationController
     else
       raise ActiveRecord::RecordNotFound
     end
+  end
+
+  def show_rubrics_redesign
+    css_bundle :enhanced_rubrics
+    render html: "".html_safe, layout: true
+  end
+
+  def rubric_breadcrumbs
+    breadcrumbs = crumbs[1..]&.map { |crumb| { name: crumb[0], url: crumb[1] } }
+    breadcrumbs << { name: t("Rubrics"), url: context_url(@context, :context_rubrics_url) }
   end
 
   # @API Create a single rubric
@@ -190,6 +215,7 @@ class RubricsController < ApplicationController
 
         @rubric = @association.rubric if @association
       end
+      @rubric.reconcile_criteria_models(@current_user)
       json_res = {}
       json_res[:rubric] = @rubric.as_json(methods: :criteria, include_root: false, permissions: { user: @current_user, session: }) if @rubric
       json_res[:rubric_association] = @association.as_json(include_root: false, include: [:assessment_requests], permissions: { user: @current_user, session: }) if @association

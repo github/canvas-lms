@@ -17,8 +17,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+import {filter, find, map, some} from 'lodash'
 import axios from '@canvas/axios'
-import _ from 'underscore'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import type {Student} from '../../api.d'
 
@@ -47,11 +47,19 @@ export function hasSubmitted(submission) {
   return !!(submission.submittedAt || submission.submitted_at)
 }
 
+export function hasGraded(submission) {
+  if (submission.excused) {
+    return true
+  }
+
+  return MessageStudentsWhoHelper.exists(submission.score)
+}
+
 export function hasSubmission(assignment) {
   const submissionTypes = getSubmissionTypes(assignment)
   if (submissionTypes.length === 0) return false
 
-  return _.some(
+  return some(
     submissionTypes,
     submissionType => submissionType !== 'none' && submissionType !== 'on_paper'
   )
@@ -140,7 +148,7 @@ const MessageStudentsWhoHelper = {
         text: I18n.t("Haven't been graded"),
         subjectFn: assignment =>
           I18n.t('No grade for %{assignment}', {assignment: assignment.name}),
-        criteriaFn: student => !this.exists(student.score),
+        criteriaFn: student => !hasGraded(student),
       },
       {
         text: I18n.t('Scored less than'),
@@ -182,14 +190,14 @@ const MessageStudentsWhoHelper = {
 
   callbackFn(selected, cutoff, students) {
     const criteriaFn = this.findOptionByText(selected).criteriaFn
-    const studentsMatchingCriteria = _.filter(students, student =>
+    const studentsMatchingCriteria = filter(students, student =>
       criteriaFn(student.user_data, cutoff)
     )
-    return _.map(studentsMatchingCriteria, student => student.user_data.id)
+    return map(studentsMatchingCriteria, student => student.user_data.id)
   },
 
   findOptionByText(text) {
-    return _.find(this.allOptions(), option => option.text === text)
+    return find(this.allOptions(), option => option.text === text)
   },
 
   generateSubjectCallbackFn(assignment) {

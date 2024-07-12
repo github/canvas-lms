@@ -88,6 +88,7 @@ module LtiOutbound
     def generate(overrides = {})
       hash["lti_message_type"] = "basic-lti-launch-request"
       hash["lti_version"] = "LTI-1p0"
+
       hash["resource_link_id"] = link_code
       hash["resource_link_title"] = overrides["resource_link_title"] || tool.name
       hash["user_id"] = user.opaque_identifier
@@ -151,6 +152,7 @@ module LtiOutbound
       hash["oauth_callback"] = "about:blank"
 
       hash["ext_platform"] = overrides[:platform] if overrides.key?(:platform)
+      hash["ext_lti_student_id"] = overrides[:lti_student_id] if overrides.key?(:lti_student_id)
 
       @variable_expander.expand_variables!(hash)
       hash

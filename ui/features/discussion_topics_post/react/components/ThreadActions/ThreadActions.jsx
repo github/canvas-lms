@@ -23,13 +23,10 @@ import React, {useMemo} from 'react'
 import {Menu} from '@instructure/ui-menu'
 import {
   IconMoreLine,
-  IconNextUnreadLine,
   IconDiscussionLine,
   IconEditLine,
   IconTrashLine,
   IconSpeedGraderLine,
-  IconMarkAsReadSolid,
-  IconMarkAsReadLine,
   IconWarningBorderlessSolid,
   IconReplyAll2Line,
   IconCommentLine,
@@ -38,6 +35,7 @@ import {
 import {IconButton} from '@instructure/ui-buttons'
 import {Text} from '@instructure/ui-text'
 import {Flex} from '@instructure/ui-flex'
+import {ReadIcon, UnreadIcon} from '../ThreadingToolbar/MarkAsReadIcons'
 
 const I18n = useI18nScope('discussion_posts')
 
@@ -71,19 +69,18 @@ export const ThreadActions = props => {
             placement="bottom"
             key={`threadActionMenu-${props.id}`}
             trigger={
-              <span className="discussion-thread-action-button">
-                <IconButton
-                  size="medium"
-                  screenReaderLabel={I18n.t('Manage Discussion by %{author}', {
-                    author: props.authorName,
-                  })}
-                  renderIcon={IconMoreLine}
-                  withBackground={false}
-                  withBorder={false}
-                  data-testid="thread-actions-menu"
-                />
-              </span>
+              <IconButton
+                size="medium"
+                screenReaderLabel={I18n.t('Manage Discussion by %{author}', {
+                  author: props.authorName,
+                })}
+                renderIcon={IconMoreLine}
+                withBackground={false}
+                withBorder={false}
+                data-testid="thread-actions-menu"
+              />
             }
+            ref={props.moreOptionsButtonRef}
           >
             {menuItems}
           </Menu>
@@ -98,7 +95,7 @@ const getMenuConfigs = props => {
   if (props.onMarkAllAsRead) {
     options.push({
       key: 'markAllAsRead',
-      icon: <IconNextUnreadLine />,
+      icon: <ReadIcon />,
       label: I18n.t('Mark All as Read'),
       selectionCallback: props.onMarkAllAsRead,
     })
@@ -106,7 +103,7 @@ const getMenuConfigs = props => {
   if (props.onMarkAllAsUnread) {
     options.push({
       key: 'markAllAsUnRead',
-      icon: <IconNextUnreadLine />,
+      icon: <UnreadIcon />,
       label: I18n.t('Mark All as Unread'),
       selectionCallback: props.onMarkAllAsUnread,
     })
@@ -114,14 +111,14 @@ const getMenuConfigs = props => {
   if (props.isUnread) {
     options.push({
       key: 'markAsRead',
-      icon: <IconNextUnreadLine />,
+      icon: <ReadIcon />,
       label: I18n.t('Mark as Read'),
       selectionCallback: props.onToggleUnread,
     })
   } else {
     options.push({
       key: 'markAsUnread',
-      icon: <IconNextUnreadLine />,
+      icon: <UnreadIcon />,
       label: I18n.t('Mark as Unread'),
       selectionCallback: props.onToggleUnread,
     })
@@ -129,7 +126,7 @@ const getMenuConfigs = props => {
   if (props.onMarkThreadAsRead) {
     options.push({
       key: 'markThreadAsRead',
-      icon: <IconMarkAsReadLine />,
+      icon: <ReadIcon />,
       label: I18n.t('Mark Thread as Read'),
       selectionCallback: () => {
         props.onMarkThreadAsRead(true)
@@ -139,7 +136,7 @@ const getMenuConfigs = props => {
   if (props.onMarkThreadAsRead) {
     options.push({
       key: 'markThreadAsUnRead',
-      icon: <IconMarkAsReadSolid />,
+      icon: <UnreadIcon />,
       label: I18n.t('Mark Thread as Unread'),
       selectionCallback: () => {
         props.onMarkThreadAsRead(false)
@@ -265,6 +262,7 @@ ThreadActions.propTypes = {
   onReport: PropTypes.func,
   isReported: PropTypes.bool,
   isSearch: PropTypes.bool,
+  moreOptionsButtonRef: PropTypes.any,
 }
 
 ThreadActions.defaultProps = {

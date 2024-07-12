@@ -84,6 +84,14 @@ RSpec.describe SubmissionComment do
           comment = @submission.submission_comments.create!(comment: "hi", author: @student)
           expect(comment.grants_right?(@teacher, :delete)).to be true
         end
+
+        it "can delete comments in a moderated assignment and the grader is not the final grader" do
+          @assignment.update!(moderated_grading: true, grades_published_at: nil, grader_count: 1)
+          expect(@teacher.id).not_to eq(@assignment.final_grader_id)
+          @submission.grade_posting_in_progress = false
+          comment = @submission.submission_comments.create!(comment: "hi", author: @student)
+          expect(comment.grants_right?(@teacher, :delete)).to be true
+        end
       end
     end
 
@@ -134,6 +142,14 @@ RSpec.describe SubmissionComment do
           comment = @submission.submission_comments.create!(comment: "hi", author: @student)
           expect(comment.grants_right?(@teacher, :update)).to be false
         end
+
+        it "can update their own comments in a moderated assignment when the grader is not the final grader" do
+          @assignment.update!(moderated_grading: true, grades_published_at: nil, grader_count: 1)
+          expect(@teacher.id).not_to eq(@assignment.final_grader_id)
+          @submission.grade_posting_in_progress = false
+          comment = @submission.submission_comments.create!(comment: "hi", author: @teacher)
+          expect(comment.grants_right?(@teacher, :update)).to be true
+        end
       end
     end
   end
@@ -172,7 +188,7 @@ RSpec.describe SubmissionComment do
   describe "viewed submission comments" do
     it "returns read if the submission is read" do
       comment = @submission.submission_comments.create!(valid_attributes)
-      @submission.mark_read(@user)
+      @submission.mark_item_read("comment")
       expect(comment).to be_read(@user)
     end
 
@@ -223,21 +239,21 @@ RSpec.describe SubmissionComment do
     it "does not send notifications to users in concluded sections" do
       @submission_ended = @assignment.submit_homework(@student_ended)
       @comment = @submission_ended.add_comment(author: @teacher, comment: "some comment")
-      expect(@comment.messages_sent.keys).not_to be_include("Submission Comment")
+      expect(@comment.messages_sent.keys).not_to include("Submission Comment")
     end
 
     it "does not dispatch notification on create if course is unpublished" do
       @course.complete
       @comment = @submission.add_comment(author: @teacher, comment: "some comment")
       expect(@course).to_not be_available
-      expect(@comment.messages_sent.keys).to_not be_include("Submission Comment")
+      expect(@comment.messages_sent.keys).to_not include("Submission Comment")
     end
 
     it "does not dispatch notification on create if student is inactive" do
       @student.enrollments.first.deactivate
 
       @comment = @submission.add_comment(author: @teacher, comment: "some comment")
-      expect(@comment.messages_sent.keys).to_not be_include("Submission Comment")
+      expect(@comment.messages_sent.keys).to_not include("Submission Comment")
     end
 
     it "does not dispatch notification on create for provisional comments" do
@@ -250,7 +266,7 @@ RSpec.describe SubmissionComment do
       @submission = @assignment.find_or_create_submission(@student)
       @comment = @submission.add_comment(author: @student, comment: "some comment")
       expect(@submission).to be_unsubmitted
-      expect(@comment.messages_sent).to be_include("Submission Comment For Teacher")
+      expect(@comment.messages_sent).to include("Submission Comment For Teacher")
     end
 
     it "doesn't dispatch notifications on create for manually posted assignments" do
@@ -286,6 +302,8 @@ RSpec.describe SubmissionComment do
     @comment.reload
     @comment.update(attachments: [a])
     expect(@comment.attachment_ids).to eql(a.id.to_s)
+    expect(@comment.cached_attachments.first).to be_an(Attachment)
+    expect(@comment.cached_attachments).to eql [a]
   end
 
   it "rejects invalid attachments" do
@@ -294,6 +312,26 @@ RSpec.describe SubmissionComment do
     @comment = @submission.submission_comments.create!(valid_attributes)
     @comment.update(attachments: [a])
     expect(@comment.attachment_ids).to eql("")
+  end
+
+  it "handles legacy OpenObject attachments" do
+    a = Attachment.create!(context: @assignment, uploaded_data: default_uploaded_data)
+    a.recently_created = false
+    @comment = @submission.submission_comments.create!(valid_attributes)
+    @comment.update(attachments: [a])
+    @comment.cached_attachments = [OpenObject.new(a.attributes, in_specs: true)]
+    expect(@comment.cached_attachments.first).to be_an(Attachment)
+    expect(@comment.cached_attachments).to eql [a]
+  end
+
+  it "handles even older legacy OpenObject attachments" do
+    a = Attachment.create!(context: @assignment, uploaded_data: default_uploaded_data)
+    a.recently_created = false
+    @comment = @submission.submission_comments.create!(valid_attributes)
+    @comment.update(attachments: [a])
+    @comment.cached_attachments = [OpenObject.new({ table: a.attributes, object_type: "attachment" }, in_specs: true)]
+    expect(@comment.cached_attachments.first).to be_an(Attachment)
+    expect(@comment.cached_attachments).to eql [a]
   end
 
   it "renders formatted_body correctly" do
@@ -473,6 +511,7 @@ RSpec.describe SubmissionComment do
       expect do
         @comment = @submission.submission_comments.create!(valid_attributes.merge({ author: @teacher }))
       end.to change(ContentParticipation, :count).by(1)
+
       expect(ContentParticipation.where(user_id: @student).first).to be_unread
       expect(@submission.unread?(@student)).to be_truthy
     end
@@ -481,6 +520,7 @@ RSpec.describe SubmissionComment do
       expect do
         @comment = @submission.submission_comments.create!(valid_attributes.merge({ author: @student }))
       end.not_to change(ContentParticipation, :count)
+
       expect(@submission.read?(@student)).to be_truthy
     end
 
@@ -488,46 +528,17 @@ RSpec.describe SubmissionComment do
       expect do
         @submission.add_comment(author: @teacher, comment: "wat", provisional: true)
       end.not_to change(ContentParticipation, :count)
+
       expect(@submission.read?(@student)).to be true
     end
 
-    context "read state when feedback visibility ff is on" do
-      before do
-        Account.site_admin.enable_feature!(:visibility_feedback_student_grades_page)
-      end
+    it "is unread when at least a comment is not commented by self" do
+      expect do
+        @submission.submission_comments.create!(valid_attributes.merge({ author: @student }))
+        @submission.submission_comments.create!(valid_attributes.merge({ author: @teacher }))
+      end.to change(ContentParticipation, :count).by(1)
 
-      it "is unread after submission is commented on by teacher" do
-        expect do
-          @comment = @submission.submission_comments.create!(valid_attributes.merge({ author: @teacher }))
-        end.to change(ContentParticipation, :count).by(1)
-
-        expect(@submission.unread?(@student)).to be_truthy
-      end
-
-      it "is read after submission is commented on by self" do
-        expect do
-          @comment = @submission.submission_comments.create!(valid_attributes.merge({ author: @student }))
-        end.not_to change(ContentParticipation, :count)
-
-        expect(@submission.read?(@student)).to be_truthy
-      end
-
-      it "is unread when at least a comment is not commented by self" do
-        expect do
-          @submission.submission_comments.create!(valid_attributes.merge({ author: @student }))
-          @submission.submission_comments.create!(valid_attributes.merge({ author: @teacher }))
-        end.to change(ContentParticipation, :count).by(1)
-
-        expect(@submission.unread?(@student)).to be_truthy
-      end
-
-      it "does not set unread state when a provisional comment is made" do
-        expect do
-          @submission.add_comment(author: @teacher, comment: "wat", provisional: true)
-        end.not_to change(ContentParticipation, :count)
-
-        expect(@submission.read?(@student)).to be_truthy
-      end
+      expect(@submission.unread?(@student)).to be_truthy
     end
   end
 
@@ -926,8 +937,8 @@ RSpec.describe SubmissionComment do
     end
 
     it "updates participation for an automatically posted assignment" do
-      expect(ContentParticipation).to receive(:create_or_update)
-        .with({ content: @submission, user: @submission.user, workflow_state: "unread" })
+      expect(ContentParticipation).to receive(:participate)
+        .with({ content: @submission, user: @student, content_item: "comment", workflow_state: "unread" })
       @comment = @submission.add_comment(author: @teacher, comment: "some comment")
     end
 

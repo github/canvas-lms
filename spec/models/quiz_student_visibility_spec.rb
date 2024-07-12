@@ -17,7 +17,13 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
+require_relative "student_visibility/student_visibility_common"
+require_relative "../helpers/selective_release_common"
+
 describe "differentiated_assignments" do
+  include StudentVisibilityCommon
+  include SelectiveReleaseCommon
+
   def course_with_differentiated_assignments_enabled
     @course = Course.create!
     @user = user_model
@@ -54,6 +60,7 @@ describe "differentiated_assignments" do
     ao.title = "ADHOC OVERRIDE"
     ao.workflow_state = "active"
     ao.set_type = "ADHOC"
+    ao.unassign_item = opts[:unassign_item] || "false"
     ao.save!
     override_student = ao.assignment_override_students.build
     override_student.user = @user
@@ -89,9 +96,17 @@ describe "differentiated_assignments" do
     quiz.reload
   end
 
-  def give_section_foo_due_date(quiz)
+  def give_section_foo_due_date(quiz, opts = {})
     create_override_for_quiz(quiz) do |ao|
       ao.set = @section_foo
+      ao.due_at = 3.weeks.from_now
+      ao.unassign_item = opts[:unassign_item] || "false"
+    end
+  end
+
+  def give_course_due_date(quiz)
+    create_override_for_quiz(quiz) do |ao|
+      ao.set = @course
       ao.due_at = 3.weeks.from_now
     end
   end
@@ -115,34 +130,16 @@ describe "differentiated_assignments" do
       quiz_with_true_only_visible_to_overrides
       give_section_foo_due_date(@quiz)
       enroller_user_in_section(@section_foo)
-      # at this point there should be an entry in the table
-      @visibility_object = Quizzes::QuizStudentVisibility.first
     end
 
-    it "returns objects" do
-      expect(@visibility_object).not_to be_nil
-    end
+    let(:visibility_object) { Quizzes::QuizStudentVisibility.first }
 
-    it "doesnt allow updates" do
-      @visibility_object.user_id = @visibility_object.user_id + 1
-      expect { @visibility_object.save! }.to raise_error(ActiveRecord::ReadOnlyRecord)
-    end
-
-    it "doesnt allow new records" do
-      expect do
-        Quizzes::QuizStudentVisibility.create!(user_id: @user.id,
-                                               quiz_id: @quiz_id,
-                                               course_id: @course.id)
-      end.to raise_error(ActiveRecord::ReadOnlyRecord)
-    end
-
-    it "doesnt allow deletion" do
-      expect { @visibility_object.destroy }.to raise_error(ActiveRecord::ReadOnlyRecord)
-    end
+    it_behaves_like "student visibility models"
   end
 
   context "course_with_differentiated_assignments_enabled" do
     before do
+      differentiated_modules_off
       course_with_differentiated_assignments_enabled
       add_multiple_sections
     end

@@ -8,30 +8,30 @@ PATH
 GEM
   remote: https://rubygems.org/
   specs:
-    diff-lcs (1.5.0)
+    diff-lcs (1.5.1)
     folio-pagination (0.0.12)
-    mini_portile2 (2.8.4)
-    rake (13.0.6)
-    rspec (3.12.0)
-      rspec-core (~> 3.12.0)
-      rspec-expectations (~> 3.12.0)
-      rspec-mocks (~> 3.12.0)
-    rspec-core (3.12.2)
-      rspec-support (~> 3.12.0)
-    rspec-expectations (3.12.3)
+    mini_portile2 (2.8.7)
+    rake (13.2.1)
+    rspec (3.13.0)
+      rspec-core (~> 3.13.0)
+      rspec-expectations (~> 3.13.0)
+      rspec-mocks (~> 3.13.0)
+    rspec-core (3.13.0)
+      rspec-support (~> 3.13.0)
+    rspec-expectations (3.13.1)
       diff-lcs (>= 1.2.0, < 2.0)
-      rspec-support (~> 3.12.0)
-    rspec-mocks (3.12.6)
+      rspec-support (~> 3.13.0)
+    rspec-mocks (3.13.1)
       diff-lcs (>= 1.2.0, < 2.0)
-      rspec-support (~> 3.12.0)
-    rspec-support (3.12.1)
-    sqlite3 (1.6.4)
+      rspec-support (~> 3.13.0)
+    rspec-support (3.13.1)
+    sqlite3 (1.7.3)
       mini_portile2 (~> 2.8.0)
-    sqlite3 (1.6.4-aarch64-linux)
-    sqlite3 (1.6.4-arm64-darwin)
-    sqlite3 (1.6.4-x86_64-darwin)
-    sqlite3 (1.6.4-x86_64-linux)
-    will_paginate (4.0.0)
+    sqlite3 (1.7.3-aarch64-linux)
+    sqlite3 (1.7.3-arm64-darwin)
+    sqlite3 (1.7.3-x86_64-darwin)
+    sqlite3 (1.7.3-x86_64-linux)
+    will_paginate (4.0.1)
 
 PLATFORMS
   aarch64-linux
@@ -47,5 +47,8 @@ DEPENDENCIES
   rspec (~> 3.12)
   sqlite3
 
+RUBY VERSION
+   ruby 3.1.2p20
+
 BUNDLED WITH
-   2.4.19
+   2.5.10

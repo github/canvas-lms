@@ -736,6 +736,81 @@ describe LearningOutcome do
                                                                                "Does Not Meet Expectations"
                                                                              ])
     end
+
+    it "archive! updates the workflow_state to archived and sets archived_at" do
+      @outcome.archive!
+      expect(@outcome.workflow_state).to eq("archived")
+      expect(@outcome.archived_at).not_to be_nil
+    end
+
+    it "archive! raises an ActiveRecord::RecordNotSaved error when we try to archive a deleted outcome" do
+      @outcome.destroy!
+      expect(@outcome.workflow_state).to eq("deleted")
+      expect { @outcome.archive! }.to raise_error(
+        ActiveRecord::RecordNotSaved,
+        "Cannot archive a deleted LearningOutcome"
+      )
+      expect(@outcome.workflow_state).to eq("deleted")
+      expect(@outcome.archived_at).to be_nil
+    end
+
+    it "archive! will not update an already archived outcome" do
+      @outcome.archive!
+      archived_at = @outcome.archived_at
+      expect(@outcome.workflow_state).to eq("archived")
+      expect(@outcome.archived_at).not_to be_nil
+      @outcome.archive!
+      expect(@outcome.workflow_state).to eq("archived")
+      expect(@outcome.archived_at).to eq(archived_at)
+    end
+
+    it "unarchive! updates the workflow_state to active and sets archived_at to nil" do
+      @outcome.archive!
+      expect(@outcome.workflow_state).to eq("archived")
+      expect(@outcome.archived_at).not_to be_nil
+      @outcome.unarchive!
+      expect(@outcome.workflow_state).to eq("active")
+      expect(@outcome.archived_at).to be_nil
+    end
+
+    it "unarchive! raises an ActiveRecord::RecordNotSaved error when we try to unarchive a deleted outcome" do
+      @outcome.destroy!
+      expect(@outcome.workflow_state).to eq("deleted")
+      expect { @outcome.unarchive! }.to raise_error(
+        ActiveRecord::RecordNotSaved,
+        "Cannot unarchive a deleted LearningOutcome"
+      )
+      expect(@outcome.workflow_state).to eq("deleted")
+      expect(@outcome.archived_at).to be_nil
+    end
+
+    it "unarchive! will not update an active outcome" do
+      @outcome.unarchive!
+      expect(@outcome.workflow_state).to eq("active")
+      expect(@outcome.archived_at).to be_nil
+    end
+
+    context "scope" do
+      before do
+        @active = @course.created_learning_outcomes.create(title: "active")
+        @archived = @course.created_learning_outcomes.create(title: "archived")
+        @archived.archive!
+        @deleted = @course.created_learning_outcomes.create(title: "deleted")
+        @deleted.destroy
+      end
+
+      it "active scope does not include deleted or archived outcomes" do
+        expect(LearningOutcome.active.include?(@active)).to be true
+        expect(LearningOutcome.active.include?(@archived)).to be false
+        expect(LearningOutcome.active.include?(@deleted)).to be false
+      end
+
+      it "active scope includes unarchived outcomes" do
+        expect(LearningOutcome.active.include?(@archived)).to be false
+        @archived.unarchive!
+        expect(LearningOutcome.active.include?(@archived)).to be true
+      end
+    end
   end
 
   context "Don't create outcomes with illegal values" do
@@ -1152,9 +1227,9 @@ describe LearningOutcome do
         LoadAccount.default_domain_root_account.enable_feature!(:outcomes_new_decaying_average_calculation)
       end
 
-      it "defaults calculation_method to weighted_average" do
+      it "defaults calculation_method to standard_decaying_average" do
         @outcome = LearningOutcome.create!(title: "outcome")
-        expect(@outcome.calculation_method).to eql("weighted_average")
+        expect(@outcome.calculation_method).to eql("standard_decaying_average")
         expect(@outcome.calculation_int).to be 65
       end
 
@@ -1258,7 +1333,7 @@ describe LearningOutcome do
       ->(*courses) { courses.each { |c| student_in_course(course: c) } }
     end
 
-    let(:account) { -> { Account.all.find { |a| !a.site_admin? && a.root_account? } } }
+    let(:account) { -> { Account.find { |a| !a.site_admin? && a.root_account? } } }
 
     let(:create_rubric) do
       lambda do |outcome|
@@ -1572,6 +1647,19 @@ describe LearningOutcome do
                                    use_for_grading: true,
                                    context: @course)
       expect(@outcome.updateable_rubrics.length).to eq 0
+    end
+  end
+
+  context "fetch_outcome_copies" do
+    it "fetch every copied learning outcome id from one of the copied outcome" do
+      o1 = LearningOutcome.create!(title: "outcome1")
+      o2 = LearningOutcome.create!(title: "outcome2")
+      o3 = LearningOutcome.create!(title: "outcome3")
+      o4 = LearningOutcome.create!(title: "outcome4")
+      o2.update(copied_from_outcome_id: o1.id)
+      o4.update(copied_from_outcome_id: o3.id)
+      o3.update(copied_from_outcome_id: o1.id)
+      expect(o3.fetch_outcome_copies.length).to eq 4
     end
   end
 end

@@ -128,6 +128,7 @@ export const CreateCourseModal = ({
   if (window.ENV.FEATURES?.enhanced_course_creation_account_fetching) {
     fetchOpts = {
       path: '/api/v1/course_creation_accounts',
+      // eslint-disable-next-line react-hooks/rules-of-hooks
       success: useCallback(accounts => {
         setAllAccounts(
           accounts.sort((a, b) => a.name.localeCompare(b.name, ENV.LOCALE, {sensitivity: 'base'}))
@@ -137,11 +138,12 @@ export const CreateCourseModal = ({
         per_page: 100,
       },
     }
-  } else {
-    if (permissions === 'admin') fetchOpts = adminFetchOpts
-    else if (permissions === 'no_enrollments') fetchOpts = noEnrollmentsFetchOpts
-    else if (['teacher', 'student'].includes(permissions))
-      fetchOpts = restrictToMCCAccount ? noEnrollmentsFetchOpts : teacherStudentFetchOpts
+  } else if (permissions === 'admin') {
+    fetchOpts = adminFetchOpts
+  } else if (permissions === 'no_enrollments') {
+    fetchOpts = noEnrollmentsFetchOpts
+  } else if (['teacher', 'student'].includes(permissions)) {
+    fetchOpts = restrictToMCCAccount ? noEnrollmentsFetchOpts : teacherStudentFetchOpts
   }
 
   useFetchApi({
@@ -211,6 +213,13 @@ export const CreateCourseModal = ({
     }
   }
 
+  const handleSyncEnrollmentsChanged = e => {
+    setSyncHomeroomEnrollments(e.target.checked)
+    if (e.target.checked && homeroomOptions[0]) {
+      handleHomeroomSelected(homeroomOptions[0].props?.id)
+    }
+  }
+
   let homeroomOptions = []
   if (selectedAccount) {
     homeroomOptions = allHomerooms
@@ -259,7 +268,7 @@ export const CreateCourseModal = ({
                 label={I18n.t('Sync enrollments and subject start/end dates from homeroom')}
                 value="syncHomeroomEnrollments"
                 checked={syncHomeroomEnrollments}
-                onChange={event => setSyncHomeroomEnrollments(event.target.checked)}
+                onChange={handleSyncEnrollmentsChanged}
               />
             )}
             {showHomeroomSyncOptions && syncHomeroomEnrollments && (

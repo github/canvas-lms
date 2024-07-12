@@ -33,6 +33,7 @@ import DirectShareCourseTray from '@canvas/direct-sharing/react/components/Direc
 import DirectShareUserModal from '@canvas/direct-sharing/react/components/DirectShareUserModal'
 import '@canvas/jquery/jquery.disableWhileLoading'
 import {ltiState} from '@canvas/lti/jquery/messages'
+import ItemAssignToTray from '@canvas/context-modules/differentiated-modules/react/Item/ItemAssignToTray'
 
 const I18n = useI18nScope('pages')
 
@@ -47,6 +48,7 @@ export default class WikiPageIndexView extends PaginatedCollectionView {
         'click .header-row a[data-sort-field]': 'sort',
         'click .header-bar-right .menu_tool_link': 'openExternalTool',
         'click .pages-mobile-header a[data-sort-mobile-field]': 'sortBySelect',
+        'click #toggle_block_editor': 'toggleBlockEditor',
       },
 
       els: {
@@ -56,6 +58,7 @@ export default class WikiPageIndexView extends PaginatedCollectionView {
         '#external-tool-mount-point': '$externalToolMountPoint',
         '#copy-to-mount-point': '$copyToMountPoint',
         '#send-to-mount-point': '$sendToMountPoint',
+        '#assign-to-mount-point': '$assignToMountPoint',
       },
     })
 
@@ -185,6 +188,10 @@ export default class WikiPageIndexView extends PaginatedCollectionView {
     if (this.lastFocusField) {
       $(`[data-sort-field='${this.lastFocusField}']`).focus()
     }
+  }
+
+  toggleBlockEditor(ev) {
+    ENV.BLOCK_EDITOR = ev.target.checked
   }
 
   confirmDeletePages(ev) {
@@ -330,6 +337,36 @@ export default class WikiPageIndexView extends PaginatedCollectionView {
     )
   }
 
+  setAssignToItem(open, newAssignToItem, returnFocusTo) {
+    // not supported in group contexts
+    if (ENV.COURSE_ID == null) {
+      return
+    }
+    const handleTrayClose = () => {
+      this.setAssignToItem(false, newAssignToItem, returnFocusTo)
+      setTimeout(() => returnFocusTo?.focus(), 100)
+    }
+    const handleTrayExited = () => ReactDOM.unmountComponentAtNode(this.$assignToMountPoint[0])
+
+    ReactDOM.render(
+      <ItemAssignToTray
+        open={open}
+        onClose={handleTrayClose}
+        onDismiss={handleTrayClose}
+        onExited={handleTrayExited}
+        iconType="page"
+        itemType="page"
+        locale={ENV.LOCALE || 'en'}
+        timezone={ENV.TIMEZONE || 'UTC'}
+        courseId={ENV.COURSE_ID}
+        itemName={newAssignToItem.get('title')}
+        itemContentId={newAssignToItem.get('page_id')}
+        removeDueDateInput={true}
+      />,
+      this.$assignToMountPoint[0]
+    )
+  }
+
   collectionHasTodoDate() {
     return !!this.collection.find(m => m.has('todo_date'))
   }
@@ -352,6 +389,8 @@ export default class WikiPageIndexView extends PaginatedCollectionView {
     json.collectionHasTodoDate = this.collectionHasTodoDate()
     json.hasWikiIndexPlacements = this.wikiIndexPlacements.length > 0
     json.wikiIndexPlacements = this.wikiIndexPlacements
+
+    json.block_editor = ENV.BLOCK_EDITOR
     return json
   }
 }

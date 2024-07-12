@@ -175,6 +175,7 @@ class SubmissionsBaseController < ApplicationController
                                                                       except: [:quiz_submission, :submission_history]
                                                                     }).merge(except: submission_json_exclusions, permissions:)
           json_args[:methods] << :provisional_grade_id if provisional
+          json_args[:methods].delete(:submission_comments)
 
           submissions_json = @submissions.map do |submission|
             submission_json = submission.as_json(json_args)
@@ -196,8 +197,9 @@ class SubmissionsBaseController < ApplicationController
           flash[:error] = @error_message
 
           error_json = { base: @error_message }
-          error_json[:error_code] = error.error_code if error
-          error_status = error&.status_code || :bad_request
+
+          error_json[:error_code] = error.error_code if error.respond_to?(:error_code)
+          error_status = (error.respond_to?(:status_code) && error.status_code) || :bad_request
 
           format.html { render :show, id: @assignment.context.id }
           format.json { render json: { errors: error_json }, status: error_status }

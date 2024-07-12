@@ -24,6 +24,7 @@ import router from './react/router'
 import configureStore from './react/store/configureStore'
 import initialState from './react/store/initialState'
 import ready from '@instructure/ready'
+import {initializeTopNavPortal} from '@canvas/top-navigation/react/TopNavPortal'
 
 // eg: '/accounts/xxx' for anything like '/accounts/xxx/whatever`
 initialState.tabList.basePath = window.location.pathname.match(/.*accounts\/[^/]*/)[0]
@@ -46,7 +47,7 @@ const props = {
 // either the "Courses" or "People" tabs on the left, it highlights the right
 // tab and updates the crumb and document title
 const originalDocumentTitle = document.title
-function updateDocumentTitleBreadcrumbAndActiveTab(activeTab) {
+function updateDocumentTitleBreadcrumbAndActiveTab(activeTab, setCrumb) {
   // give the correct left nav item an active class
   $('#section-tabs .section a').each(function () {
     const $tab = $(this)
@@ -58,13 +59,22 @@ function updateDocumentTitleBreadcrumbAndActiveTab(activeTab) {
 
   // toggle the breadcrumb between "Corses" and "People"
   $('#breadcrumbs a:last span').text(activeTab.title)
+  setCrumb()({name: activeTab.title, href: activeTab.href})
 }
+
 ready(() => {
+  let setBreadCrumb = () => {}
+  const setFunction = f => {
+    setBreadCrumb = f?.setCrumbs || (() => {})
+  }
+
+  initializeTopNavPortal({getBreadCrumbSetter: setFunction})
+
   const content = document.getElementById('content')
   store.subscribe(() => {
     const tabState = store.getState().tabList
     const selectedTab = tabState.tabs[tabState.selected]
-    updateDocumentTitleBreadcrumbAndActiveTab(selectedTab)
+    updateDocumentTitleBreadcrumbAndActiveTab(selectedTab, () => setBreadCrumb)
 
     ReactDOM.render(<App {...props} />, content)
   })

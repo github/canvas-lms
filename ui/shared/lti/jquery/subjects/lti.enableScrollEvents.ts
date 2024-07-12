@@ -1,4 +1,3 @@
-// @ts-nocheck
 /*
  * Copyright (C) 2021 - present Instructure, Inc.
  *
@@ -17,10 +16,10 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {LtiMessageHandler} from '../lti_message_handler'
+import type {LtiMessageHandler} from '../lti_message_handler'
 
 const enableScrollEvents: LtiMessageHandler = ({responseMessages}) => {
-  let timeout
+  let timeout: number
   window.addEventListener(
     'scroll',
     () => {

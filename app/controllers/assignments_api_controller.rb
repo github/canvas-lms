@@ -787,23 +787,29 @@ class AssignmentsApiController < ApplicationController
   #   Determines the order of the assignments. Defaults to "position".
   # @argument post_to_sis [Boolean]
   #   Return only assignments that have post_to_sis set or not set.
+  # @argument new_quizzes [Boolean]
+  #   Return only New Quizzes assignments
   # @returns [Assignment]
   def index
-    error_or_array = get_assignments(@current_user)
-    render json: error_or_array unless performed?
+    GuardRail.activate(:secondary) do
+      error_or_array = get_assignments(@current_user)
+      render json: error_or_array unless performed?
+    end
   end
 
   # @API List assignments for user
   # Returns the paginated list of assignments for the specified user if the current user has rights to view.
   # See {api:AssignmentsApiController#index List assignments} for valid arguments.
   def user_index
-    @user.shard.activate do
-      error_or_array = get_assignments(@user)
-      render json: error_or_array unless performed?
+    GuardRail.activate(:secondary) do
+      @user.shard.activate do
+        error_or_array = get_assignments(@user)
+        render json: error_or_array unless performed?
+      end
     end
   end
 
-  # @API Duplicate assignnment
+  # @API Duplicate assignment
   #
   # Duplicate an assignment and return a json based on result_type argument.
   #
@@ -932,6 +938,41 @@ class AssignmentsApiController < ApplicationController
     end
   end
 
+  def retry_alignment_clone
+    old_assignment = old_assignment_for_duplicate
+    target_assignment = target_assignment_for_duplicate
+    target_course = target_course_for_duplicate
+    unless target_assignment.workflow_state == "failed_to_clone_outcome_alignment"
+      render json: { error: t("invalid status") }, status: :bad_request
+      return
+    end
+    target_assignment.workflow_state = "outcome_alignment_cloning"
+    target_assignment.duplication_started_at = Time.zone.now
+    target_assignment.save!
+    result_json = if use_quiz_json?
+                    quiz_json(target_assignment, @context, @current_user, session, {}, QuizzesNext::QuizSerializer)
+                  else
+                    assignment_json(target_assignment, @current_user, session)
+                  end
+    result_json["new_positions"] = { target_assignment.id => target_assignment.position }
+    Canvas::LiveEvents.quizzes_next_quiz_duplicated(
+      {
+        original_course_uuid: old_assignment.context.uuid,
+        new_course_uuid: target_course.uuid,
+        new_course_resource_link_id: target_course.lti_context_id,
+        domain: target_course.root_account&.domain(ApplicationController.test_cluster_name),
+        new_course_name: target_course.name,
+        created_on_blueprint_sync: false,
+        resource_map_url: "",
+        remove_alignments: false,
+        original_assignment_resource_link_id: old_assignment.lti_resource_link_id,
+        new_assignment_resource_link_id: target_assignment.lti_resource_link_id,
+        status: "outcome_alignment_cloning"
+      }
+    )
+    render json: result_json
+  end
+
   def get_assignments(user)
     if authorized_action(@context, user, :read)
       log_api_asset_access(["assignments", @context], "assignments", "other")
@@ -955,9 +996,17 @@ class AssignmentsApiController < ApplicationController
 
       scope = scope.where(post_to_sis: value_to_boolean(params[:post_to_sis])) if params[:post_to_sis]
 
+      if params[:new_quizzes]
+        scope = scope.type_quiz_lti
+      end
+
+      if params[:exclude_checkpoints]
+        scope = scope.where.not(has_sub_assignments: true)
+      end
+
       if params[:assignment_ids]
-        if params[:assignment_ids].length > Api.max_per_page
-          return render json: { message: "Request contains too many assignment_ids.  Limit #{Api.max_per_page}" }, status: :bad_request
+        if params[:assignment_ids].length > Api::MAX_PER_PAGE
+          return render json: { message: "Request contains too many assignment_ids.  Limit #{Api::MAX_PER_PAGE}" }, status: :bad_request
         end
 
         scope = scope.where(id: params[:assignment_ids])
@@ -1008,7 +1057,11 @@ class AssignmentsApiController < ApplicationController
       include_visibility = include_params.include?("assignment_visibility") && @context.grants_any_right?(user, :read_as_admin, :manage_grades, *RoleOverride::GRANULAR_MANAGE_ASSIGNMENT_PERMISSIONS)
 
       if include_visibility
-        assignment_visibilities = AssignmentStudentVisibility.users_with_visibility_by_assignment(course_id: @context.id, assignment_id: assignments.map(&:id))
+        assignment_visibilities = if Account.site_admin.feature_enabled?(:selective_release_backend)
+                                    AssignmentVisibility::AssignmentVisibilityService.users_with_visibility_by_assignment(course_id: @context.id, assignment_ids: assignments.map(&:id))
+                                  else
+                                    AssignmentStudentVisibility.users_with_visibility_by_assignment(course_id: @context.id, assignment_id: assignments.map(&:id))
+                                  end
       end
 
       needs_grading_by_section_param = params[:needs_grading_count_by_section] || false
@@ -1033,6 +1086,8 @@ class AssignmentsApiController < ApplicationController
       end
 
       mc_status = setup_master_course_restrictions(assignments, context)
+
+      DatesOverridable.preload_override_data_for_objects(assignments)
 
       assignments.map do |assignment|
         visibility_array = assignment_visibilities[assignment.id] if assignment_visibilities
@@ -1059,7 +1114,8 @@ class AssignmentsApiController < ApplicationController
                         include_can_edit: include_params.include?("can_edit"),
                         include_score_statistics: include_params.include?("score_statistics"),
                         include_ab_guid: include_params.include?("ab_guid"),
-                        master_course_status: mc_status)
+                        master_course_status: mc_status,
+                        include_checkpoints: include_params.include?("checkpoints"))
       end
     end
   end
@@ -1111,7 +1167,8 @@ class AssignmentsApiController < ApplicationController
         include_score_statistics: included_params.include?("score_statistics"),
         include_can_submit: included_params.include?("can_submit"),
         include_webhook_info: included_params.include?("webhook_info"),
-        include_ab_guid: included_params.include?("ab_guid")
+        include_ab_guid: included_params.include?("ab_guid"),
+        include_checkpoints: included_params.include?("checkpoints")
       }
 
       result_json = if use_quiz_json?
@@ -1310,6 +1367,7 @@ class AssignmentsApiController < ApplicationController
     @assignment.workflow_state = "unpublished"
     if authorized_action(@assignment, @current_user, :create)
       @assignment.content_being_saved_by(@current_user)
+      track_create_metrics(@assignment)
       result = create_api_assignment(@assignment,
                                      params.require(:assignment),
                                      @current_user,
@@ -1529,8 +1587,10 @@ class AssignmentsApiController < ApplicationController
       # update_api_assignment mutates params so this has to be done here
       opts = assignment_json_opts
 
+      track_update_metrics(@assignment, params[:assignment])
+
       @assignment.skip_downstream_changes! if params[:skip_downstream_changes].present?
-      result = update_api_assignment(@assignment, params.require(:assignment), @current_user, @context)
+      result = update_api_assignment(@assignment, params.require(:assignment), @current_user, @context, opts)
       render_create_or_update_result(result, opts)
     end
   end
@@ -1695,5 +1755,15 @@ class AssignmentsApiController < ApplicationController
     assignment.shard.activate do
       assignment.resource_map = ContentMigration.find_most_recent_by_course_ids(@context.global_id, assignment.context.global_id)&.asset_map_url
     end
+  end
+
+  def track_update_metrics(assignment, _params)
+    if assignment.hide_in_gradebook_changed?(to: true)
+      InstStatsd::Statsd.increment("assignment.hide_in_gradebook")
+    end
+  end
+
+  def track_create_metrics(assignment)
+    InstStatsd::Statsd.increment("assignment.hide_in_gradebook") if assignment.hide_in_gradebook
   end
 end

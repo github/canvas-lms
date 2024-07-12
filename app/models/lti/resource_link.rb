@@ -21,8 +21,6 @@
 class Lti::ResourceLink < ApplicationRecord
   include Canvas::SoftDeletable
 
-  self.ignored_columns += %i[lookup_id resource_link_id]
-
   validates :context_external_tool_id,
             :context_id,
             :context_type,
@@ -43,17 +41,29 @@ class Lti::ResourceLink < ApplicationRecord
            dependent: :destroy,
            foreign_key: :lti_resource_link_id
 
+  has_one :content_tag,
+          as: :associated_asset,
+          required: false,
+          inverse_of: :associated_asset
+
   before_validation :generate_resource_link_uuid, on: :create
   before_validation :generate_lookup_uuid, on: :create
   before_save :set_root_account
 
-  def self.create_with(context, tool, custom_params = nil, url = nil)
+  def undestroy
+    line_items.find_each(&:undestroy)
+    super
+  end
+
+  def self.create_with(context, tool, custom_params = nil, url = nil, title = nil, lti_1_1_id: nil)
     return if context.nil? || tool.nil?
 
     context.lti_resource_links.create!(
       custom: Lti::DeepLinkingUtil.validate_custom_params(custom_params),
       context_external_tool: tool,
-      url:
+      url:,
+      title:,
+      lti_1_1_id:
     )
   end
 

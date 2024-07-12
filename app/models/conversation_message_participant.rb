@@ -19,8 +19,6 @@
 #
 
 class ConversationMessageParticipant < ActiveRecord::Base
-  self.ignored_columns += %i[root_account_id]
-
   include SimpleTags
   include Workflow
   include ConversationHelper
@@ -52,7 +50,7 @@ class ConversationMessageParticipant < ActiveRecord::Base
     query = deleted.eager_load(:conversation_message).where(user_id:).order(deleted_at: :desc)
 
     query = query.where(conversation_messages: { conversation_id: options["conversation_id"] }) if options["conversation_id"]
-    query = query.where("conversation_message_participants.deleted_at < ?", options["deleted_before"]) if options["deleted_before"]
+    query = query.where(conversation_message_participants: { deleted_at: ...options["deleted_before"] }) if options["deleted_before"]
     query = query.where("conversation_message_participants.deleted_at > ?", options["deleted_after"]) if options["deleted_after"]
 
     query

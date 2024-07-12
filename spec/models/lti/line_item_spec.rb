@@ -112,36 +112,46 @@ RSpec.describe Lti::LineItem do
     let(:creation_arguments) { base_line_item_params(assignment_model, DeveloperKey.create!) }
   end
 
-  context "when destroying a line item" do
-    let(:line_item) { line_item_model }
-    let(:assignment) { assignment_model }
-    let(:resource_link) { resource_link_model }
+  it "destroys and undestroys associated results" do
+    line_item = line_item_model
+    result = lti_result_model(line_item:)
+    expect(result).to be_active
+    line_item.destroy
+    expect(result.reload).to be_deleted
+    line_item.reload.undestroy
+    expect(result.reload).to be_active
+  end
 
-    it "destroys the assignment if it is the first line item and is not coupled" do
-      line_item_one = line_item_model(assignment:, coupled: false)
-      line_item_two = line_item_model(assignment:)
-      line_item_two.update!(created_at: line_item_one.created_at + 5.seconds)
-      expect do
-        line_item_one.destroy!
-      end.to change(assignment, :workflow_state).from("published").to("deleted")
+  context "when updating the associated assignment" do
+    let(:line_item) do
+      Time.now
+      tool = AccessToken.create!
+      line_item_params = { start_date_time: Time.now - 1.day, end_date_time: Time.now, score_maximum: 10.0, label: "a line item" }
+      line_item = Lti::LineItem.create_line_item!(nil, course_model, tool, line_item_params)
+      # This is necessary because the line item only gets associated to the assignment after
+      # the assignment is created. This line_item variable is up-to-date with "knowing" its
+      # relation to the assignment, but the assignment variable is not yet up-to-date with
+      # its relation to the line item, even though we are referencing it with
+      # line_item.assignment -- in the assignment model, when it calls self.line_items,
+      # it will still get nil. So it needs to be reloaded. Since Lti::LineItem.create_line_item!
+      # is only ever called in an API request, this "need to reload" scenario should not
+      # happen in real life.
+      line_item.assignment.reload
+      line_item
     end
 
-    it "doesn't destroy the assignment if the line item is not the first line item" do
-      line_item_one = line_item_model(assignment:)
-      line_item_two = line_item_model(assignment:, coupled: false)
-      line_item_two.update!(created_at: line_item_one.created_at + 5.seconds)
-      expect do
-        line_item_two.destroy!
-      end.not_to change(assignment, :workflow_state)
+    it "updates the line item's end_date_time to match assignment's due date" do
+      next_week = 1.week.from_now
+      line_item.assignment.due_at = next_week
+      line_item.assignment.save!
+      expect(line_item.reload.end_date_time).to eq(next_week)
     end
 
-    it "doesn't destroy the assignment if the line item is coupled" do
-      line_item_one = line_item_model(assignment:, coupled: true)
-      line_item_two = line_item_model(assignment:)
-      line_item_two.update!(created_at: line_item_one.created_at + 5.seconds)
-      expect do
-        line_item_one.destroy!
-      end.not_to change(assignment, :workflow_state)
+    it "updates the line item's start_date_time to match assignment's due date" do
+      last_week = 1.week.ago
+      line_item.assignment.unlock_at = last_week
+      line_item.assignment.save!
+      expect(line_item.reload.start_date_time).to eq(last_week)
     end
   end
 end

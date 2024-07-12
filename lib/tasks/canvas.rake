@@ -39,9 +39,9 @@ unless $canvas_tasks_loaded
       write_brand_configs = ENV["COMPILE_ASSETS_BRAND_CONFIGS"] != "0"
       build_prod_js = ENV["RAILS_ENV"] == "production" || ENV["USE_OPTIMIZED_JS"] == "true" || ENV["USE_OPTIMIZED_JS"] == "True"
       # build dev bundles even in prod mode so you can debug with ?optimized_js=0
-      # query string (except for on jenkins where we set JS_BUILD_NO_UGLIFY anyway
+      # query string (except for on jenkins where we set SKIP_SOURCEMAPS anyway
       # so there's no need for an unminified fallback)
-      build_dev_js = ENV["JS_BUILD_NO_FALLBACK"] != "1" && (!build_prod_js || ENV["JS_BUILD_NO_UGLIFY"] != "1")
+      build_dev_js = ENV["JS_BUILD_NO_FALLBACK"] != "1" && (!build_prod_js || ENV["SKIP_SOURCEMAPS"] != "1")
 
       batches = Rake::TaskGraph.draw do
         task "brand_configs:write" => ["js:gulp_rev"] if write_brand_configs
@@ -160,9 +160,12 @@ unless $canvas_tasks_loaded
   namespace :db do
     desc "Shows pending db migrations."
     task pending_migrations: :environment do
-      migrations = ActiveRecord::Base.connection.migration_context.migrations
-      pending_migrations = ActiveRecord::Migrator.new(:up, migrations, ActiveRecord::Base.connection.schema_migration).pending_migrations
-      pending_migrations.each do |pending_migration|
+      ActiveRecord::Migrator.new(
+        :up,
+        ActiveRecord::Base.connection.migration_context.migrations,
+        ActiveRecord::Base.connection.schema_migration,
+        ActiveRecord::InternalMetadata.new(ActiveRecord::Base.connection)
+      ).pending_migrations.each do |pending_migration|
         tags = pending_migration.tags
         tags = " (#{tags.join(", ")})" unless tags.empty?
         puts "  %4d %s%s" % [pending_migration.version, pending_migration.name, tags]
@@ -171,9 +174,10 @@ unless $canvas_tasks_loaded
 
     desc "Shows skipped db migrations."
     task skipped_migrations: :environment do
-      migrations = ActiveRecord::Base.connection.migration_context.migrations
-      skipped_migrations = ActiveRecord::Migrator.new(:up, migrations, ActiveRecord::Base.connection.schema_migration).skipped_migrations
-      skipped_migrations.each do |skipped_migration|
+      ActiveRecord::Migrator.new(:up,
+                                 ActiveRecord::Base.connection.migration_context.migrations,
+                                 ActiveRecord::Base.connection.schema_migration,
+                                 ActiveRecord::InternalMetadata.new(ActiveRecord::Base.connection)).skipped_migrations.each do |skipped_migration|
         tags = skipped_migration.tags
         tags = " (#{tags.join(", ")})" unless tags.empty?
         puts "  %4d %s%s" % [skipped_migration.version, skipped_migration.name, tags]
@@ -189,7 +193,11 @@ unless $canvas_tasks_loaded
       task predeploy: [:environment, :load_config] do
         migrations = ActiveRecord::Base.connection.migration_context.migrations
         migrations = migrations.select { |m| m.tags.include?(:predeploy) }
-        ActiveRecord::Migrator.new(:up, migrations, ActiveRecord::Base.connection.schema_migration).migrate
+        ActiveRecord::Migrator.new(:up,
+                                   migrations,
+                                   ActiveRecord::Base.connection.schema_migration,
+                                   ActiveRecord::InternalMetadata.new(ActiveRecord::Base.connection))
+                              .migrate
       end
     end
 
@@ -202,6 +210,7 @@ unless $canvas_tasks_loaded
         queue = config.configuration_hash[:queue]
         ActiveRecord::Tasks::DatabaseTasks.drop(queue) if queue rescue nil
         ActiveRecord::Tasks::DatabaseTasks.drop(config) rescue nil
+        ActiveRecord::Base.connection_handler.clear_all_connections!
         Shard.default(reload: true) # make sure we know that sharding isn't set up yet
         CanvasCassandra::DatabaseBuilder.config_names.each do |cass_config|
           db = CanvasCassandra::DatabaseBuilder.from_config(cass_config)
@@ -216,22 +225,6 @@ unless $canvas_tasks_loaded
         Rake::Task["db:migrate"].invoke
       end
     end
-  end
-
-  Switchman::Rake.filter_database_servers do |servers, block|
-    ENV["REGION"]&.split(",")&.each do |region|
-      method = :select!
-      if region[0] == "-"
-        method = :reject!
-        region = region[1..]
-      end
-      if region == "self"
-        servers.send(method, &:in_current_region?)
-      else
-        servers.send(method) { |server| server.in_region?(region) }
-      end
-    end
-    block.call(servers)
   end
 
   %w[db:pending_migrations db:skipped_migrations db:migrate:predeploy db:migrate:tagged].each do |task_name|

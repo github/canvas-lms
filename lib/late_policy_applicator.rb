@@ -29,6 +29,7 @@ class LatePolicyApplicator
   end
 
   def self.for_assignment(assignment)
+    return if assignment.has_sub_assignments?
     return unless assignment.published? && assignment.points_possible&.positive?
     return unless assignment.course
 
@@ -41,9 +42,9 @@ class LatePolicyApplicator
   def initialize(course, assignments = [])
     @course = course
     @assignments = if assignments.present?
-                     assignments.select(&:published?)
+                     assignments.select { |a| a.published? && !a.has_sub_assignments? }
                    else
-                     @course.assignments.published
+                     AbstractAssignment.where(context_id: course.id, context_type: "Course").published.has_no_sub_assignments
                    end
 
     @relevant_submissions = {}
@@ -54,7 +55,6 @@ class LatePolicyApplicator
 
     late_policy = @course.late_policy
     user_ids = []
-
     @assignments.each do |assignment|
       relevant_submissions(assignment).find_each do |submission|
         submission.assignment = assignment

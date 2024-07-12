@@ -21,7 +21,7 @@ import moment from 'moment-timezone'
 
 import {BlackoutDate} from '../../shared/types'
 import {weekendIntegers} from '../../shared/api/backend_serializer'
-import tz from '@canvas/timezone'
+import * as tz from '@instructure/moment-utils'
 import {useScope as useI18nScope} from '@canvas/i18n'
 
 const I18n = useI18nScope('course_paces_app')

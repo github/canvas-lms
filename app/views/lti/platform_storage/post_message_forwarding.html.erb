@@ -16,4 +16,16 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 %>
 
-<% js_bundle(:post_message_forwarding) %>
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="robots" content="noindex,nofollow" />
+  <title>Canvas LTI PostMessageForwarding</title>
+  <script>
+    window.ENV = { PARENT_ORIGIN: <%= raw @parent_origin.to_json %> }
+  </script>
+</head>
+<body>
+  <script src="<%= javascript_path("/javascripts/lti_post_message_forwarding.js") %>"></script>
+</body>
+</html>

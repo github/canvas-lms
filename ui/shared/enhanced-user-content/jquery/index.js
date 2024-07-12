@@ -15,40 +15,40 @@
  * You should have received a copy of the GNU Affero General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-import {isolate} from '@canvas/sentry'
 import KeyboardNavDialog from '@canvas/keyboard-nav-dialog'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import _ from 'underscore'
-import htmlEscape from 'html-escape'
+import {uniqueId} from 'lodash'
+import htmlEscape from '@instructure/html-escape'
 import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
 import RichContentEditor from '@canvas/rce/RichContentEditor'
-import {enhanceUserContent, makeAllExternalLinksExternalLinks} from '@instructure/canvas-rce'
+import {enhanceUserContent} from '@instructure/canvas-rce'
+import {makeAllExternalLinksExternalLinks} from '@instructure/canvas-rce/es/enhance-user-content/external_links'
 import './instructure_helper'
 import 'jqueryui/draggable'
 import '@canvas/jquery/jquery.ajaxJSON'
-import '@canvas/doc-previews' /* loadDocPreview */
-import '@canvas/datetime' /* datetimeString, dateString, fudgeDateForProfileTimezone */
-import '@canvas/forms/jquery/jquery.instructure_forms' /* formSubmit, fillFormData, formErrors */
+import {datetimeString, fudgeDateForProfileTimezone} from '@canvas/datetime/date-functions'
+import '@canvas/jquery/jquery.instructure_forms' /* formSubmit, fillFormData, formErrors */
 import 'jqueryui/dialog'
 import '@canvas/jquery/jquery.instructure_misc_helpers' /* replaceTags, youTubeID */
 import '@canvas/jquery/jquery.instructure_misc_plugins' /* ifExists, .dim, confirmDelete, showIf, fillWindowWithMe */
-import '@canvas/keycodes'
+import '@canvas/jquery-keycodes'
 import '@canvas/loading-image'
 import '@canvas/rails-flash-notifications'
 import '@canvas/util/templateData'
 import '@canvas/util/jquery/fixDialogButtons'
 import '@canvas/media-comments/jquery/mediaCommentThumbnail'
-import 'date-js'
+import '@instructure/date-js'
 import 'jquery-tinypubsub' /* /\.publish\(/ */
 import 'jqueryui/resizable'
 import 'jqueryui/sortable'
 import 'jqueryui/tabs'
+import {captureException} from '@sentry/browser'
 
 const I18n = useI18nScope('instructure_js')
 
 export function formatTimeAgoTitle(date) {
-  const fudgedDate = $.fudgeDateForProfileTimezone(date)
+  const fudgedDate = fudgeDateForProfileTimezone(date)
   return fudgedDate.toString('MMM d, yyyy h:mmtt')
 }
 
@@ -101,6 +101,7 @@ function enhanceUserJQueryWidgetContent() {
         "will go away. Rather than relying on the internals of Canvas's JavaScript, " +
         'you should use your own custom JS file to do any such customizations.'
       console.error(msg, $elements) // eslint-disable-line no-console
+      captureException(new Error(msg))
     })
     .end()
     .filter('.dialog')
@@ -112,7 +113,10 @@ function enhanceUserJQueryWidgetContent() {
         .find("a[href='#" + $dialog.attr('id') + "']")
         .on('click', event => {
           event.preventDefault()
-          $dialog.dialog()
+          $dialog.dialog({
+            modal: true,
+            zIndex: 1000,
+          })
         })
     })
     .end()
@@ -130,26 +134,6 @@ function enhanceUserJQueryWidgetContent() {
       $(this).tabs()
     })
     .end()
-}
-
-function retriggerEarlyClicks() {
-  // handle all of the click events that were triggered before the dom was ready (and thus weren't handled by jquery listeners)
-  if (window._earlyClick) {
-    // unset the onclick handler we were using to capture the events
-    document.removeEventListener('click', window._earlyClick)
-    if (window._earlyClick.clicks) {
-      // wait to fire the "click" events till after all of the event hanlders loaded at dom ready are initialized
-      setTimeout(function () {
-        $.each(_.uniq(window._earlyClick.clicks), function () {
-          // cant use .triggerHandler because it will not bubble,
-          // but we do want to preventDefault, so this is what we have to do
-          const event = $.Event('click')
-          event.preventDefault()
-          $(this).trigger(event)
-        })
-      }, 1)
-    }
-  }
 }
 
 function ellipsifyBreadcrumbs() {
@@ -287,6 +271,8 @@ function previewEquellaContentWhenClicked() {
         close() {
           $dialog.find('iframe').attr('src', 'about:blank')
         },
+        modal: true,
+        zIndex: 1000,
       })
     }
     $dialog.find('.original_link').attr('href', $(this).attr('href'))
@@ -314,12 +300,13 @@ function openDialogsWhenClicked() {
     $('#' + $(this).attr('aria-controls')).ifExists($dialog => {
       event.preventDefault()
       // if the linked dialog has not already been initialized, initialize it (passing in opts)
-      if (!$dialog.data('dialog')) {
+      if (!$dialog.data('ui-dialog')) {
         $dialog.dialog(
           $.extend(
             {
               autoOpen: false,
               modal: true,
+              zIndex: 1000,
             },
             $(link).data('dialogOpts')
           )
@@ -391,7 +378,7 @@ function addDiscussionTopicEntryWhenClicked() {
       .clone(true)
       .removeClass('blank')
     $reply.before($response.show())
-    const id = _.uniqueId('textarea_')
+    const id = uniqueId('textarea_')
     $response.find('textarea.rich_text').attr('id', id)
     $(document).triggerHandler('richTextStart', $('#' + id))
     $response.find('textarea:first').focus().select()
@@ -425,7 +412,7 @@ function showAndHideRCEWhenAsked() {
 function doThingsWhenDiscussionTopicSubMessageIsPosted() {
   $('.communication_sub_message .add_sub_message_form').formSubmit({
     beforeSubmit(_data) {
-      $(this).find('button').attr('disabled', true)
+      $(this).find('button').prop('disabled', true)
       $(this).find('.submit_button').text(I18n.t('status.posting_message', 'Posting Message...'))
       $(this).loadingImage()
     },
@@ -448,7 +435,7 @@ function doThingsWhenDiscussionTopicSubMessageIsPosted() {
           const comment =
             submission.submission_comments[submission.submission_comments.length - 1]
               .submission_comment
-          comment.post_date = $.datetimeString(comment.created_at)
+          comment.post_date = datetimeString(comment.created_at)
           comment.message = comment.formatted_body || comment.comment
           $message.fillTemplateData({
             data: comment,
@@ -457,7 +444,7 @@ function doThingsWhenDiscussionTopicSubMessageIsPosted() {
         }
       } else {
         const entry = data.discussion_entry
-        entry.post_date = $.datetimeString(entry.created_at)
+        entry.post_date = datetimeString(entry.created_at)
         $message.find('.content > .message_html').val(entry.message)
         $message.fillTemplateData({
           data: entry,
@@ -477,7 +464,7 @@ function doThingsWhenDiscussionTopicSubMessageIsPosted() {
     },
     error(data) {
       $(this).loadingImage('remove')
-      $(this).find('button').attr('disabled', false)
+      $(this).find('button').prop('disabled', false)
       $(this)
         .find('.submit_button')
         .text(I18n.t('errors.posting_message_failed', 'Post Failed, Try Again'))
@@ -552,6 +539,7 @@ function doThingsToModuleSequenceFooter() {
       .catch(ex => {
         // eslint-disable-next-line no-console
         console.error(ex)
+        captureException(ex)
       })
   }
 }
@@ -559,7 +547,7 @@ function doThingsToModuleSequenceFooter() {
 function showHideRemoveThingsToRightSideMoreLinksWhenClicked() {
   // this is for things like the to-do, recent items and upcoming, it
   // happend a lot so rather than duplicating it everywhere I stuck it here
-  $('#right-side').delegate('.more_link', 'click', function (event) {
+  $('#right-side').on('click', '.more_link', function (event) {
     const $this = $(this)
     const $children = $this.parents('ul').children(':hidden').show()
     $this.closest('li').remove()
@@ -642,9 +630,8 @@ const setDialogCloseText = () => {
   $.ui.dialog.prototype.options.closeText = I18n.t('Close')
 }
 
-export default function enhanceTheEntireUniverse() {
+export function enhanceTheEntireUniverse() {
   ;[
-    retriggerEarlyClicks,
     ellipsifyBreadcrumbs,
     bindKeyboardShortcutsHelpPanel,
     warnAboutRolesBeingSwitched,
@@ -666,7 +653,5 @@ export default function enhanceTheEntireUniverse() {
     makeAllExternalLinksExternalLinks,
     wireUpFilePreview,
     setDialogCloseText,
-  ]
-    .map(isolate)
-    .map(x => x())
+  ].map(x => x())
 }

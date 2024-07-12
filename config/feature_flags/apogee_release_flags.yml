@@ -1,9 +1,4 @@
 ---
-analytics2_api_access:
-  state: hidden
-  applies_to: RootAccount
-  display_name: New Analytics API Access
-  description: Enables new API endpoints for the course and user data provided by New Analytics.
 datadog_rum_js:
   state: hidden
   applies_to: SiteAdmin
@@ -63,6 +58,9 @@ enhanced_gradebook_filters:
       this flag is enabled, early access to ongoing improvements will be displayed
       automatically with every release. For full details, please see the *Gradebook
       Filters User Group* in the Canvas Community.
+  environments:
+    development:
+      state: on # enable for local development
 message_observers_of_students_who:
   state: hidden
   applies_to: SiteAdmin
@@ -96,24 +94,6 @@ submission_comment_emojis:
       state: allowed_on # enable for automated testings builds and local testing
     development:
       state: allowed_on # enable for local development
-updated_mastery_connect_icon:
-  state: hidden
-  applies_to: SiteAdmin
-  display_name: Updated Mastery Connect Icon
-  description: If set, displays updated mastery connect icon
-  environments:
-    ci:
-      state: on # enable for automated testings builds and local testing
-    development:
-      state: on # enable for local development
-    test:
-      state: on # enable for the deployed 'test' environment
-visibility_feedback_student_grades_page:
-  state: hidden
-  applies_to: SiteAdmin
-  display_name: Improve Feedback on Students Grade Page
-  description: Students will be able to more easily recognize when
-    feedback has been provided by an instructor/grader ...
 peer_reviews_for_a2:
   state: hidden
   applies_to: Course
@@ -257,11 +237,6 @@ grading_scheme_updates:
   applies_to: SiteAdmin
   display_name: Improve Letter Grading Scheme Usability
   description: Teachers and Account Managers will be able to more easily manage letter grading schemes for accounts, courses, and assignments.
-points_based_grading_schemes:
-  state: hidden
-  applies_to: SiteAdmin
-  display_name: Points Based Letter Grading Schemes
-  description: Teachers and Account Managers will be able to create letter grading schemes that use points instead of percentages for grade book entry and display.
 custom_gradebook_statuses:
   state: hidden
   applies_to: SiteAdmin
@@ -312,3 +287,75 @@ external_tools_for_a2:
       state: allowed_on # enable for automated testing builds and local testing
     development:
       state: allowed_on # enable for local development
+archived_grading_schemes:
+  state: hidden
+  applies_to: SiteAdmin
+  display_name: Archived Grading Schemes
+  description: Users can now archive grading schemes, preventing them from being added to courses/assignments. Grading schemes in old contexts where it is being used will continue being used. Archived grading schemes can be accessed on the account level grading scheme settings page, but cannot be edited or deleted.
+  environments:
+    ci:
+      state: allowed_on
+    development:
+      state: allowed_on
+enhanced_rubrics:
+  beta: true
+  state: hidden
+  applies_to: RootAccount
+  root_opt_in: true
+  display_name: Rubric Enhancements
+  description: This feature provides visual and functional enhancements to rubrics across Canvas.
+  environments:
+    ci:
+      state: allowed
+    development:
+      state: allowed
+multiselect_gradebook_filters:
+  state: hidden
+  applies_to: SiteAdmin
+  display_name: Multi-select Gradebook Filters
+  description: This feature enables multi-select filters in the Gradebook.
+  environments:
+    ci:
+      state: allowed
+    development:
+      state: allowed
+customizable_default_due_time:
+  state: hidden
+  applies_to: SiteAdmin
+  display_name: Customizable Default Due Date
+  description: Users can now set the default due date for a course to be in minutes
+  environments:
+    ci:
+      state: allowed_on
+    development:
+      state: allowed_on
+platform_service_speedgrader:
+  state: hidden
+  applies_to: Course
+  display_name: "SpeedGrader 2: Steel Thread"
+  description: This feature provides a new SpeedGrader platform experience.
+  environments:
+    ci:
+      state: allowed
+    development:
+      state: allowed
+grading_periods_filter_dates:
+  state: hidden
+  applies_to: SiteAdmin
+  display_name: Add dates to Gradebook Grading Period Filter
+  description: This feature adds the start, end, and close dates of grading periods to the grading period filter.
+  environments:
+    ci:
+      state: allowed_on
+    development:
+      state: allowed_on
+speedgrader_studio_media_capture:
+  state: hidden
+  applies_to: SiteAdmin
+  display_name: SpeedGrader Studio Media Capture
+  description: This feature provides the ability to capture media in SpeedGrader using Studio Screen Capture.
+  environments:
+    ci:
+      state: allowed
+    development:
+      state: allowed

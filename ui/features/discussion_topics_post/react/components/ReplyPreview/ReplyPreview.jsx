@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import DateHelper from '../../../../../shared/datetime/dateHelper'
+import DateHelper from '@canvas/datetime/dateHelper'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import PropTypes from 'prop-types'
 import React, {useState} from 'react'
@@ -27,6 +27,7 @@ import {Responsive} from '@instructure/ui-responsive'
 import {Text} from '@instructure/ui-text'
 import {View} from '@instructure/ui-view'
 import {Link} from '@instructure/ui-link'
+import {AccessibleContent} from '@instructure/ui-a11y-content'
 
 const I18n = useI18nScope('discussion_topics_post')
 
@@ -37,7 +38,7 @@ export const ReplyPreview = ({...props}) => {
   const deletedMessage = props.editor?.shortName
     ? I18n.t('Deleted by %{editor}', {editor: props.editor.shortName})
     : I18n.t('Deleted')
-  const message = props.deleted ? deletedMessage : props.previewMessage
+  const message = props.deleted ? deletedMessage : props.message
 
   return (
     <Responsive
@@ -66,6 +67,10 @@ export const ReplyPreview = ({...props}) => {
         const readMoreButtonText = shouldShowTruncatedText
           ? I18n.t('Read More')
           : I18n.t('Read Less')
+        const author = getDisplayName(props)
+        const readMoreButtonScreenReaderText = shouldShowTruncatedText
+          ? I18n.t('Read More, Reply from %{author}', {author})
+          : I18n.t('Read Less, Reply from %{author}', {author})
 
         return (
           <View
@@ -101,7 +106,9 @@ export const ReplyPreview = ({...props}) => {
                           margin="small"
                           onClick={() => setShouldShowTruncatedText(!shouldShowTruncatedText)}
                         >
-                          <Text size={responsiveProps.textSize}>{readMoreButtonText}</Text>
+                          <AccessibleContent alt={readMoreButtonScreenReaderText}>
+                            <Text size={responsiveProps.textSize}>{readMoreButtonText}</Text>
+                          </AccessibleContent>
                         </Link>
                       </span>
                     </Flex.Item>
@@ -136,7 +143,7 @@ ReplyPreview.propTypes = {
   /**
    * Quoted message
    */
-  previewMessage: PropTypes.string,
+  message: PropTypes.string,
   /**
    * True if the quoted message has been deleted
    */

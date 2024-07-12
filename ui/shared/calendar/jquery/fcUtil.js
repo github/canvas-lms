@@ -17,9 +17,9 @@
  */
 
 import $ from 'jquery'
-import tz from '@canvas/timezone'
+import * as tz from '@instructure/moment-utils'
 import 'fullcalendar'
-import '@canvas/datetime'
+import {fudgeDateForProfileTimezone, unfudgeDateForProfileTimezone} from '@instructure/moment-utils'
 
 // expects a date (unfudged), and returns a fullcalendar moment
 // (fudged) appropriate for passing to fullcalendar methods
@@ -27,7 +27,7 @@ const wrap = function (date) {
   if (!date) {
     return null
   }
-  return $.fullCalendar.moment($.fudgeDateForProfileTimezone(date))
+  return $.fullCalendar.moment(fudgeDateForProfileTimezone(date))
 }
 
 // expects a fullcalendar moment (fudged) from a fullcalendar
@@ -45,7 +45,7 @@ const unwrap = function (date) {
   // so just parsing it from there is the same as unfudging it. we can't
   // use toDate() in that case as it would act as a UTC time there.
   if (date.hasZone()) {
-    return $.unfudgeDateForProfileTimezone(date.toDate())
+    return unfudgeDateForProfileTimezone(date.toDate())
   } else {
     return tz.parse(date.format())
   }

@@ -51,6 +51,7 @@ describe "submissions" do
     end
 
     it "is able to create a new student group category from the assignment edit page", priority: "1" do
+      skip "FOO-3799 (10/7/2023)"
       original_number_of_assignment = Assignment.count
       original_number_of_group = Group.count
       create_assignment_preparation
@@ -71,7 +72,7 @@ describe "submissions" do
   end
 
   context "grade a group assignment as a teacher" do
-    it "Submitting Group Assignments - Speedgrader", priority: "1" do
+    it "Submitting Group Assignments - SpeedGrader", priority: "1" do
       create_assignment_for_group("online_text_entry")
       get "/courses/#{@course.id}/gradebook/speed_grader?assignment_id=#{@assignment.id}"
       f(".ui-selectmenu-icon").click

@@ -119,7 +119,7 @@ module BroadcastPolicies
     end
 
     def just_submitted_late?
-      (just_submitted? || submission.saved_change_to_submitted_at?)
+      just_submitted? || submission.saved_change_to_submitted_at?
     end
 
     def is_a_resubmission?
@@ -135,8 +135,8 @@ module BroadcastPolicies
       # was submitted for the first time is seeing if the
       # workflow state transitioned from unsubmitted -> submitted.
       submission.saved_change_to_workflow_state == [
-        Submission.workflow_states.unsubmitted,
-        Submission.workflow_states.submitted
+        "unsubmitted",
+        "submitted"
       ]
     end
 
@@ -163,7 +163,11 @@ module BroadcastPolicies
     end
 
     def user_has_visibility?
-      AssignmentStudentVisibility.where(assignment_id: submission.assignment_id, user_id: submission.user_id).any?
+      if Account.site_admin.feature_enabled?(:selective_release_backend)
+        AssignmentVisibility::AssignmentVisibilityService.assignment_visible_to_students(user_ids: [submission.user_id], assignment_id: submission.assignment_id).any?
+      else
+        AssignmentStudentVisibility.where(assignment_id: submission.assignment_id, user_id: submission.user_id).any?
+      end
     end
 
     def user_active_or_invited?

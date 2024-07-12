@@ -51,7 +51,7 @@ class FileInContext
 
         # only engage in hash comparison if there are possible duplicates
         if scope.take
-          existing_att = scope.where(md5:).take
+          existing_att = scope.find_by(md5:)
 
           # Hashing an alternative digest to check the possible duplicate that didn't match the previous hash
           # Keep in mind that the md5 argument isn't necessarily an actual md5 hash, it may be a sha512 (maybe even other stuff in the future)
@@ -72,7 +72,7 @@ class FileInContext
         end
       end
 
-      uploaded_data = Rack::Test::UploadedFile.new(filename, Attachment.mimetype(explicit_filename || filename))
+      uploaded_data = Canvas::UploadedFile.new(filename, Attachment.mimetype(explicit_filename || filename))
 
       @attachment = Attachment.new(context:, display_name:, folder:)
       Attachments::Storage.store_for_attachment(@attachment, uploaded_data)

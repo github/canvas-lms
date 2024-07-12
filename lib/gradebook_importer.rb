@@ -434,7 +434,7 @@ class GradebookImporter
     # after the row.length check above.
 
     # includes name, ID, section
-    @has_student_first_last_names = (row[0] == "LastName" && row[1] == "FirstName")
+    @has_student_first_last_names = row[0] == "LastName" && row[1] == "FirstName"
     raise InvalidHeaderRow if @has_student_first_last_names && !allow_student_last_first_names?
 
     @student_columns = student_name_column_count = @has_student_first_last_names ? 4 : 3
@@ -884,8 +884,10 @@ class GradebookImporter
       end
       matching_score_change&.current_score = existing_score.override_score&.to_s
 
-      matching_status_change = @gradebook_importer_override_statuses[student_id].detect do |status_change|
-        status_change.grading_period_id == existing_score.grading_period_id
+      if allow_override_grade_statuses?
+        matching_status_change = @gradebook_importer_override_statuses[student_id].detect do |status_change|
+          status_change.grading_period_id == existing_score.grading_period_id
+        end
       end
 
       matching_status_change&.current_grade_status = @custom_grade_statuses_map[existing_score.custom_grade_status_id]

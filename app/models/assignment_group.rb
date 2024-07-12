@@ -37,7 +37,7 @@ class AssignmentGroup < ActiveRecord::Base
   belongs_to :context, polymorphic: [:course]
   acts_as_list scope: { context: self, workflow_state: "available" }
   has_a_broadcast_policy
-  serialize :integration_data, Hash
+  serialize :integration_data, type: Hash
 
   has_many :scores, -> { active }
   has_many :assignments, -> { order("position, due_at, title") }
@@ -140,7 +140,7 @@ class AssignmentGroup < ActiveRecord::Base
       # time that this group was last modified, that assignment was deleted
       # along with this group. This might help avoid undeleting assignments that
       # were deleted earlier.
-      to_restore = to_restore.where("updated_at >= ?", updated_at.utc)
+      to_restore = to_restore.where(updated_at: updated_at.utc..)
     end
     undestroy(active_state: "available")
     restore_scores

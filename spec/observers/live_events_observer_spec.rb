@@ -359,41 +359,52 @@ describe LiveEventsObserver do
     end
   end
 
-  describe "quiz_export_complete" do
-    it "posts update events for quizzes2" do
-      expect(Canvas::LiveEvents).to receive(:quiz_export_complete).once
-      course = Account.default.courses.create!
-      enable_quizzes_next(course)
-
-      Account.default.context_external_tools.create!(
-        name: "Quizzes.Next",
-        consumer_key: "test_key",
-        shared_secret: "test_secret",
-        tool_id: "Quizzes 2",
-        url: "http://example.com/launch"
-      )
-      quiz = course.quizzes.create!(title: "quiz1")
-      ce = course.content_exports.create!(
-        export_type: ContentExport::QUIZZES2,
-        selected_content: quiz.id,
-        user: user_model
-      )
-      ce.export(synchronous: true)
-    end
-
-    it "does not post for other ContentExport types" do
-      expect(Canvas::LiveEvents).not_to receive(:quiz_export_complete)
-      course = Account.default.courses.create!
-      ce = course.content_exports.create!
-      ce.export(synchronous: true)
-    end
-
+  context "content_exports" do
     def enable_quizzes_next(course)
       course.enable_feature!(:quizzes_next)
       # do quizzes next provision
       # quizzes_next is available to users only after quizzes next provisioning
       course.root_account.settings[:provision] = { "lti" => "lti url" }
       course.root_account.save!
+    end
+
+    describe "quiz_export_complete" do
+      it "posts update events for quizzes2" do
+        expect(Canvas::LiveEvents).to receive(:quiz_export_complete).once
+        course = Account.default.courses.create!
+        enable_quizzes_next(course)
+
+        Account.default.context_external_tools.create!(
+          name: "Quizzes.Next",
+          consumer_key: "test_key",
+          shared_secret: "test_secret",
+          tool_id: "Quizzes 2",
+          url: "http://example.com/launch"
+        )
+        quiz = course.quizzes.create!(title: "quiz1")
+        ce = course.content_exports.create!(
+          export_type: ContentExport::QUIZZES2,
+          selected_content: quiz.id,
+          user: user_model
+        )
+        ce.export(synchronous: true)
+      end
+
+      it "does not post for other ContentExport types" do
+        expect(Canvas::LiveEvents).not_to receive(:quiz_export_complete)
+        course = Account.default.courses.create!
+        ce = course.content_exports.create!
+        ce.export(synchronous: true)
+      end
+    end
+
+    describe "content_export_created" do
+      it "posts for ContentExport created type" do
+        expect(Canvas::LiveEvents).to receive(:content_export_created).once
+        course = Account.default.courses.create!
+        ce = course.content_exports.create!
+        ce.export(synchronous: true)
+      end
     end
   end
 
@@ -606,6 +617,31 @@ describe LiveEventsObserver do
       friendly_description = outcome_friendly_description_model(account_model)
       expect(Canvas::LiveEvents).to receive(:outcome_friendly_description_updated).once
       friendly_description.destroy
+    end
+  end
+
+  describe "RubricAssessment" do
+    before(:once) do
+      outcome_model
+      outcome_with_rubric(outcome: @outcome, context: Account.default)
+      course_with_student
+    end
+
+    it "posts create events" do
+      expect(Canvas::LiveEvents).to receive(:rubric_assessed).once
+      rubric_assessment_model(rubric: @rubric, user: @student)
+    end
+
+    # an update event will look like a save for a rubric assessment
+    # because it is simply versioned
+    it "posts update events" do
+      expect(Canvas::LiveEvents).to receive(:rubric_assessed).twice
+      first_assessment = rubric_assessment_model(rubric: @rubric, user: @student)
+      expect(first_assessment.versions.count).to eq 1
+
+      first_assessment.score = 1
+      first_assessment.save
+      expect(first_assessment.reload.versions.count).to eq 2
     end
   end
 

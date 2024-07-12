@@ -244,7 +244,7 @@ export class PlannerItem_raw extends Component {
             assignmentType,
             title,
             datetime,
-            endTime: this.props.endTime.format('LT')
+            endTime: this.props.endTime.format('LT'),
           })
         } else {
           return I18n.t('%{assignmentType} %{title}, at %{datetime}.', {
@@ -356,7 +356,7 @@ export class PlannerItem_raw extends Component {
         <div className={this.style.classNames.title} style={{position: 'relative'}}>
           <Link
             isWithinText={false}
-            theme={{
+            themeOverride={{
               mediumPaddingHorizontal: '0',
               linkColor: this.props.simplifiedControls ? colors.licorice : undefined,
               linkHoverColor: this.props.simplifiedControls ? colors.licorice : undefined,
@@ -383,7 +383,7 @@ export class PlannerItem_raw extends Component {
       <Link
         href={this.props.html_url}
         isWithinText={false}
-        theme={{
+        themeOverride={{
           linkColor: this.props.simplifiedControls ? colors.licorice : undefined,
           linkHoverColor: this.props.simplifiedControls ? colors.licorice : undefined,
         }}
@@ -494,7 +494,7 @@ export class PlannerItem_raw extends Component {
         color="primary"
         letterSpacing="expanded"
         transform="uppercase"
-        theme={{primaryColor: this.props.color}}
+        themeOverride={{primaryColor: this.props.color}}
         data-testid="MissingAssignments-CourseName"
       >
         {this.props.courseName}
@@ -647,6 +647,7 @@ export class PlannerItem_raw extends Component {
           }}
         >
           <Checkbox
+            data-testid="planner-item-completed-checkbox"
             ref={this.registerFocusElementRef}
             label={<ScreenReaderContent>{checkboxLabel}</ScreenReaderContent>}
             checked={this.props.toggleAPIPending ? !this.state.completed : this.state.completed}
@@ -691,6 +692,7 @@ export class PlannerItem_raw extends Component {
       <>
         <style>{this.style.css}</style>
         <div
+          data-testid="planner-item-raw"
           className={classnames(
             this.style.classNames.root,
             this.style.classNames[this.getLayout()],

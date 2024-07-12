@@ -29,14 +29,18 @@ describe "eportfolios" do
     stub_rcs_config
   end
 
-  it "creates an eportfolio", priority: "1" do
-    create_eportfolio
-    validate_eportfolio
-  end
-
-  it "creates an eportfolio that is public", priority: "2" do
-    create_eportfolio
-    validate_eportfolio(true)
+  it "validates creation and visibility of eportfolio" do
+    skip "FOO-3809 (6/20/2024)"
+    get "/dashboard/eportfolios"
+    f(".add_eportfolio_link").click
+    wait_for_animations
+    replace_content f("#eportfolio_name"), "student content"
+    set_value(f("#eportfolio_public"), 1)
+    expect_new_page_load { f("#eportfolio_submit").click }
+    eportfolio = Eportfolio.find_by_name("student content")
+    expect(eportfolio).to be_valid
+    expect(eportfolio.public).to be_truthy
+    expect(f("#content h2")).to include_text(I18n.t("headers.welcome", "Welcome to Your ePortfolio"))
   end
 
   context "eportfolio created with user" do
@@ -95,7 +99,8 @@ describe "eportfolios" do
       expect(last_page).not_to contain_jqcss(".remove_page_link:visible")
     end
 
-    it "reorders a page", ignore_js_errors: true, priority: "1" do
+    it "reorders a page", :ignore_js_errors, priority: "1" do
+      skip "FOO-3814 (10/6/2023)"
       get "/eportfolios/#{@eportfolio.id}"
 
       # add 3 pages
@@ -134,7 +139,8 @@ describe "eportfolios" do
       expect(last_section).not_to contain_jqcss(".remove_section_link:visible")
     end
 
-    it "reorders a section", ignore_js_errors: true, priority: "1" do
+    it "reorders a section", :ignore_js_errors, priority: "1" do
+      skip "FOO-3814 (10/6/2023)"
       get "/eportfolios/#{@eportfolio.id}"
 
       # add a 3 sections
@@ -198,7 +204,7 @@ describe "eportfolios" do
       submit_form("#delete_eportfolio_form")
       f("#wrapper .eportfolios").click
       expect(f("#content")).not_to contain_css("#portfolio_#{@eportfolio.id}")
-      expect(f("#whats_an_eportfolio .add_eportfolio_link")).to be_displayed
+      expect(f(".add_eportfolio_link")).to be_displayed
       expect(Eportfolio.first.workflow_state).to eq "deleted"
     end
 

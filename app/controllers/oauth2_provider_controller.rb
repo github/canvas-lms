@@ -19,9 +19,12 @@
 #
 
 class OAuth2ProviderController < ApplicationController
+  rescue_from Canvas::OAuth::RequestError, with: :oauth_error
   protect_from_forgery except: %i[token destroy], with: :exception
   before_action :run_login_hooks, only: %i[token]
   skip_before_action :require_reacceptance_of_terms, only: %i[token destroy]
+
+  include Lti::Concerns::ParentFrame # allow_trusted_tools_to_embed_this_page!
 
   def auth
     if params[:code] || params[:error]
@@ -34,20 +37,20 @@ class OAuth2ProviderController < ApplicationController
     scopes = (params[:scope] || params[:scopes] || "").split
 
     provider = Canvas::OAuth::Provider.new(params[:client_id], params[:redirect_uri], scopes, params[:purpose])
-    begin
-      raise Canvas::OAuth::RequestError, :invalid_client_id unless provider.has_valid_key?
-      raise Canvas::OAuth::RequestError, :invalid_redirect unless provider.has_valid_redirect?
-    rescue Canvas::OAuth::RequestError => e
-      oauth_error(e)
-      return
-    end
 
-    if provider.key.require_scopes? && !provider.valid_scopes?
-      raise Canvas::OAuth::InvalidScopeError, provider.missing_scopes
-    end
+    raise Canvas::OAuth::RequestError, :invalid_client_id unless provider.has_valid_key?
+    raise Canvas::OAuth::RequestError, :invalid_redirect unless provider.has_valid_redirect?
 
     session[:oauth2] = provider.session_hash
     session[:oauth2][:state] = params[:state] if params.key?(:state)
+
+    if provider.key.require_scopes? && !provider.valid_scopes?
+      return redirect_to Canvas::OAuth::Provider.final_redirect(self,
+                                                                state: params[:state],
+                                                                error: "invalid_scope",
+                                                                error_description: "A requested scope is invalid, unknown, malformed, or exceeds the scope granted by the resource owner. " \
+                                                                                   "The following scopes were requested, but not granted: #{provider.missing_scopes.to_sentence(locale: :en)}")
+    end
 
     unless provider.key.authorized_for_account?(@domain_root_account)
       return redirect_to Canvas::OAuth::Provider.final_redirect(self,
@@ -97,14 +100,13 @@ class OAuth2ProviderController < ApplicationController
                                           :authentication_provider,
                                           pseudonym_session: :unique_id))
     end
-  rescue Canvas::OAuth::RequestError => e
-    Canvas::OAuth::Provider.is_oob?(params[:redirect_uri]) ? oauth_error(e) : redirect_oauth_error(e)
   end
 
   def confirm
     if session[:oauth2]
       @provider = Canvas::OAuth::Provider.new(session[:oauth2][:client_id], session[:oauth2][:redirect_uri], session[:oauth2][:scopes], session[:oauth2][:purpose])
       @special_confirm_message = special_confirm_message(@provider)
+      allow_trusted_tools_to_embed_this_page!
 
       if mobile_device?
         render layout: "mobile_auth", action: "confirm_mobile"
@@ -141,7 +143,12 @@ class OAuth2ProviderController < ApplicationController
               when "refresh_token"
                 Canvas::OAuth::GrantTypes::RefreshToken.new(client_id, secret, params)
               when "client_credentials"
-                Canvas::OAuth::GrantTypes::ClientCredentials.new(params, request.host_with_port, request.protocol)
+                Canvas::OAuth::GrantTypes::ClientCredentials.new(
+                  params,
+                  request.host_with_port,
+                  @domain_root_account,
+                  request.protocol
+                )
               else
                 Canvas::OAuth::GrantTypes::BaseType.new(client_id, secret, params)
               end
@@ -156,11 +163,7 @@ class OAuth2ProviderController < ApplicationController
       I18n.set_locale_with_localizer
     end
 
-    increment_request_cost(Setting.get("oauth_token_additional_request_cost", "200").to_i)
-
     render json: token
-  rescue Canvas::OAuth::RequestError => e
-    Account.site_admin.feature_enabled?(:no_redirect_on_oauth_token_method) ? oauth_error(e) : old_silly_behavior(e)
   end
 
   def destroy
@@ -187,20 +190,6 @@ class OAuth2ProviderController < ApplicationController
     render(exception.to_render_data)
   end
 
-  def redirect_oauth_error(exception)
-    redirect_to exception.redirect_uri(params[:redirect_uri])
-  end
-
-  # this method should be removed when the no_redirect_on_oauth_token_method flag is removed
-  def old_silly_behavior(exception)
-    if @should_not_redirect || Canvas::OAuth::Provider.is_oob?(params[:redirect_uri]) || params[:redirect_uri].blank?
-      response["WWW-Authenticate"] = "Canvas OAuth 2.0" if exception.http_status == 401
-      render(exception.to_render_data)
-    else
-      redirect_to exception.redirect_uri(params[:redirect_uri])
-    end
-  end
-
   def grant_type
     @grant_type ||= params[:grant_type] || (
         (!params[:grant_type] && params[:code]) ? "authorization_code" : "__UNSUPPORTED_PLACEHOLDER__"
@@ -211,13 +200,13 @@ class OAuth2ProviderController < ApplicationController
     commons_dk_id = Setting.get("commons_developer_key_id", nil)
     if commons_dk_id.present? && commons_dk_id.to_s == provider.key.global_id.to_s
       case provider.redirect_uri
-      when /commons\.ca-central\.canvaslms\.com/
+      when /commons\.ca-central\.canvaslms\.com/, /commons-yul-(prod|beta)\.instructure\.com/
         mt "Instructure hosts Canvas Commons in the region chosen by your institution, which is Canada. This means that when you use Canvas Commons your personal data will be stored and processed in Canada. These personal data elements include: name, email address, Canvas User ID, Canvas login name, Canvas Avatar, IP Address, Canvas Commons resources favorited by you, and comments you make to any resources in Canvas Commons. You can find more information about Instructure’s privacy practices [here](%{url}).", url: "https://www.instructure.com/policies/privacy"
-      when /commons\.eu-central\.canvaslms\.com/
+      when /commons\.eu-central\.canvaslms\.com/, /commons-fra-(prod|beta)\.instructure\.com/
         mt "Instructure hosts Canvas Commons in the region chosen by your institution, which is Europe. This means that when you use Canvas Commons your personal data will be stored and processed in Germany. These personal data elements include: name, email address, Canvas User ID, Canvas login name, Canvas Avatar, IP Address, Canvas Commons resources favorited by you, and comments you make to any resources in Canvas Commons. You can find more information about Instructure’s privacy practices [here](%{url}).", url: "https://www.instructure.com/policies/privacy"
-      when /commons\.sydney\.canvaslms\.com/
+      when /commons\.sydney\.canvaslms\.com/, /commons-syd-(prod|beta)\.instructure\.com/
         mt "Instructure hosts Canvas Commons in the region chosen by your institution, which is Australia. This means that when you use Canvas Commons your personal data will be stored and processed in Australia. These personal data elements include: name, email address, Canvas User ID, Canvas login name, Canvas Avatar, IP Address, Canvas Commons resources favorited by you, and comments you make to any resources in Canvas Commons. You can find more information about Instructure’s privacy practices [here](%{url}).", url: "https://www.instructure.com/policies/privacy"
-      when /commons\.singapore\.canvaslms\.com/
+      when /commons\.singapore\.canvaslms\.com/, /commons-sin-(prod|beta)\.instructure\.com/
         mt "Instructure hosts Canvas Commons in the region chosen by your institution, which is Asia Pacific. This means that when you use Canvas Commons your personal data will be stored and processed in Singapore. These personal data elements include: name, email address, Canvas User ID, Canvas login name, Canvas Avatar, IP Address, Canvas Commons resources favorited by you, and comments you make to any resources in Canvas Commons. You can find more information about Instructure’s privacy practices [here](%{url}).", url: "https://www.instructure.com/policies/privacy"
       else
         mt "Instructure hosts Canvas Commons in the region chosen by your institution, which is the US. This means that when you use Canvas Commons your personal data will be stored and processed in the United States. These personal data elements include: name, email address, Canvas User ID, Canvas login name, Canvas Avatar, IP Address, Canvas Commons resources favorited by you, and comments you make to any resources in Canvas Commons. You can find more information about Instructure’s privacy practices [here](%{url}).", url: "https://www.instructure.com/policies/privacy"

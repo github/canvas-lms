@@ -51,7 +51,7 @@ describe Api::V1::Submission do
 
   describe "#provisional_grade_json" do
     describe "speedgrader_url" do
-      it "links to the speed grader for a student's submission" do
+      it "links to SpeedGrader for a student's submission" do
         expect(assignment).to receive(:can_view_student_names?).with(user).and_return true
         json = fake_controller.provisional_grade_json(
           course:,
@@ -65,7 +65,7 @@ describe Api::V1::Submission do
         expect(json.fetch("speedgrader_url")).to match_path(path).and_query(query)
       end
 
-      it "links to the speed grader for a student's anonymous submission when grader cannot view student names" do
+      it "links to SpeedGrader for a student's anonymous submission when grader cannot view student names" do
         expect(assignment).to receive(:can_view_student_names?).with(user).and_return false
         json = fake_controller.provisional_grade_json(
           course:,
@@ -82,6 +82,44 @@ describe Api::V1::Submission do
   end
 
   describe "#submission_json" do
+    context "when discussion_checkpoints feature flag is enabled" do
+      let(:field) { "sub_assignment_submissions" }
+
+      before :once do
+        Account.site_admin.enable_feature!(:discussion_checkpoints)
+      end
+
+      it "includes sub_assignment_submissions for checkpointed assignments" do
+        student = course_with_user("StudentEnrollment", course:, active_all: true, name: "Student").user
+
+        parent_assignment = course.assignments.create!(title: "Assignment 1", has_sub_assignments: true)
+        parent_submission = parent_assignment.submissions.find_by(user_id: student.id)
+        parent_assignment.sub_assignments.create!(context: parent_assignment.context, sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC, points_possible: 5, due_at: 3.days.from_now)
+        parent_assignment.sub_assignments.create!(context: parent_assignment.context, sub_assignment_tag: CheckpointLabels::REPLY_TO_ENTRY, points_possible: 10, due_at: 5.days.from_now)
+
+        json = fake_controller.submission_json(parent_submission, parent_assignment, teacher, session, parent_assignment.context, field, params)
+        expect(json["has_sub_assignment_submissions"]).to be true
+        sas = json["sub_assignment_submissions"]
+        expect(sas.pluck("sub_assignment_tag")).to match_array([CheckpointLabels::REPLY_TO_TOPIC, CheckpointLabels::REPLY_TO_ENTRY])
+        expect(sas.pluck("id")).to match_array([nil, nil])
+        expect(sas.pluck("user_id")).to match_array([student.id, student.id])
+
+        # since these are now the sub-assignments themselves, they should not have sub-assignments
+        expect(sas.pluck("has_sub_assignment_submissions")).to match_array([false, false])
+        expect(sas.pluck("sub_assignment_submissions")).to match_array([[], []])
+      end
+
+      it "has falso sub_assignment_submissions info for non-checkpointed assignments" do
+        student = course_with_user("StudentEnrollment", course:, active_all: true, name: "Student").user
+        assignment = course.assignments.create!(title: "Assignment 1", has_sub_assignments: false)
+        submission = assignment.submissions.find_by(user_id: student.id)
+
+        json = fake_controller.submission_json(submission, assignment, teacher, session, assignment.context, field, params)
+        expect(json["has_sub_assignment_submissions"]).to be false
+        expect(json["sub_assignment_submissions"]).to be_empty
+      end
+    end
+
     describe "anonymous_id" do
       let(:field) { "anonymous_id" }
       let(:submission) { assignment.submissions.build(user:) }
@@ -503,8 +541,23 @@ describe Api::V1::Submission do
         ]
       end
 
-      it "outputs submission histories only for distinct urls" do
-        expect(json.fetch(field).count).to be 4
+      it "outputs submission histories only for distinct urls with not null grade and score" do
+        fields = json.fetch(field)
+        expect(fields.count).to be 4
+        fields.each do |field|
+          expect(field["grade"]).not_to be_nil
+          expect(field["score"]).not_to be_nil
+        end
+      end
+
+      it "outputs submission histories only for distinct urls with null grade and score" do
+        assignment.ensure_post_policy(post_manually: true)
+        fields = json.fetch(field)
+        expect(fields.count).to be 4
+        fields.each do |field|
+          expect(field["grade"]).to be_nil
+          expect(field["score"]).to be_nil
+        end
       end
     end
 
@@ -574,6 +627,15 @@ describe Api::V1::Submission do
         fake_controller.submission_json(submission, assignment, user, session, course, [field], params)
         expect(submission).to be_read(user)
       end
+    end
+
+    it "submission json returns video when media comment type is a specific video mime type" do
+      submission = assignment.submission_for_student(user)
+      submission.media_comment_id = 1
+      submission.media_comment_type = "video/mp4"
+      fake_controller.current_user = user
+      submission_json = fake_controller.submission_json(submission, assignment, user, session, context)
+      expect(submission_json.fetch("media_comment")["media_type"]).to eq "video"
     end
   end
 

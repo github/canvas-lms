@@ -178,6 +178,29 @@ describe "accounts/settings" do
       end
     end
 
+    describe "allow_observers_in_appointment_groups setting" do
+      before do
+        account = Account.default
+        admin = account_admin_user
+        view_context(account, admin)
+        assign(:account, account)
+        assign(:announcements, AccountNotification.none.paginate)
+      end
+
+      let(:setting_label) { "Allow observers to sign-up for appointments when enabled by the teacher" }
+
+      it "renders the setting when the observer_appointment_groups feature is enabled" do
+        render
+        expect(rendered).to include(setting_label)
+      end
+
+      it "does not render the setting when the observer_appointment_groups feature is disabled" do
+        Account.site_admin.disable_feature!(:observer_appointment_groups)
+        render
+        expect(rendered).not_to include(setting_label)
+      end
+    end
+
     context "account admin user" do
       let_once(:account) { Account.default }
       let_once(:admin) { account_admin_user(account:) }
@@ -580,62 +603,6 @@ describe "accounts/settings" do
     end
   end
 
-  context "privacy" do
-    let(:account) { account_model }
-    let(:account_admin) { account_admin_user(account:) }
-    let(:dom) { Nokogiri::HTML5(response) }
-    let(:enable_fullstory) { dom.at_css("#account_settings_enable_fullstory") }
-    let(:site_admin) { site_admin_user }
-    let(:sub_account) { account_model(root_account: account) }
-
-    def render_for(target_account, target_user)
-      assign(:context, target_account)
-      assign(:account, target_account)
-      assign(:root_account, target_account)
-      assign(:current_user, target_user)
-      assign(:account_users, [])
-      assign(:associated_courses_count, 0)
-      assign(:announcements, AccountNotification.none.paginate)
-
-      view_context(target_account, target_user)
-      render
-      yield if block_given?
-    end
-
-    it "is not available to account admins" do
-      render_for(account, account_admin) do
-        expect(response).not_to have_tag("#tab-privacy")
-      end
-    end
-
-    it "is not available for the site_admin account" do
-      render_for(Account.site_admin, site_admin) do
-        expect(response).not_to have_tag("#tab-privacy")
-      end
-    end
-
-    it "is not available for sub accounts" do
-      render_for(sub_account, site_admin) do
-        expect(response).not_to have_tag("#tab-privacy")
-      end
-    end
-
-    it "opts in to FullStory by default" do
-      render_for(account, site_admin) do
-        expect(enable_fullstory).to be_checked
-      end
-    end
-
-    it "allows opting out of FullStory" do
-      account.settings[:enable_fullstory] = false
-      account.save!
-
-      render_for(account, site_admin) do
-        expect(enable_fullstory).not_to be_checked
-      end
-    end
-  end
-
   context "course templates" do
     let_once(:account) { Account.default }
     let_once(:admin) { account_admin_user(account:) }
@@ -669,6 +636,21 @@ describe "accounts/settings" do
       doc = Nokogiri::HTML5(response.body)
       select = doc.at_css("#account_course_template_id")
       expect(select.css("option").pluck("value")).to eq ["", "0"]
+    end
+
+    it "does not show dummy course for sub accounts" do
+      account.courses.create!(id: 0, workflow_state: "deleted", name: "Unnamed Course")
+      a2 = account.sub_accounts.create!
+      a2.update(course_template_id: 0)
+      view_context(a2, admin)
+      assign(:context, a2)
+      assign(:account, a2)
+
+      render
+      doc = Nokogiri::HTML5(response.body)
+      options = doc.css("#account_course_template_id option[selected]")
+      expect(options.map(&:text)).to_not include("Unnamed Course")
+      expect(options.count).to eq 1
     end
 
     it "disables if you don't have permission" do

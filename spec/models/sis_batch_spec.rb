@@ -108,7 +108,7 @@ describe SisBatch do
     observer = user_with_managed_pseudonym(account: @account)
     UserObservationLink.create_or_restore(observer:, student: user, root_account: @account)
     student_enrollment = course.enroll_user(user, "StudentEnrollment", enrollment_state: "active")
-    observer_enrollment = course.observer_enrollments.where(user_id: observer).take
+    observer_enrollment = course.observer_enrollments.find_by(user_id: observer)
 
     batch = process_csv_data([%(course_id,user_id,role,status,section_id
                                 c1,u1,student,deleted,)])
@@ -132,11 +132,11 @@ describe SisBatch do
                                 c1,u1,student,deleted,)])
     expect(student_enrollment.reload.workflow_state).to eq "deleted"
     UserObservationLink.create_or_restore(observer:, student: user, root_account: @account)
-    expect(course.observer_enrollments.where(user_id: observer).take).to be_nil # doesn't make a new enrollment
+    expect(course.observer_enrollments.find_by(user_id: observer)).to be_nil # doesn't make a new enrollment
     batch.restore_states_for_batch
     run_jobs
     expect(student_enrollment.reload.workflow_state).to eq "active"
-    observer_enrollment = course.observer_enrollments.where(user_id: observer).take # until now
+    observer_enrollment = course.observer_enrollments.find_by(user_id: observer) # until now
     expect(observer_enrollment.workflow_state).to eq "active"
   end
 
@@ -312,21 +312,21 @@ describe SisBatch do
       expect_any_instantiation_of(b5).not_to receive(:process_without_send_later)
       SisBatch.process_all_for_account(@a1)
       run_jobs
-      [b1, b2, b4].each { |batch| expect([:imported, :imported_with_messages]).to be_include(batch.reload.state) }
+      [b1, b2, b4].each { |batch| expect([:imported, :imported_with_messages]).to include(batch.reload.state) }
     end
 
     it "aborts non processed sis_batches when aborted" do
       process_csv_data([%(course_id,short_name,long_name,account_id,term_id,status
 test_1,TC 101,Test Course 101,,term1,active
 )])
-      expect(@account.all_courses.where(sis_source_id: "test_1").take.workflow_state).to eq "claimed"
+      expect(@account.all_courses.find_by(sis_source_id: "test_1").workflow_state).to eq "claimed"
       batch = process_csv_data([%(course_id,short_name,long_name,account_id,term_id,status
 test_1,TC 101,Test Course 101,,term1,deleted
 )],
                                workflow_state: "aborted")
       expect(batch.progress).to eq 100
       expect(batch.workflow_state).to eq "aborted"
-      expect(@account.all_courses.where(sis_source_id: "test_1").take.workflow_state).to eq "claimed"
+      expect(@account.all_courses.find_by(sis_source_id: "test_1").workflow_state).to eq "claimed"
     end
 
     describe "with parallel importers" do
@@ -607,7 +607,7 @@ s2,test_1,section2,active),
       expect(@batch.data[:stack_trace]).to be_nil
 
       expect(@c1.reload).to be_deleted
-      expect(@c1.stuck_sis_fields).not_to be_include(:workflow_state)
+      expect(@c1.stuck_sis_fields).not_to include(:workflow_state)
       expect(@c2.reload).to be_available
       expect(@c3.reload).to be_available
       expect(@c4.reload).to be_claimed
@@ -797,11 +797,11 @@ s2,test_1,section2,active),
         run_jobs
       end
       expect(batch.reload.workflow_state).to eq "imported"
-      p = Pseudonym.where(sis_user_id: "user_1").take
+      p = Pseudonym.find_by(sis_user_id: "user_1")
       expect(p.workflow_state).to eq "active"
-      expect(Course.where(sis_source_id: "course_1").take.workflow_state).to eq "claimed"
-      expect(CourseSection.where(sis_source_id: "section_1").take.workflow_state).to eq "active"
-      expect(Enrollment.where(user: p.user).take.workflow_state).to eq "active"
+      expect(Course.find_by(sis_source_id: "course_1").workflow_state).to eq "claimed"
+      expect(CourseSection.find_by(sis_source_id: "section_1").workflow_state).to eq "active"
+      expect(Enrollment.find_by(user: p.user).workflow_state).to eq "active"
     end
 
     it "treats crosslisted sections as belonging to their original course" do
@@ -1234,9 +1234,9 @@ test_1,test_a,course
                        ],
                        diffing_data_set_identifier: "default")
 
-      course = @account.all_courses.where(sis_source_id: "A042").take
+      course = @account.all_courses.find_by(sis_source_id: "A042")
       group = course.groups.create!(name: "Group")
-      4.times { |i| group.group_memberships.create!(user: Pseudonym.where(sis_user_id: "U#{i + 1}").take.user) }
+      4.times { |i| group.group_memberships.create!(user: Pseudonym.find_by(sis_user_id: "U#{i + 1}").user) }
 
       expect(course.enrollments.active.count).to eq 4
       expect(group.group_memberships.active.count).to eq 4
@@ -1547,8 +1547,8 @@ test_1,u1,student,active)
       UserObservationLink.create_or_restore(observer:, student:, root_account: @account)
 
       process_csv_data([%(section_id,user_id,role,status,course_id\n,u1,student,active,c1)], batch_mode: true, batch_mode_term: term)
-      student_enrollment = course.enrollments.where(user: student).take
-      observer_enrollment = course.observer_enrollments.where(user: observer).take
+      student_enrollment = course.enrollments.find_by(user: student)
+      observer_enrollment = course.observer_enrollments.find_by(user: observer)
       expect(student_enrollment.workflow_state).to eq "active"
       expect(observer_enrollment.workflow_state).to eq "active"
 
@@ -1577,8 +1577,8 @@ test_1,u1,student,active)
       UserObservationLink.create_or_restore(observer:, student:, root_account: @account)
 
       process_csv_data([%(section_id,user_id,role,status,course_id\n,u1,student,active,c1)], batch_mode: true, batch_mode_term: term)
-      student_enrollment = course.enrollments.where(user: student).take
-      observer_enrollment = course.observer_enrollments.where(user: observer).take
+      student_enrollment = course.enrollments.find_by(user: student)
+      observer_enrollment = course.observer_enrollments.find_by(user: observer)
       expect(student_enrollment.workflow_state).to eq "active"
       expect(observer_enrollment.workflow_state).to eq "active"
 

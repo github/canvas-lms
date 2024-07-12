@@ -27,6 +27,7 @@ class GroupCategory < ActiveRecord::Base
   belongs_to :context, polymorphic: [:course, :account]
   belongs_to :sis_batch
   belongs_to :root_account, class_name: "Account", inverse_of: :all_group_categories
+  has_many :assignments, inverse_of: :group_category
   has_many :groups, dependent: :destroy
   has_many :progresses, as: "context", dependent: :destroy
   has_many :group_and_membership_importers, dependent: :destroy, inverse_of: :group_category
@@ -214,7 +215,7 @@ class GroupCategory < ActiveRecord::Base
 
   def group_for(user)
     shard.activate do
-      groups.active.where(GroupMembership.active.where("group_id=groups.id").where(user_id: user).arel.exists).take
+      groups.active.find_by(GroupMembership.active.where("group_id=groups.id").where(user_id: user).arel.exists)
     end
   end
 

@@ -23,12 +23,12 @@ require_relative "../graphql_spec_helper"
 describe Types::SubmissionType do
   before(:once) do
     student_in_course(active_all: true)
-    @assignment = @course.assignments.create! name: "asdf", points_possible: 10
-    @submission = @assignment.grade_student(@student, score: 8, grader: @teacher).first
+    @assignment = @course.assignments.create!(name: "asdf", submission_types: "online_text_entry", points_possible: 10)
+    @submission = @assignment.grade_student(@student, score: 8, grader: @teacher, student_entered_score: 13).first
   end
 
-  let(:submission_type) { GraphQLTypeTester.new(@submission, current_user: @teacher) }
-  let(:submission_type_for_student) { GraphQLTypeTester.new(@submission, current_user: @student) }
+  let(:submission_type) { GraphQLTypeTester.new(@submission, current_user: @teacher, request: ActionDispatch::TestRequest.create) }
+  let(:submission_type_for_student) { GraphQLTypeTester.new(@submission, current_user: @student, request: ActionDispatch::TestRequest.create) }
 
   it "works" do
     expect(submission_type.resolve("user { _id }")).to eq @student.id.to_s
@@ -38,6 +38,9 @@ describe Types::SubmissionType do
     expect(submission_type.resolve("assignmentId")).to eq @assignment.id.to_s
     expect(submission_type.resolve("redoRequest")).to eq @submission.redo_request?
     expect(submission_type.resolve("cachedDueDate")).to eq @submission.cached_due_date
+    expect(submission_type.resolve("secondsLate")).to eq @submission.seconds_late
+    expect(submission_type.resolve("studentEnteredScore")).to eq @submission.student_entered_score
+    expect(submission_type.resolve("submissionCommentDownloadUrl")).to eq "/submissions/#{@submission.id}/comments.pdf"
   end
 
   it "requires read permission" do
@@ -115,6 +118,17 @@ describe Types::SubmissionType do
 
     it "returns false for hide_grade_from_student" do
       expect(submission_type.resolve("hideGradeFromStudent")).to be false
+    end
+  end
+
+  describe "custom_grade_status" do
+    before do
+      custom_grade_status = CustomGradeStatus.create!(name: "foo", color: "#FFE8E5", root_account_id: Account.default.id, created_by_id: @teacher.id)
+      @submission.update!(custom_grade_status_id: custom_grade_status.id)
+    end
+
+    it "returns the custom grade status" do
+      expect(submission_type.resolve("customGradeStatus")).to eq "foo"
     end
   end
 
@@ -399,6 +413,32 @@ describe Types::SubmissionType do
         ).to eq [student_2_comment.id.to_s]
       end
     end
+
+    context "draft comments" do
+      before(:once) do
+        @draft_comment = @submission.add_comment(author: @teacher, comment: "draft", draft_comment: true)
+      end
+
+      it "returns draft comments for the current user" do
+        expect(
+          submission_type.resolve("commentsConnection(includeDraftComments: true) { nodes { _id }}")
+        ).to eq [@comment2.id.to_s, @draft_comment.id.to_s]
+      end
+
+      it "does not return draft comments for other users" do
+        other_teacher = teacher_in_course(course: @course).user
+        expect(
+          submission_type.resolve("commentsConnection { nodes { _id }}", current_user: other_teacher)
+        ).to eq [@comment2.id.to_s]
+      end
+
+      it "does not return draft comments for other users when expecting drafts" do
+        other_teacher = teacher_in_course(course: @course).user
+        expect(
+          submission_type.resolve("commentsConnection(includeDraftComments: true) { nodes { _id }}", current_user: other_teacher)
+        ).to eq [@comment2.id.to_s]
+      end
+    end
   end
 
   describe "submission_drafts" do
@@ -568,6 +608,27 @@ describe Types::SubmissionType do
     end
   end
 
+  describe "customGradeStatus" do
+    before(:once) do
+      Account.site_admin.enable_feature!(:custom_gradebook_statuses)
+      assignment = @course.assignments.create!(
+        name: "custom status assignment",
+        points_possible: 10,
+        due_at: 1.hour.ago,
+        submission_types: ["online_text_entry"]
+      )
+      @submission1 = Submission.where(assignment_id: assignment.id, user_id: @student.id).first
+      @custom_status = CustomGradeStatus.create(name: "Test Status", color: "#000000", root_account: @course.root_account, created_by: @teacher)
+    end
+
+    let(:submission_type) { GraphQLTypeTester.new(@submission1, current_user: @teacher) }
+
+    it "returns customGradeStatus" do
+      @submission1.update!(custom_grade_status: @custom_status)
+      expect(submission_type.resolve("customGradeStatus")).to eq @custom_status.name
+    end
+  end
+
   describe "gradeMatchesCurrentSubmission" do
     before(:once) do
       assignment = @course.assignments.create!(name: "assignment", points_possible: 10)
@@ -700,6 +761,137 @@ describe Types::SubmissionType do
     it "works" do
       result = submission_type.resolve("assignedAssessments { workflowState }")
       expect(result.count).to eq 1
+    end
+  end
+
+  describe "groupId" do
+    before(:once) do
+      @first_student = @student
+      @second_student = student_in_course(course: @course, active_all: true).user
+      group_category = @course.group_categories.create!(name: "My Category")
+      @course.groups.create!(name: "Group A", group_category:)
+      @group_b = @course.groups.create!(name: "Group B", group_category:)
+      @group_b.add_user(@first_student)
+      @group_b.save!
+      @assignment.update!(group_category:)
+    end
+
+    it "returns the group id associated with the submission" do
+      @assignment.submit_homework(@first_student, body: "help my legs are stuck under my desk!")
+      aggregate_failures do
+        expect(@assignment.submissions.find_by(user: @first_student).group_id).to eq @group_b.id
+        expect(submission_type.resolve("groupId")).to eq @group_b.id.to_s
+      end
+    end
+
+    it "works even when the submission's group_id is set to nil (which is the case before the group has submitted)" do
+      aggregate_failures do
+        expect(@assignment.submissions.find_by(user: @first_student).group_id).to be_nil
+        expect(submission_type.resolve("groupId")).to eq @group_b.id.to_s
+      end
+    end
+
+    it "returns nil for students not in groups" do
+      expect(submission_type.resolve("groupId", current_user: @second_student)).to be_nil
+    end
+
+    it "returns nil for non-group assignments" do
+      @assignment.update!(group_category: nil)
+      expect(submission_type.resolve("groupId")).to be_nil
+    end
+  end
+
+  describe "previewUrl" do
+    let(:preview_url) { submission_type.resolve("previewUrl") }
+
+    it "returns the preview URL when a student has submitted" do
+      @assignment.submit_homework(@student, body: "test")
+      expected_url = "http://test.host/courses/#{@course.id}/assignments/#{@assignment.id}/submissions/#{@student.id}?preview=1&version=0"
+      expect(preview_url).to eq expected_url
+    end
+
+    it "returns nil when the student has not submitted and has not been graded" do
+      expect(preview_url).to be_nil
+    end
+
+    it "returns nil when the student has not submitted but has been graded" do
+      @assignment.grade_student(@student, score: 8, grader: @teacher)
+      expect(preview_url).to be_nil
+    end
+
+    context "external tool submissions" do
+      before do
+        @assignment.update!(submission_types: "external_tool")
+      end
+
+      let(:query_params) { Rack::Utils.parse_query(URI(preview_url).query).with_indifferent_access }
+
+      it "returns the external tool URL" do
+        @assignment.submit_homework(
+          @student,
+          submission_type: "basic_lti_launch",
+          url: "http://anexternaltoolsubmission.com"
+        )
+        expect(preview_url).to include "/courses/#{@course.id}/external_tools/retrieve"
+      end
+
+      it "includes the grade_by_question_enabled query param when it's a new quiz" do
+        tool = @course.context_external_tools.create!(
+          name: "Quizzes.Next",
+          consumer_key: "test_key",
+          shared_secret: "test_secret",
+          tool_id: "Quizzes 2",
+          url: "http://somenewquiz.com/launch"
+        )
+        @assignment.update!(external_tool_tag_attributes: { content: tool })
+        url = "http://anexternaltoolsubmission.com"
+        @assignment.submit_homework(
+          @student,
+          submission_type: "basic_lti_launch",
+          url:
+        )
+        expect(query_params[:url]).to eq "#{url}?grade_by_question_enabled=false"
+      end
+
+      it "excludes the grade_by_question_enabled query param when it's not a new quiz" do
+        @assignment.submit_homework(
+          @student,
+          submission_type: "basic_lti_launch",
+          url: "http://anexternaltoolsubmission.com"
+        )
+        expect(query_params[:url]).not_to include "grade_by_question_enabled"
+      end
+    end
+
+    it "includes a 'version' query param that corresponds to the attempt number - 1 (and NOT the associated submission version number)" do
+      @assignment.submit_homework(@student, body: "My first attempt")
+      @assignment.update!(points_possible: 5) # this causes a new submission version to get created
+      expected_url = "http://test.host/courses/#{@course.id}/assignments/#{@assignment.id}/submissions/#{@student.id}?preview=1&version=0"
+      @submission.reload
+      aggregate_failures do
+        expect(@submission.attempt).to eq 1
+        expect(@submission.versions.maximum(:number)).to eq 2
+        expect(submission_type.resolve("previewUrl")).to eq expected_url
+      end
+    end
+
+    context "whent the assignment is a discussion topic" do
+      before do
+        @assignment.update!(submission_types: "discussion_topic")
+        @discussion_topic = @assignment.discussion_topic
+      end
+
+      it "returns the preview URL for the discussion topic" do
+        @discussion_topic.discussion_entries.create!(user: @student, message: "I have a lot to say about this topic")
+        expect(preview_url).to eq "http://test.host/courses/#{@course.id}/discussion_topics/#{@discussion_topic.id}?embed=true"
+      end
+    end
+  end
+
+  describe "wordCount" do
+    it "returns the word count" do
+      @submission.update!(body: "word " * 100)
+      expect(submission_type.resolve("wordCount")).to eq 100
     end
   end
 end

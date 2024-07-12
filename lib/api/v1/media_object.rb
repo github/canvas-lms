@@ -29,6 +29,7 @@ module Api::V1::MediaObject
       json["can_add_captions"] = media_object.grants_right?(current_user, session, :add_captions)
       json["media_sources"] = media_sources_json(media_object) unless exclude.include?("sources")
       json["embedded_iframe_url"] = media_object_iframe_url(media_object.media_id)
+      json["auto_caption_status"] = media_object.auto_caption_status
 
       unless exclude.include?("tracks")
         json["media_tracks"] = media_object.media_tracks.map do |track|
@@ -40,12 +41,13 @@ module Api::V1::MediaObject
     end
   end
 
-  def media_attachment_api_json(attachment, media_object, current_user, session, exclude = [])
+  def media_attachment_api_json(attachment, media_object, current_user, session, exclude = [], verifier: nil)
     api_json(media_object, current_user, session, API_MEDIA_OBJECT_JSON_OPTS).tap do |json|
       json["title"] = media_object.guaranteed_title
-      json["can_add_captions"] = attachment.grants_right?(current_user, session, :update) && media_object.grants_right?(current_user, session, :add_captions)
-      json["media_sources"] = media_sources_json(media_object) unless exclude.include?("sources")
+      json["can_add_captions"] = attachment.grants_right?(current_user, session, :update)
+      json["media_sources"] = media_sources_json(media_object, attachment:, verifier:) unless exclude.include?("sources")
       json["embedded_iframe_url"] = media_attachment_iframe_url(attachment.id)
+      json["auto_caption_status"] = media_object.auto_caption_status
 
       unless exclude.include?("tracks")
         json["media_tracks"] = attachment.media_tracks_include_originals.map do |track|
@@ -57,10 +59,14 @@ module Api::V1::MediaObject
     end
   end
 
-  def media_sources_json(media_object)
+  def media_sources_json(media_object, attachment: nil, verifier: nil)
     media_object.media_sources&.map do |mo|
       if Account.site_admin.feature_enabled?(:authenticated_iframe_content)
-        mo[:url] = media_object_redirect_url(media_object.id, bitrate: mo[:bitrate])
+        mo[:url] = if attachment
+                     media_attachment_redirect_url(attachment.id, bitrate: mo[:bitrate], verifier:)
+                   else
+                     media_object_redirect_url(media_object.media_id, bitrate: mo[:bitrate])
+                   end
       end
       mo[:src] = mo[:url]
       mo[:label] = "#{(mo[:bitrate].to_i / 1024).floor} kbps"

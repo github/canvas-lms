@@ -47,7 +47,7 @@ describe DiscussionEntryParticipant do
       it "when inappropriate" do
         user = user_model
         DiscussionEntryParticipant.upsert_for_entries(@entry, user, report_type: "inappropriate")
-        discussion_entry_participant = DiscussionEntryParticipant.where(discussion_entry: @entry, user_id: user).take
+        discussion_entry_participant = DiscussionEntryParticipant.find_by(discussion_entry: @entry, user_id: user)
 
         expect(discussion_entry_participant.report_type).to eq("inappropriate")
       end
@@ -55,7 +55,7 @@ describe DiscussionEntryParticipant do
       it "when offensive" do
         user = user_model
         DiscussionEntryParticipant.upsert_for_entries(@entry, user, report_type: "offensive")
-        discussion_entry_participant = DiscussionEntryParticipant.where(discussion_entry: @entry, user_id: user).take
+        discussion_entry_participant = DiscussionEntryParticipant.find_by(discussion_entry: @entry, user_id: user)
 
         expect(discussion_entry_participant.report_type).to eq("offensive")
       end
@@ -63,7 +63,7 @@ describe DiscussionEntryParticipant do
       it "when other" do
         user = user_model
         DiscussionEntryParticipant.upsert_for_entries(@entry, user, report_type: "other")
-        discussion_entry_participant = DiscussionEntryParticipant.where(discussion_entry: @entry, user_id: user).take
+        discussion_entry_participant = DiscussionEntryParticipant.find_by(discussion_entry: @entry, user_id: user)
 
         expect(discussion_entry_participant.report_type).to eq("other")
       end
@@ -71,36 +71,30 @@ describe DiscussionEntryParticipant do
 
     context "workflow_state.changed to read" do
       it "set read_at to Time.now" do
-        Timecop.safe_mode = false
-        Timecop.freeze
-        # Make a new user a discussion entry participant to the old entry, so they will default unread.
-        student_2 = student_in_course(active_all: true).user
-        @entry.change_read_state("read", student_2)
+        Timecop.freeze do
+          # Make a new user a discussion entry participant to the old entry, so they will default unread.
+          student_2 = student_in_course(active_all: true).user
+          @entry.change_read_state("read", student_2)
 
-        participant_2 = @entry.find_existing_participant(student_2)
-        expect(participant_2.read_at).to be_within(10.seconds).of Time.now.utc
-      ensure
-        Timecop.return
-        Timecop.safe_mode = true
+          participant_2 = @entry.find_existing_participant(student_2)
+          expect(participant_2.read_at).to be_within(10.seconds).of Time.now.utc
+        end
       end
     end
 
     context "workflow_state.changed to not read" do
       it "set read_at to nil" do
-        Timecop.safe_mode = false
-        Timecop.freeze
-        student_2 = student_in_course(active_all: true).user
-        @entry.change_read_state("read", student_2)
+        Timecop.freeze do
+          student_2 = student_in_course(active_all: true).user
+          @entry.change_read_state("read", student_2)
 
-        participant_2 = @entry.find_existing_participant(student_2)
-        expect(participant_2.read_at).to be_within(10.seconds).of Time.now.utc
+          participant_2 = @entry.find_existing_participant(student_2)
+          expect(participant_2.read_at).to be_within(10.seconds).of Time.now.utc
 
-        @entry.change_read_state("unread", student_2)
-        participant_2.reload
-        expect(participant_2.read_at).to be_nil
-      ensure
-        Timecop.return
-        Timecop.safe_mode = true
+          @entry.change_read_state("unread", student_2)
+          participant_2.reload
+          expect(participant_2.read_at).to be_nil
+        end
       end
     end
 

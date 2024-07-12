@@ -22,6 +22,11 @@ export const CURRENT_USER = 'current_user'
 export const HIGHLIGHT_TIMEOUT = 6000
 export const SEARCH_TERM_DEBOUNCE_DELAY = 500
 export const DEFAULT_AVATAR_URL = 'http://canvas.instructure.com/images/messages/avatar-50.png'
+export const REPLY_TO_TOPIC = 'reply_to_topic'
+export const REPLY_TO_ENTRY = 'reply_to_entry'
+export const SUBMITTED = 'submitted'
+export const MISSING = 'missing'
+export const LATE = 'late'
 
 export const AllThreadsState = {
   None: 0,
@@ -54,6 +59,8 @@ const discussionManagerUtilityContext = {
   setHighlightEntryId: () => {},
   isGradedDiscussion: false,
   setIsGradedDiscussion: () => {},
+  usedThreadingToolbarChildRef: null,
+  isSummaryEnabled: false,
 }
 
 export const DiscussionManagerUtilityContext = React.createContext(discussionManagerUtilityContext)

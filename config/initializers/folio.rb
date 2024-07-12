@@ -19,6 +19,10 @@
 
 require "folio/core_ext/enumerable"
 
+module Folio
+  PAGINATION_COUNT_TIMEOUT = "5s"
+end
+
 module Folio::WillPaginate::ActiveRecord::Pagination
   def paginate(options = {})
     unless options.key?(:total_entries)
@@ -33,8 +37,7 @@ module Folio::WillPaginate::ActiveRecord::Pagination
       unless group_values.empty?
         begin
           scope.connection.transaction(requires_new: true) do
-            timeout = Setting.get("pagination_count_timeout", "5s")
-            scope.connection.execute("SET LOCAL statement_timeout=#{scope.connection.quote(timeout)}")
+            scope.connection.execute("SET LOCAL statement_timeout='#{Folio::PAGINATION_COUNT_TIMEOUT}'")
             # total_entries left to an auto-count, but the relation being
             # paginated has a grouping. we need to do a special count, lest
             # self.count give us a hash instead of the integer we expect.
@@ -50,7 +53,7 @@ module Folio::WillPaginate::ActiveRecord::Pagination
         end
       end
     end
-    super(options).to_a
+    super.to_a
   end
 end
 
@@ -59,15 +62,14 @@ module FolioARPagination
     if !options.key?(:total_entries) && respond_to?(:count)
       begin
         connection.transaction(requires_new: true) do
-          timeout = Setting.get("pagination_count_timeout", "5s")
-          connection.execute("SET LOCAL statement_timeout=#{connection.quote(timeout)}")
+          connection.execute("SET LOCAL statement_timeout='#{Folio::PAGINATION_COUNT_TIMEOUT}'")
           options[:total_entries] = count(:all)
         end
       rescue ActiveRecord::QueryCanceled
         options[:total_entries] = nil
       end
     end
-    super(page, options)
+    super
   end
 end
 

@@ -26,29 +26,35 @@ import {View} from '@instructure/ui-view'
 import {Avatar} from '@instructure/ui-avatar'
 import {CloseButton} from '@instructure/ui-buttons'
 import Carousel from './Carousel'
-import {ApplyTheme} from '@instructure/ui-themeable'
+import {InstUISettingsProvider} from '@instructure/emotion'
 import {Link} from '@instructure/ui-link'
 import {Heading} from '@instructure/ui-heading'
 import {Text} from '@instructure/ui-text'
 import GradeOverrideTrayRadioInputGroup from './GradeOverrideTrayRadioInputGroup'
-import {GradeStatus} from '@canvas/grading/accountGradingStatus'
+import type {GradeStatusUnderscore} from '@canvas/grading/accountGradingStatus'
 
 import useStore from '../stores'
 import {gradeOverrideCustomStatus} from '../FinalGradeOverrides/FinalGradeOverride.utils'
 import {useFinalGradeOverrideCustomStatus} from '../hooks/useFinalGradeOverrideCustomStatus'
 import {showFlashError} from '@canvas/alerts/react/FlashAlert'
-import {ApiCallStatus} from '@canvas/util/apiRequest'
+import {ApiCallStatus} from '@canvas/do-fetch-api-effect/apiRequest'
 
 const I18n = useI18nScope('gradebook')
 
+const componentOverrides = {
+  Link: {
+    mediumPaddingHorizontal: 0,
+    mediumHeight: 'normal',
+  },
+}
+
 export type TotalGradeOverrideTrayProps = {
-  customGradeStatuses: GradeStatus[]
+  customGradeStatuses: GradeStatusUnderscore[]
   handleDismiss: (manualDismiss: boolean) => void
   handleOnGradeChange: (studentId: string, grade: GradeOverrideInfo) => void
   selectedGradingPeriodId?: string
   navigateDown: () => void
   navigateUp: () => void
-  pointsBasedGradingSchemesFeatureEnabled: boolean
 }
 
 export function TotalGradeOverrideTrayProvider(props: TotalGradeOverrideTrayProps) {
@@ -60,13 +66,12 @@ export function TotalGradeOverrideTrayProvider(props: TotalGradeOverrideTrayProp
 }
 
 export function TotalGradeOverrideTray({
-  customGradeStatuses,
+  customGradeStatuses = [],
   selectedGradingPeriodId,
   handleDismiss,
   handleOnGradeChange,
   navigateDown,
   navigateUp,
-  pointsBasedGradingSchemesFeatureEnabled,
 }: TotalGradeOverrideTrayProps) {
   const {finalGradeOverrideTrayProps, toggleFinalGradeOverrideTray, finalGradeOverrides} =
     useStore()
@@ -83,7 +88,7 @@ export function TotalGradeOverrideTray({
     return null
   }
 
-  const {isOpen, isFirstStudent, isLastStudent, studentInfo, gradeEntry, gradeInfo} =
+  const {isOpen, isFirstStudent, isLastStudent, studentInfo, gradeEntry} =
     finalGradeOverrideTrayProps
 
   if (!studentInfo) {
@@ -96,6 +101,10 @@ export function TotalGradeOverrideTray({
     finalGradeOverrides,
     studentId,
     selectedGradingPeriodId
+  )
+
+  const selectedCustomStatus = customGradeStatuses.find(
+    status => status.id === selectedCustomStatusId
   )
 
   const {name, avatarUrl, gradesUrl, enrollmentId} = studentInfo
@@ -113,31 +122,40 @@ export function TotalGradeOverrideTray({
     const gradingPeriodId = getNullableSelectedGradingPeriodId()
     await saveFinalOverrideCustomStatus(newCustomStatusId, enrollmentId, gradingPeriodId)
 
-    const finalGradeOverrideToUpdate = {...finalGradeOverrides[studentInfo.id]}
-    if (!gradingPeriodId && finalGradeOverrideToUpdate.courseGrade) {
-      finalGradeOverrideToUpdate.courseGrade.customGradeStatusId = newCustomStatusId
-    } else if (
-      gradingPeriodId &&
-      finalGradeOverrideToUpdate.gradingPeriodGrades?.[gradingPeriodId]
-    ) {
+    const {id: studentId} = studentInfo
+    const finalGradeOverrideToUpdate = finalGradeOverrides[studentId] ?? {}
+
+    if (gradingPeriodId) {
+      if (!finalGradeOverrideToUpdate.gradingPeriodGrades?.[gradingPeriodId]) {
+        finalGradeOverrideToUpdate.gradingPeriodGrades = {
+          [gradingPeriodId]: {},
+        }
+      }
+
       finalGradeOverrideToUpdate.gradingPeriodGrades[gradingPeriodId].customGradeStatusId =
         newCustomStatusId
+    } else {
+      if (!finalGradeOverrideToUpdate.courseGrade) {
+        finalGradeOverrideToUpdate.courseGrade = {}
+      }
+
+      finalGradeOverrideToUpdate.courseGrade.customGradeStatusId = newCustomStatusId
     }
 
     useStore.setState({
       finalGradeOverrides: {
         ...finalGradeOverrides,
-        finalGradeOverrideToUpdate,
+        [studentId]: finalGradeOverrideToUpdate,
       },
     })
   }
 
-  const gradeInfoInput =
-    gradeEntry && gradeInfo ? gradeEntry.formatGradeInfoForInput(gradeInfo) : ''
-
-  const radioInputDisabled = gradeInfoInput === '' || saveCallStatus === ApiCallStatus.PENDING
-
   const studentFinalGradeOverrides = finalGradeOverrides[studentId]
+  const gradingPeriodId = getNullableSelectedGradingPeriodId()
+
+  const studentFinalGradePercentage = gradingPeriodId
+    ? studentFinalGradeOverrides?.gradingPeriodGrades?.[gradingPeriodId]?.percentage
+    : studentFinalGradeOverrides?.courseGrade?.percentage
 
   return (
     <Tray
@@ -171,11 +189,11 @@ export function TotalGradeOverrideTray({
             onRightArrowClick={() => navigateDown()}
             rightArrowDescription={I18n.t('Next student')}
           >
-            <ApplyTheme theme={{mediumPaddingHorizontal: '0', mediumHeight: 'normal'}}>
+            <InstUISettingsProvider theme={{componentOverrides}}>
               <Link href={gradesUrl} isWithinText={false}>
                 {name}
               </Link>
-            </ApplyTheme>
+            </InstUISettingsProvider>
           </Carousel>
 
           <View as="div" margin="small 0" className="hr" />
@@ -191,25 +209,33 @@ export function TotalGradeOverrideTray({
               onGradeChange={newGrade => {
                 handleOnGradeChange(studentId, newGrade)
               }}
-              pointsBasedGradingSchemesFeatureEnabled={pointsBasedGradingSchemesFeatureEnabled}
               finalGradeOverride={studentFinalGradeOverrides}
-              gradingPeriodId={getNullableSelectedGradingPeriodId()}
+              gradingPeriodId={gradingPeriodId}
               gradingScheme={gradeEntry?.gradingScheme}
               showPercentageLabel={false}
               width="4rem"
+              disabled={selectedCustomStatus?.allow_final_grade_value === false}
             />
           </View>
 
-          <View as="div" margin="small 0" className="hr" />
+          {customGradeStatuses.length > 0 && (
+            <>
+              <View as="div" margin="small 0" className="hr" />
 
-          <View as="div" margin="medium 0">
-            <GradeOverrideTrayRadioInputGroup
-              disabled={radioInputDisabled}
-              handleRadioInputChanged={handleRadioInputChanged}
-              customGradeStatuses={customGradeStatuses}
-              selectedCustomStatusId={selectedCustomStatusId}
-            />
-          </View>
+              <View as="div" margin="medium 0">
+                <GradeOverrideTrayRadioInputGroup
+                  disabled={saveCallStatus === ApiCallStatus.PENDING}
+                  hasOverrideScore={
+                    studentFinalGradePercentage !== null &&
+                    studentFinalGradePercentage !== undefined
+                  }
+                  handleRadioInputChanged={handleRadioInputChanged}
+                  customGradeStatuses={customGradeStatuses}
+                  selectedCustomStatusId={selectedCustomStatusId}
+                />
+              </View>
+            </>
+          )}
         </View>
       </View>
     </Tray>

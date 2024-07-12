@@ -29,7 +29,13 @@ import {hasGradeChanged, parseTextValue} from '@canvas/grading/GradeInputHelper'
 
 const I18n = useI18nScope('gradebook')
 
-function formatGrade(submission, assignment, gradingScheme, pendingGradeInfo) {
+function formatGrade(
+  submission,
+  assignment,
+  gradingScheme,
+  pointsBasedGradingScheme,
+  pendingGradeInfo
+) {
   if (pendingGradeInfo) {
     return GradeFormatHelper.formatGradeInfo(pendingGradeInfo, {defaultValue: ''})
   }
@@ -38,6 +44,7 @@ function formatGrade(submission, assignment, gradingScheme, pendingGradeInfo) {
     defaultValue: '',
     formatType: 'gradingScheme',
     gradingScheme,
+    pointsBasedGradingScheme,
     pointsPossible: assignment.pointsPossible,
     version: 'entered',
   }
@@ -49,6 +56,7 @@ function getGradeInfo(value, props) {
   return parseTextValue(value, {
     enterGradesAs: 'gradingScheme',
     gradingScheme: props.gradingScheme,
+    pointsBasedGradingScheme: props.pointsBasedGradingScheme,
     pointsPossible: props.assignment.pointsPossible,
   })
 }
@@ -60,6 +68,7 @@ export default class GradingSchemeInput extends Component {
     }).isRequired,
     disabled: bool,
     gradingScheme: instanceOf(Array).isRequired,
+    pointsBasedGradingScheme: bool,
     label: element.isRequired,
     menuContentRef: Menu.propTypes.menuRef,
     messages: arrayOf(
@@ -88,6 +97,7 @@ export default class GradingSchemeInput extends Component {
     onMenuDismiss() {},
     onMenuShow() {},
     pendingGradeInfo: null,
+    pointsBasedGradingScheme: false,
   }
 
   constructor(props) {
@@ -105,24 +115,50 @@ export default class GradingSchemeInput extends Component {
     this.handleTextChange = this.handleTextChange.bind(this)
     this.handleToggle = this.handleToggle.bind(this)
 
-    const {assignment, gradingScheme, pendingGradeInfo, submission} = props
-    const value = formatGrade(submission, assignment, gradingScheme, pendingGradeInfo)
+    const {assignment, gradingScheme, pointsBasedGradingScheme, pendingGradeInfo, submission} =
+      props
+    const value = formatGrade(
+      submission,
+      assignment,
+      gradingScheme,
+      pointsBasedGradingScheme,
+      pendingGradeInfo
+    )
 
     this.state = {
       gradeInfo: pendingGradeInfo || getGradeInfo(submission.excused ? 'EX' : value, this.props),
       menuIsOpen: false,
-      value: formatGrade(submission, assignment, gradingScheme, pendingGradeInfo),
+      value: formatGrade(
+        submission,
+        assignment,
+        gradingScheme,
+        pointsBasedGradingScheme,
+        pendingGradeInfo
+      ),
     }
   }
 
   UNSAFE_componentWillReceiveProps(nextProps) {
     if (this.textInput !== document.activeElement) {
-      const {assignment, gradingScheme, pendingGradeInfo, submission} = nextProps
-      const value = formatGrade(submission, assignment, gradingScheme, pendingGradeInfo)
+      const {assignment, gradingScheme, pointsBasedGradingScheme, pendingGradeInfo, submission} =
+        nextProps
+      const value = formatGrade(
+        submission,
+        assignment,
+        gradingScheme,
+        pointsBasedGradingScheme,
+        pendingGradeInfo
+      )
 
       this.setState({
         gradeInfo: pendingGradeInfo || getGradeInfo(submission.excused ? 'EX' : value, nextProps),
-        value: formatGrade(submission, assignment, gradingScheme, pendingGradeInfo),
+        value: formatGrade(
+          submission,
+          assignment,
+          gradingScheme,
+          pointsBasedGradingScheme,
+          pendingGradeInfo
+        ),
       })
     }
   }
@@ -160,7 +196,7 @@ export default class GradingSchemeInput extends Component {
   handleSelect(event, value) {
     const gradeInfo = getGradeInfo(value, this.props)
     const formattedGrade = GradeFormatHelper.formatGradeInfo(gradeInfo)
-    this.setState({gradeInfo, value: formattedGrade})
+    this.setState({gradeInfo, value: GradeFormatHelper.replaceDashWithMinus(formattedGrade)})
   }
 
   handleTextChange(event) {
@@ -191,8 +227,13 @@ export default class GradingSchemeInput extends Component {
       return this.state.value.trim() !== this.props.pendingGradeInfo.grade
     }
 
-    const {assignment, gradingScheme, submission} = this.props
-    const formattedGrade = formatGrade(submission, assignment, gradingScheme)
+    const {assignment, gradingScheme, pointsBasedGradingScheme, submission} = this.props
+    const formattedGrade = formatGrade(
+      submission,
+      assignment,
+      gradingScheme,
+      pointsBasedGradingScheme
+    )
 
     if (formattedGrade === this.state.value.trim()) {
       return false
@@ -221,7 +262,7 @@ export default class GradingSchemeInput extends Component {
 
         <div className="Grid__GradeCell__GradingSchemeMenu">
           <Menu
-            contentRef={this.props.menuContentRef}
+            menuRef={this.props.menuContentRef}
             onDismiss={this.props.onMenuDismiss}
             onToggle={this.handleToggle}
             onSelect={this.handleSelect}
@@ -239,7 +280,7 @@ export default class GradingSchemeInput extends Component {
           >
             {this.props.gradingScheme.map(([key]) => (
               <Menu.Item key={key} value={key}>
-                {key}
+                {GradeFormatHelper.replaceDashWithMinus(key)}
               </Menu.Item>
             ))}
 

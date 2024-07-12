@@ -213,6 +213,7 @@ module SpeedGrader
                 end,
               submissions:
             )
+          json[:fake_student] = !!student.preferences[:fake_student]
           json
         end
 
@@ -605,7 +606,7 @@ module SpeedGrader
       group_id =
         current_user
         .get_preference(:gradebook_settings, course.global_id)
-          &.dig("filter_rows_by", "student_group_id")
+        &.dig("filter_rows_by", "student_group_id")
 
       # If we selected a group that is now deleted, don't use it
       Group.active.where(id: group_id).exists? ? group_id : nil

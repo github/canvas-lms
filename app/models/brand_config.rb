@@ -21,7 +21,7 @@ class BrandConfig < ActiveRecord::Base
   include BrandableCSS
 
   self.primary_key = "md5"
-  serialize :variables, Hash
+  serialize :variables, type: Hash
 
   OVERRIDE_TYPES = %i[js_overrides css_overrides mobile_js_overrides mobile_css_overrides].freeze
   ATTRS_TO_INCLUDE_IN_MD5 = ([:variables, :parent_md5] + OVERRIDE_TYPES).freeze
@@ -260,7 +260,7 @@ class BrandConfig < ActiveRecord::Base
       # When someone is actively working in the theme editor, it just saves one
       # in their session, so only delete stuff that is more than a week old,
       # to not clear out a theme someone was working on.
-      .where(["created_at < ?", 1.week.ago])
+      .where(created_at: ...1.week.ago)
       .where.not(Account.where("brand_config_md5=brand_configs.md5").arel.exists)
       .where.not(SharedBrandConfig.where("brand_config_md5=brand_configs.md5").arel.exists)
       .delete_all

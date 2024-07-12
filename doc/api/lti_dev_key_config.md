@@ -1,4 +1,4 @@
-# Configuring LTI Advantage Tools
+# Manually Configuring LTI Advantage Tools
 
 <a name="top"></a>
 
@@ -8,7 +8,7 @@
 For a successful launch to occur, LTI Advantage Tools require configuration
 on both Canvas and inside the tool:
 
-- [Configuring LTI Advantage Tools](#configuring-lti-advantage-tools)
+- [Manually Configuring LTI Advantage Tools](#configuring-lti-advantage-tools)
 - [Overview of an LTI Launch](#overview-of-an-lti-launch)
 - [Configuring Canvas in the Tool](#configuring-canvas-in-the-tool)
 - [Configuring the Tool in Canvas](#configuring-the-tool-in-canvas)
@@ -94,6 +94,8 @@ Tools that wish to utilize this redirect need to make sure that all possible ini
 
 Tools that utilize different instances for beta and test must also make sure that they are storing the correct corresponding values for Canvas URLS like the OIDC Auth URL, JWKs URL, and the Issuer/`iss`, and that they use the beta or test versions of all of those URLs when the tool is launched from beta or test Canvas.
 
+Using the `oidc_initiation_urls` option described [in the JSON tool config](#request-params) can also produce a similar outcome while removing the need for the tool to perform an internal redirect.
+
 <a name="step-2"></a>
 ###Step 2: Authentication Request
 To complete authentication, tools are expected to send back an <a href="http://www.imsglobal.org/spec/security/v1p0/#step-2-authentication-request" target="_blank">authentication request</a> to an "OIDC Authorization end-point". This can be a GET or POST, however, this request needs to be a redirect in the user’s browser and not made server to server as we need to validate the current user's session data. For cloud-hosted Canvas, regardless of the domain used by the client, the endpoint is always:
@@ -127,28 +129,30 @@ or another situation where cookies can't get set to still store data across requ
 Canvas asking it to store and retrieve arbitrary data, which acts as a cookie-like proxy.
 
 The LTI Platform Storage spec includes an [implementation guide](https://www.imsglobal.org/spec/lti-cs-oidc/v0p1)
-which should function as the primary resource for implementing this, though a brief usage overview is included below:
-
-In Step 2, instead of storing the `state` parameter in a cookie, the tool should store it in Canvas's LTI Platform Storage using the `lti.put_data` postMessage. It's recommended that the key include the value (eg key: "state-1234", value: "1234) to avoid any collisions during multiple launches, and to make recovering the value easy.
-
-In Step 4, instead of comparing the `state` parameter to the stored value in the cookie, the tool should retrieve it using the `lti.get_data` postMessage. Since this comparison has to happen in Javascript instead of on the server, the tool should render _something_, then check these values. If the values don't match, the tool can then log the user out or render an error.
-
-**Note** that according to the spec, the target origin for these postMessages must be the OIDC Auth domain (e.g. `https://sso.canvaslms.com`). Since every institution's domain varies, Canvas renders a frame at this domain that will respond to postMessages, and the name of this frame is supplied in the `lti_storage_target` parameter, provided as a body parameter in both login and launch requests. Tools should send their `lti.put_data` and `lti.get_data` postMessages to that frame, but can continue send all other postMessage types to the parent window.
-
-Other LTI Platform Storage spec docs:
-
-- [Client-side postMessages](https://www.imsglobal.org/spec/lti-cs-pm/v0p1)
-- [postMessage Platform Storage](https://www.imsglobal.org/spec/lti-pm-s/v0p1)
-- [Canvas postMessage documentation](file.lti_window_post_message.html)
+which **needs to be the primary resource for implementing this**, though a brief usage overview is included below.
 
 Support for this API is determined by either:
 
 1. the presence of the `lti_storage_target` as an extra body parameter in both the login (Step 1) and launch (Step 3) requests, or
 2. a response postMessage to the `lti.capabilities` postMessage that contains the `lti.get_data` and `lti.put_data` subjects.
 
-**Note** that `lti_storage_target` is currently present in all launches, including from the Canvas mobile apps. Support for this API in the Canvas mobile apps is not yet implemented, and
-the requirements for supporting it are currently under review. Tools should confirm using the `lti.capabilities` postMessage if the current launch supports this API. If tools do not get a
-response to that or any message in this API, they should assume that this API is not supported and try to set a cookie instead.
+If the `lti_storage_target` parameter is absent, or the tool doesn't receive a response postMessage for `lti.capabilities`, then the tool
+should not attempt to use this API and should fall back to cookies to verify the launch `state` parameter.
+
+When the tool sees either of the above signals that Canvas supports this API, then:
+
+1. In Step 2, instead of storing the `state` parameter in a cookie the tool should store it in Canvas's LTI Platform Storage using the `lti.put_data` postMessage. It's recommended that the key include the value (eg key: "state-1234", value: "1234") to avoid any collisions during multiple launches, and to make recovering the value easy.
+
+2. In Step 4, instead of comparing the `state` parameter to the stored value in the cookie, the tool should retrieve it using the `lti.get_data` postMessage. Since this comparison has to happen in Javascript instead of on the server, the tool should render _something_, then check these values. If the values don't match, the tool can then log the user out or render an error.
+
+According to the spec, the target origin for these postMessages must be the OIDC Auth domain (e.g. `https://sso.canvaslms.com`). Since every institution's domain varies, Canvas renders a frame at this domain that will respond to postMessages, and the name of this frame is supplied in the `lti_storage_target` parameter, provided as a body parameter in both login and launch requests. Tools should send their `lti.put_data` and `lti.get_data` postMessages to that frame, but can continue to send all other postMessage types to the parent window.
+
+The LTI Platform Storage spec docs:
+
+- [LTI OIDC Login with LTI Client Side postMessages](https://www.imsglobal.org/spec/lti-cs-oidc/v0p1)
+- [Client-side postMessages](https://www.imsglobal.org/spec/lti-cs-pm/v0p1)
+- [postMessage Platform Storage](https://www.imsglobal.org/spec/lti-pm-s/v0p1)
+- [Canvas postMessage documentation](file.lti_window_post_message.html)
 
 <a name="config-in-tool"></a>
 Configuring Canvas in the Tool
@@ -213,6 +217,10 @@ also found in the placements sub-menu in the left-navigation of this documentati
   "title": "The Best Tool",
   "description": "1.3 Test Tool used for documentation purposes.",
   "oidc_initiation_url": "https://your.oidc_initiation_url",
+  "oidc_initiation_urls": {
+    "eu-west-1": "https://your.eu-specific1.oidc_initiation_url",
+    "eu-central-1": "https://your.eu-specific2.oidc_initiation_url"
+  },
   "target_link_uri": "https://your.target_link_uri",
   "scopes": [
     "https://purl.imsglobal.org/spec/lti-ags/scope/lineitem",
@@ -226,6 +234,12 @@ also found in the placements sub-menu in the left-navigation of this documentati
       "privacy_level": "public",
       "settings": {
         "text": "Launch The Best Tool",
+        "labels": {
+          "en": "Launch The Best Tool",
+          "en-AU": "G'day, Launch The Best Tool",
+          "es": "Lanzar la mejor herramienta",
+          "zh-Hans": "启动最佳工具"
+        },
         "icon_url": "https://some.icon.url/tool-level.png",
         "selection_height": 800,
         "selection_width": 800,
@@ -278,6 +292,8 @@ also found in the placements sub-menu in the left-navigation of this documentati
 }
 ```
 
+<a name="request-params"></a>
+
 <table class="request-params">
   <thead>
     <tr>
@@ -326,7 +342,7 @@ also found in the placements sub-menu in the left-navigation of this documentati
 
       <td class="param-desc">
 
-<p>A description of the tool</p>
+<p>A description of the tool.</p>
 
       </td>
     </tr>
@@ -335,6 +351,7 @@ also found in the placements sub-menu in the left-navigation of this documentati
 
     <tr class="request-param ">
       <td>oidc_initiation_url</td>
+
       <td>
 
         Required
@@ -347,6 +364,24 @@ also found in the placements sub-menu in the left-navigation of this documentati
       <td class="param-desc">
 
 <p>The <a href="https://www.imsglobal.org/spec/security/v1p0#step-1-third-party-initiated-login" target="_blank">login initiation url</a> that Canvas should redirect the User Agent to.
+
+      </td>
+    </tr>
+
+<!-- oidc_initiation_urls -->
+
+    <tr class="request-param ">
+      <td><a name="param-oidc-initial-urls"></a>oidc_initiation_urls</td>
+      <td>
+
+      </td>
+      <td>JSON object</td>
+
+
+
+      <td class="param-desc">
+
+<p>Optional region-specific <a href="https://www.imsglobal.org/spec/security/v1p0#step-1-third-party-initiated-login" target="_blank">login initiation urls</a> that Canvas should redirect the User Agent to. Each institution's Canvas install lives in a particular AWS region, typically one close to the institution's physical region. If ths AWS region is listed as a key in this object, the URL in the value will override the default `oidc_initiation_url`. As of 2023, the regions used by Canvas are: us-east-1, us-west-2, ca-central-1, eu-west-1, eu-central-1, ap-southeast-1, ap-southeast-2.
 
       </td>
     </tr>
@@ -368,7 +403,7 @@ also found in the placements sub-menu in the left-navigation of this documentati
 
 <p>The <a href="https://www.imsglobal.org/spec/security/v1p0#step-1-third-party-initiated-login" target="_blank">target_link_uri</a> that Canvas should pass in the to the login initiation endpoint. This allows tools to determine which redirect_uri to pass Canvas in the authorization redirect request and should be <a href="https://www.imsglobal.org/spec/lti/v1p3/impl#verify-the-target_link_uri" target="_blank">verified during the final
 launch</a>. This can be set at the tool-level, or within the "placements" JSON
-object for placement-specific target_link_uri's</p>
+object for placement-specific target_link_uri's.</p>
 
       </td>
     </tr>
@@ -413,14 +448,13 @@ object for placement-specific target_link_uri's</p>
       <td>
 
       </td>
-      <td>JSON object</td>
+      <td>array of JSON objects</td>
 
 
 
       <td class="param-desc">
 
-<p>The set of Canvas extensions, including placements, that the tool should use
-</p>
+<p>The set of Canvas extensions, including placements, that the tool should use.</p>
 
       </td>
     </tr>
@@ -438,7 +472,7 @@ object for placement-specific target_link_uri's</p>
 
       <td class="param-desc">
 
-<p>The domain Canvas should use to match clicked LTI links against. This is recommended if <a href="file.content_item.html">deep linking</a> is used</p>.
+<p>The domain Canvas should use to match clicked LTI links against. This is recommended if <a href="file.content_item.html">deep linking</a> is used.</p>
 
       </td>
     </tr>
@@ -456,7 +490,7 @@ object for placement-specific target_link_uri's</p>
 
       <td class="param-desc">
 
-<p>Allows tools to set a unique identifier for the tool.</p>.
+<p>Allows tools to set a unique identifier for the tool.</p>
 
       </td>
     </tr>
@@ -474,7 +508,7 @@ object for placement-specific target_link_uri's</p>
 
       <td class="param-desc">
 
-<p>The LMS platform that the extensions belong to. This should always be set to "canvas.instructure.com" for cloud-hosted Canvas</p>
+<p>The LMS platform that the extensions belong to. This should always be set to "canvas.instructure.com" for cloud-hosted Canvas.</p>
 
       </td>
     </tr>
@@ -523,6 +557,43 @@ object for placement-specific target_link_uri's</p>
       </td>
     </tr>
 
+<!-- text -->
+
+    <tr class="request-param ">
+      <td>text</td>
+      <td>
+
+      </td>
+      <td>string</td>
+
+
+
+      <td class="param-desc">
+
+<p>The default text to show for this tool. Can be set within "settings" for the tool-level display text, or within "placements" object for placement-specific display text.</p>
+
+      </td>
+    </tr>
+
+<!-- labels -->
+
+    <tr class="request-param ">
+      <td>labels</td>
+      <td>
+
+      </td>
+      <td>JSON object</td>
+
+
+
+      <td class="param-desc">
+
+<p>An object for translations of the "text", used to support internationalization (i18n) / localization (l10n). If the user's Canvas interface is set to one of the languages listed, the tool will display the translated text in place of the value in the "text" field. More specific locales ("en-AU") are preferred over less specific ones ("en").  Can be set within "settings" or individual placements.
+</p>
+
+      </td>
+    </tr>
+
 <!-- icon_url -->
 
     <tr class="request-param ">
@@ -567,24 +638,6 @@ object for placement-specific target_link_uri's</p>
       <td class="param-desc">
 
 <p>The display width of the iframe. This may be ignored or overridden for some LTI placements due to other UI requirements set by Canvas. Tools are advised to experiment with this setting to see what makes the most sense for their application.</p>
-
-<!-- text -->
-
-      </td>
-    </tr>
-
-    <tr class="request-param ">
-      <td>text</td>
-      <td>
-
-      </td>
-      <td>string</td>
-
-
-
-      <td class="param-desc">
-
-<p>The default text to show for this tool. Can be set within "settings" for the tool-level display text, or within "placements" object for placement-specific display text.</p>
 
       </td>
     </tr>
@@ -665,7 +718,8 @@ object for placement-specific target_link_uri's</p>
         <p>LTI 1.1 tools <a href="file.tools_xml.html">support environment-specific domains and launch urls</a>, used for launching
         from beta or test instances of Canvas. This config option is not supported for LTI 1.3. Tools instead should use the
         <code>canvas_environment</code> parameter of the OIDC Login request to redirect to environment-specific launch urls or
-        instances of the tool, as specified in <a href="file.lti_dev_key_config.html#login-redirect">Step 1.5</a> above.
+        instances of the tool, as specified in <a href="file.lti_dev_key_config.html#login-redirect">Step 1.5</a> above, and/or
+        use the region-specific <a href="#param-oidc-initial-urls">oidc_initiation_urls</a>.
         </p>
       </td>
     </tr>

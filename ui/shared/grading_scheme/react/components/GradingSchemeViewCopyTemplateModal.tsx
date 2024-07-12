@@ -17,7 +17,6 @@
  */
 import React, {useEffect, useRef, useState} from 'react'
 import {useScope as useI18nScope} from '@canvas/i18n'
-// @ts-expect-error -- TODO: remove once we're on InstUI 8
 import {Modal} from '@instructure/ui-modal'
 import {Button, CloseButton} from '@instructure/ui-buttons'
 import {Heading} from '@instructure/ui-heading'
@@ -28,10 +27,10 @@ import {useGradingSchemeCreate} from '../hooks/useGradingSchemeCreate'
 import {useDefaultGradingScheme} from '../hooks/useDefaultGradingScheme'
 import {
   GradingSchemeInput,
-  GradingSchemeEditableData,
-  GradingSchemeInputHandle,
+  type GradingSchemeEditableData,
+  type GradingSchemeInputHandle,
 } from './form/GradingSchemeInput'
-import {GradingSchemeSummary, GradingSchemeTemplate} from '../../gradingSchemeApiModel'
+import type {GradingScheme, GradingSchemeSummary} from '../../gradingSchemeApiModel'
 import {GradingSchemeTemplateView} from './view/GradingSchemeTemplateView'
 import {defaultPointsGradingScheme} from '../../defaultPointsGradingScheme'
 
@@ -41,7 +40,6 @@ export interface ComponentProps {
   contextType: 'Account' | 'Course'
   contextId: string
   allowDuplication: boolean
-  pointsBasedGradingSchemesEnabled: boolean
   onCreate?: (gradingSchemeSummary: GradingSchemeSummary) => any
   onCancel: () => any
 }
@@ -52,12 +50,11 @@ export const GradingSchemeViewCopyTemplateModal = ({
   onCreate,
   onCancel,
   allowDuplication,
-  pointsBasedGradingSchemesEnabled,
 }: ComponentProps) => {
   const {createGradingScheme /* deleteGradingSchemeStatus */} = useGradingSchemeCreate()
   const {loadDefaultGradingScheme /* deleteGradingSchemeStatus */} = useDefaultGradingScheme()
   const [defaultCanvasGradingSchemeTemplate, setDefaultCanvasGradingSchemeTemplate] = useState<
-    GradingSchemeTemplate | undefined
+    GradingScheme | undefined
   >(undefined)
   const [copying, setCopying] = useState<boolean>(false)
   const toggleCopying = () => {
@@ -94,7 +91,11 @@ export const GradingSchemeViewCopyTemplateModal = ({
       showFlashSuccess(I18n.t('Grading scheme was successfully created.'))()
       if (onCreate) {
         // if parent supplied a callback method, inform parent that grading scheme was created
-        onCreate({title: createdGradingScheme.title, id: createdGradingScheme.id})
+        onCreate({
+          title: createdGradingScheme.title,
+          id: createdGradingScheme.id,
+          context_type: createdGradingScheme.context_type,
+        })
       }
     } catch (error) {
       showFlashError(I18n.t('There was an error while creating the grading scheme'))(error as Error)
@@ -149,7 +150,6 @@ export const GradingSchemeViewCopyTemplateModal = ({
                       pointsBased: true,
                     },
                   }}
-                  pointsBasedGradingSchemesFeatureEnabled={pointsBasedGradingSchemesEnabled}
                   onSave={modifiedGradingScheme => handleCreateScheme(modifiedGradingScheme)}
                 />
               ) : (

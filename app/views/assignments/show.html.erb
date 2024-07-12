@@ -20,6 +20,21 @@
   #right-side-wrapper {
     height: 100%;
   }
+
+  .assignment_header {
+    border-bottom: 1px solid #a4a4a4;
+    overflow: hidden;
+  }
+
+  #assignment_head {
+    margin-top: 0;
+    font-weight: bold;
+  }
+
+  .lock_explanation {
+    text-align: left;
+    margin-top: 20px;
+  }
 </style>
 
 <% provide :page_title, @assignment.title %>
@@ -27,8 +42,13 @@
 
 <% if @show_locked_page %>
 
-  <h1><%= @assignment.title %></h1>
-  <%= @locked.is_a?(Hash) ? lock_explanation(@locked, 'assignment', @context) : t(:assignment_locked, "This assignment is currently locked.") %>
+  <div class="assignment_header">
+    <h1 id="assignment_head"><%= @assignment.title %></h1>
+    <%= render :partial => "assignment_details" %>
+    <div class="lock_explanation">
+      <%= @locked.is_a?(Hash) ? lock_explanation(@locked, 'assignment', @context) : t(:assignment_locked, "This assignment is currently locked.") %>
+    </div>
+  </div>
 
 <% else %>
 
@@ -37,7 +57,7 @@
     <%= t("This assignment does not count toward the final grade.") %>
   </div>
 <% end %>
-<div id="assignment_show" class="assignment content_underline_links">
+<div id="assignment_show" class="assignment content_underline_links" data-lti-page-content="true">
   <% if can_do(@context, @current_user, :read_as_admin) %>
     <div class='assignment-title'>
       <div class='title-content'>
@@ -51,6 +71,17 @@
           data-id='<%= @assignment.id %>'
           class='btn <%= "published" if @assignment.published? %> <%= "disabled" unless assignment_publishing_enabled?(@assignment, @current_user) %>'>
         </button>
+        <% if @assignment.grants_right?(@current_user, :manage_assign_to) && Account.site_admin.feature_enabled?(:selective_release_ui_api) %>
+          <button
+            class='btn assign-to-link'
+            data-assignment-name="<%= @assignment.title %>"
+            data-assignment-context-id="<%= @assignment.context_id %>"
+            data-assignment-id="<%= @assignment.id %>"
+            data-assignment-points-possible="<%= @assignment.points_possible %>"
+          >
+            <i class='icon-permissions'></i> <%= t('Assign To') %>
+          </button>
+        <% end %>
         <% if @context.grants_any_right?(@current_user, :manage_assignments, :manage_assignments_edit) %>
           <a href="<%= edit_polymorphic_path([@context, @assignment]) %>" class='btn edit_assignment_link<%= ' disabled' unless can_do(@assignment, @current_user, :update) %>'>
             <i class='icon-edit'></i> <%= t('links.edit', 'Edit') %>
@@ -80,7 +111,7 @@
             <% if @can_link_to_speed_grader %>
               <li id="speed-grader-link-container" role="presentation" class='<%= "hidden" unless @assignment.published? %>'>
                 <a href="<%= context_url(@context, :speed_grader_context_gradebook_url, :assignment_id => @assignment.id) %>" class="speed-grader-link-assignment icon-speed-grader">
-                  <%= t(:speed_grader, "SpeedGrader™") %>
+                  <%= t(:speed_grader, "SpeedGrader") %>
                 </a>
               </li>
             <% end %>
@@ -98,6 +129,7 @@
       </div>
     </div>
     <div id="direct-share-mount-point"></div>
+    <div id="assign-to-mount-point"></div>
   <% else %>
     <!--Student View-->
     <% if show_confetti %>
@@ -125,6 +157,10 @@
 
   <div class="clear"></div>
 
+  <% if @current_user_submission&.has_submission? && @domain_root_account&.feature_enabled?(:lti_before_assignment_results) %>
+  <div id="assignment_external_tools"></div>
+  <% end %>
+
   <% description = @assignment.description.present? ? public_user_content(@assignment.description) : t("No additional details were added for this assignment.") %>
 
   <% if @assignment.annotated_document? %>
@@ -135,7 +171,7 @@
     </div>
   <% end %>
 
-  <div class="description user_content <%= can_do(@context, @current_user, :read_as_admin) ? "teacher-version" : "" %>"><%= description %></div>
+  <div class="description user_content <%= can_do(@context, @current_user, :read_as_admin) ? "teacher-version" : "" %>" data-resource-type="assignment.body" data-resource-id=<%= @assignment.id %>><%= description %></div>
 
   <% if can_do(@context, @current_user, :read_as_admin) %>
     <!--Teacher view-->

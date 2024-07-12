@@ -36,7 +36,7 @@ Use this whenever you don't want to do anything custom with your header or your 
 You should be able to use it exactly like you'd use an instUi Modal by changing:
 import {Modal} from '@instructure/ui-overlays'
 to
-import Modal from '../shared/components/InstuiModal'
+import Modal from '@canvas/instui-bindings/react/InstuiModal'
 
 <Modal
   open={this.state.open}
@@ -72,7 +72,7 @@ function getLiveRegion(): HTMLElement | null {
   return document.getElementById('flash_screenreader_holder')
 }
 
-export default function CanvasInstUIModal({
+function CanvasInstUIModal({
   label,
   closeButtonLabel,
   onDismiss,
@@ -101,4 +101,8 @@ export default function CanvasInstUIModal({
   )
 }
 
-;['Header', 'Body', 'Footer'].forEach(prop => (CanvasInstUIModal[prop] = Modal[prop]))
+export default CanvasInstUIModal
+
+CanvasInstUIModal.Header = Modal.Header
+CanvasInstUIModal.Body = Modal.Body
+CanvasInstUIModal.Footer = Modal.Footer

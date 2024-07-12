@@ -193,6 +193,9 @@ const locale = {
   "congruent_5a244acd": { "message": "Congruente" },
   "contains_311f37b7": { "message": "Contém" },
   "content_1440204b": { "message": "Conteúdo" },
+  "content_in_the_editor_will_be_changed_press_cancel_d5bf3357": {
+    "message": "O conteúdo do editor será alterado. Pressione Cancelar para manter o conteúdo original."
+  },
   "content_is_still_being_uploaded_if_you_continue_it_8f06d0cb": {
     "message": "Conteúdo ainda está sendo carregado, se você continuar, ele não será incorporado adequadamente."
   },
@@ -334,6 +337,10 @@ const locale = {
   "enter_at_least_3_characters_to_search_4f037ee0": {
     "message": "Insira pelo menos 3 caracteres para pesquisar"
   },
+  "enter_replacement_text_17631bbc": {
+    "message": "digite o texto de substituição"
+  },
+  "enter_search_text_26cb4459": { "message": "digite o texto de pesquisa" },
   "epsilon_54bb8afa": { "message": "Épsilon" },
   "epsilon_variant_d31f1e77": { "message": "Épsilon (variante)" },
   "equals_sign_c51bdc58": { "message": "Sinal de igual" },
@@ -378,6 +385,8 @@ const locale = {
   },
   "files_c300e900": { "message": "Arquivos" },
   "files_index_af7c662b": { "message": "Índice de arquivos" },
+  "find_8d605019": { "message": "Localizar" },
+  "find_and_replace_6e345933": { "message": "Localizar e substituir" },
   "finish_bc343002": { "message": "Concluir" },
   "fix_heading_hierarchy_f60884c4": {
     "message": "Corrigir hierarquia de títulos"
@@ -500,6 +509,7 @@ const locale = {
   "in_element_of_19ca2f33": { "message": "Em (elemento de)" },
   "increase_indent_6af90f7c": { "message": "Aumentar recuo" },
   "indefinite_integral_6623307e": { "message": "Integral indefinida" },
+  "index_of_max_80dcf7a5": { "message": "{ index } de { max }" },
   "indigo_2035fc55": { "message": "Índigo" },
   "inference_fed5c960": { "message": "Inferência" },
   "infinity_7a10f206": { "message": "Infinity" },
@@ -679,6 +689,7 @@ const locale = {
   "nested_less_than_27d17e58": { "message": "Aninhado menos de" },
   "new_quiz_34aacba6": { "message": "Novo teste" },
   "next_40e12421": { "message": "Próximo" },
+  "next_findtext_9d69f0fe": { "message": "Próximo { findText }" },
   "no_accessibility_issues_were_detected_f8d3c875": {
     "message": "Sem problemas de acessibilidades detectados."
   },
@@ -720,6 +731,7 @@ const locale = {
   },
   "no_quizzes_found_c80c537a": { "message": "Nenhum teste encontrado." },
   "no_results_940393cf": { "message": "Sem resultados." },
+  "no_results_found_58717065": { "message": "Nenhum resultado encontrado" },
   "no_results_found_for_filterterm_ad1b04c8": {
     "message": "Nenhum resultado encontrado para { filterTerm }"
   },
@@ -808,6 +820,9 @@ const locale = {
   "precedes_196b9aef": { "message": "Precede" },
   "precedes_equal_20701e84": { "message": "Precede igual" },
   "preformatted_d0670862": { "message": "Pré-formatado" },
+  "prepend_findtext_append_8e0e769a": {
+    "message": "{ prepend }{ findText }{ append }"
+  },
   "prev_f82cbc48": { "message": "Ant" },
   "preview_53003fd2": { "message": "Pré-visualização" },
   "preview_a3f8f854": { "message": "PRÉ-VISUALIZAÇÃO" },
@@ -815,6 +830,8 @@ const locale = {
     "message": "Pré-visualizar na sobreposição"
   },
   "preview_inline_9787330": { "message": "Pré-visualizar em linha" },
+  "previous_bd2ac015": { "message": "Anterior" },
+  "previous_findtext_8dfbfd30": { "message": "{ findText } anterior" },
   "prime_917ea60e": { "message": "Melhor" },
   "prime_numbers_13464f61": { "message": "Números primos" },
   "product_39cf144f": { "message": "Produto" },
@@ -843,11 +860,28 @@ const locale = {
   "religion_icon_246e0be1": { "message": "Ícone de religião" },
   "remove_heading_style_5fdc8855": { "message": "Remover estilo do título" },
   "remove_link_d1f2f4d0": { "message": "Remover link" },
+  "replace_all_d3d68b3": { "message": "Substituir todos" },
+  "replace_all_findtext_with_replacetext_da574b32": {
+    "message": "Substituir todos { findText } por { replaceText }"
+  },
   "replace_e61834a7": { "message": "Substituir" },
+  "replace_findtext_with_replacetext_7b5c7fb3": {
+    "message": "Substituir { findText } por { replaceText }"
+  },
+  "replace_with_eeff01ad": { "message": "Substituir por" },
+  "replaced_alertfindtext_with_alertreplacetext_de5c1795": {
+    "message": "Substituído { alertFindText } por { alertReplaceText }"
+  },
+  "replaced_all_alertfindtext_with_alertreplacetext_83fdfe59": {
+    "message": "Substituído todos { alertFindText } por { alertReplaceText }"
+  },
   "reset_95a81614": { "message": "Redefinir" },
   "resize_ec83d538": { "message": "Redimensionar" },
   "restore_auto_save_deccd84b": {
     "message": "Restaurar salvamento automático?"
+  },
+  "result_index_of_max_7db5ad8b": {
+    "message": "Resultado { index } de { max }."
   },
   "reverse_turnstile_does_not_yield_7558be06": {
     "message": "Catraca reversa (não cede)"

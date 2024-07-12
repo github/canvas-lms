@@ -61,11 +61,42 @@ describe Types::AssignmentType do
     expect(assignment_type.resolve("moderatedGradingEnabled")).to eq assignment.moderated_grading?
     expect(assignment_type.resolve("postManually")).to eq assignment.post_manually?
     expect(assignment_type.resolve("published")).to eq assignment.published?
+    expect(assignment_type.resolve("importantDates")).to eq assignment.important_dates
   end
 
   it_behaves_like "types with enumerable workflow states" do
     let(:enum_class) { Types::AssignmentType::AssignmentStateType }
     let(:model_class) { Assignment }
+  end
+
+  describe "hasGroupCategory" do
+    it "returns true for group assignments" do
+      assignment.update!(group_category: course.group_categories.create!(name: "My Category"))
+      expect(assignment_type.resolve("hasGroupCategory")).to be true
+    end
+
+    it "returns false for non-group assignments" do
+      expect(assignment_type.resolve("hasGroupCategory")).to be false
+    end
+  end
+
+  describe "gradeAsGroup" do
+    it "returns true for group assignments being graded as group" do
+      assignment.update!(group_category: course.group_categories.create!(name: "My Category"))
+      expect(assignment_type.resolve("gradeAsGroup")).to be true
+    end
+
+    it "returns false for group assignments being graded individually" do
+      assignment.update!(
+        group_category: course.group_categories.create!(name: "My Category"),
+        grade_group_students_individually: true
+      )
+      expect(assignment_type.resolve("gradeAsGroup")).to be false
+    end
+
+    it "returns false for non-group assignments" do
+      expect(assignment_type.resolve("gradeAsGroup")).to be false
+    end
   end
 
   context "top-level permissions" do
@@ -307,6 +338,19 @@ describe Types::AssignmentType do
     expect(assignment_type.resolve("allowedAttempts")).to eq 7
   end
 
+  describe "gradingStandard" do
+    it "returns the grading standard" do
+      grading_standard = course.grading_standards.create!(title: "Win/Lose", data: [["Winner", 0.94], ["Loser", 0]])
+      assignment.update(grading_type: "letter_grade", grading_standard_id: grading_standard.id)
+      assignment.save!
+      expect(assignment_type.resolve("gradingStandard { title }")).to eq grading_standard.title
+    end
+
+    it "returns null if no grading standard is set" do
+      expect(assignment_type.resolve("gradingStandard { title }")).to be_nil
+    end
+  end
+
   describe "submissionsConnection" do
     let_once(:other_student) { student_in_course(course:, active_all: true).user }
 
@@ -344,6 +388,41 @@ describe Types::AssignmentType do
                                                                direction: "descending"
                                                              }]
                                                            })
+    end
+
+    context "include_unsubmitted" do
+      it "returns unsubmitted submission when include_unsubmitted is true" do
+        assignment_unsubmitted = course.assignments.create!
+        assignment_unsubmitted.update!(submission_types: "online_text_entry")
+        assignment_type_2 = GraphQLTypeTester.new(assignment_unsubmitted, current_user: student)
+
+        result = assignment_type_2.resolve(<<~GQL, current_user: student)
+          submissionsConnection(
+            filter: {
+              includeUnsubmitted: true
+            }
+          ) { nodes { state } }
+        GQL
+
+        expect(result.count).to eq 1
+        expect(result[0]).to eq "unsubmitted"
+      end
+
+      it "does not return unsubmitted submission when include_unsubmitted is false" do
+        assignment_unsubmitted = course.assignments.create!
+        assignment_unsubmitted.update!(submission_types: "online_text_entry")
+        assignment_type_2 = GraphQLTypeTester.new(assignment_unsubmitted, current_user: student)
+
+        result = assignment_type_2.resolve(<<~GQL, current_user: student)
+          submissionsConnection(
+            filter: {
+              includeUnsubmitted: false
+            }
+          ) { nodes { state } }
+        GQL
+
+        expect(result.count).to eq 0
+      end
     end
 
     it "returns 'real' submissions from with permissions" do
@@ -684,6 +763,21 @@ describe Types::AssignmentType do
         GQL
       ).to eq ["555"]
     end
+
+    it "works for Course tags" do
+      Account.site_admin.enable_feature!(:selective_release_backend)
+      assignment.assignment_overrides.create!(set: course)
+
+      expect(
+        assignment_type.resolve(<<~GQL, current_user: teacher)
+          assignmentOverrides { edges { node { set {
+            ... on Course {
+              _id
+            }
+          } } } }
+        GQL
+      ).to eq [course.id.to_s]
+    end
   end
 
   describe Types::LockInfoType do
@@ -775,6 +869,127 @@ describe Types::AssignmentType do
             teacher_assignment_type.resolve("restrictQuantitativeData(checkExtraPermissions: true)")
           ).to be false
         end
+      end
+    end
+  end
+
+  describe "checkpoints" do
+    describe "when feature flag is disabled" do
+      it "checkpoints is nil and hasSubAssignments is false" do
+        expect(assignment_type.resolve("checkpoints {tag}")).to be_nil
+        expect(assignment_type.resolve("hasSubAssignments")).to be_falsey
+      end
+    end
+
+    describe "when feature flag is enabled" do
+      before do
+        course.root_account.enable_feature!(:discussion_checkpoints)
+      end
+
+      it "checkpoints is [] and hasSubAssignments is false" do
+        expect(assignment_type.resolve("checkpoints {tag}")).to eq []
+        expect(assignment_type.resolve("hasSubAssignments")).to be_falsey
+      end
+
+      describe "when assignment has checkpoint assignments" do
+        before do
+          assignment.update!(has_sub_assignments: true)
+          @c1 = assignment.sub_assignments.create!(context: course, sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC, points_possible: 5, due_at: 3.days.from_now)
+          @c2 = assignment.sub_assignments.create!(context: course, sub_assignment_tag: CheckpointLabels::REPLY_TO_ENTRY, points_possible: 10, due_at: 5.days.from_now)
+        end
+
+        it "checkpoints returns the correct tags" do
+          expect(assignment_type.resolve("checkpoints {tag}")).to match_array [CheckpointLabels::REPLY_TO_TOPIC, CheckpointLabels::REPLY_TO_ENTRY]
+        end
+
+        it "hasSubAssignments is true" do
+          expect(assignment_type.resolve("hasSubAssignments")).to be_truthy
+        end
+
+        it "checkpoints returns the points possible" do
+          expect(assignment_type.resolve("checkpoints {pointsPossible}")).to match_array [@c1.points_possible, @c2.points_possible]
+        end
+
+        it "checkpoints returns the due at" do
+          expect(assignment_type.resolve("checkpoints {dueAt}")).to match_array [@c1.due_at.iso8601, @c2.due_at.iso8601]
+        end
+
+        it "checkpoints returns the onlyVisibleToOverrides as false" do
+          expect(assignment_type.resolve("checkpoints {onlyVisibleToOverrides}")).to match_array [@c1.only_visible_to_overrides, @c2.only_visible_to_overrides]
+        end
+      end
+
+      describe "when assignment has checkpoints with overrides" do
+        before do
+          @everyone_due_at = 2.days.from_now
+          @section_due_at = 3.days.from_now
+
+          @topic = DiscussionTopic.create_graded_topic!(course:, title: "Checkpointed Discussion")
+          @c1 = Checkpoints::DiscussionCheckpointCreatorService.call(
+            discussion_topic: @topic,
+            checkpoint_label: CheckpointLabels::REPLY_TO_TOPIC,
+            dates: [
+              { type: "everyone", due_at: @everyone_due_at },
+              { type: "override", set_type: "CourseSection", set_id: @topic.course.default_section.id, due_at: @section_due_at }
+            ],
+            points_possible: 10
+          )
+        end
+
+        it "returns assignment overrides for checkpoints" do
+          query = GraphQLTypeTester.new(@topic.assignment, current_user: student)
+
+          expect(query.resolve("checkpoints {pointsPossible}")).to eq [10]
+          expect(query.resolve("checkpoints {dueAt}")).to eq [@everyone_due_at.iso8601]
+          expect(query.resolve("checkpoints {assignmentOverrides {nodes {dueAt}}}")).to eq [[@section_due_at.iso8601]]
+        end
+      end
+    end
+  end
+
+  describe "mySubAssignmentSubmissionsConnection" do
+    context "when feature flag is enabled" do
+      before do
+        course.root_account.enable_feature!(:discussion_checkpoints)
+        @topic = DiscussionTopic.create_graded_topic!(course:, title: "Checkpointed Discussion")
+        @topic.reply_to_entry_required_count = 2
+        @topic.save!
+        @assignment = @topic.assignment
+        @assignment.update!(has_sub_assignments: true)
+        @assignment.sub_assignments.create!(context: course, sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC, points_possible: 5, due_at: 3.days.from_now)
+        @assignment.sub_assignments.create!(context: course, sub_assignment_tag: CheckpointLabels::REPLY_TO_ENTRY, points_possible: 10, due_at: 5.days.from_now)
+        @other_student = student_in_course(course:, active_all: true).user
+      end
+
+      it "returns the correct sub assignment submissions" do
+        root_entry = @topic.discussion_entries.create!(user: student, message: "my reply to topic")
+        2.times { |i| @topic.discussion_entries.create!(user: student, message: "my child reply #{i}", parent_entry: root_entry) }
+        @topic.discussion_entries.create!(user: @other_student, message: "other student reply to topic")
+
+        query = GraphQLTypeTester.new(@assignment, current_user: student)
+
+        expect(query.resolve("mySubAssignmentSubmissionsConnection {nodes {userId}}")).to match_array [student.id.to_s, student.id.to_s]
+        expect(query.resolve("mySubAssignmentSubmissionsConnection {nodes {subAssignmentTag}}")).to match_array [CheckpointLabels::REPLY_TO_TOPIC, CheckpointLabels::REPLY_TO_ENTRY]
+        expect(query.resolve("mySubAssignmentSubmissionsConnection {nodes {submissionStatus}}")).to match_array ["submitted", "submitted"]
+      end
+
+      it "does not mark REPLY_TO_ENTRY as submitted if user has not met minimum count" do
+        root_entry = @topic.discussion_entries.create!(user: student, message: "my reply to topic")
+        @topic.discussion_entries.create!(user: student, message: "my child reply", parent_entry: root_entry)
+
+        query = GraphQLTypeTester.new(@assignment, current_user: student)
+        expect(query.resolve("mySubAssignmentSubmissionsConnection {nodes {userId}}")).to match_array [student.id.to_s, student.id.to_s]
+        expect(query.resolve("mySubAssignmentSubmissionsConnection {nodes {subAssignmentTag}}")).to match_array [CheckpointLabels::REPLY_TO_TOPIC, CheckpointLabels::REPLY_TO_ENTRY]
+        expect(query.resolve("mySubAssignmentSubmissionsConnection {nodes {submissionStatus}}")).to match_array ["submitted", "unsubmitted"]
+      end
+
+      it "does not mark REPLY_TO_TOPIC as submitted if user has only replied to entries (but not enough)" do
+        root_entry = @topic.discussion_entries.create!(user: @other_student, message: "my reply to topic")
+        @topic.discussion_entries.create!(user: student, message: "my child reply", parent_entry: root_entry)
+        query = GraphQLTypeTester.new(@assignment, current_user: student)
+        expect(query.resolve("mySubAssignmentSubmissionsConnection {nodes {userId}}")).to match_array [student.id.to_s, student.id.to_s]
+        expect(query.resolve("mySubAssignmentSubmissionsConnection {nodes {subAssignmentTag}}")).to match_array [CheckpointLabels::REPLY_TO_TOPIC, CheckpointLabels::REPLY_TO_ENTRY]
+        expect(query.resolve("mySubAssignmentSubmissionsConnection {nodes {submissionStatus}}")).to match_array ["unsubmitted", "unsubmitted"]
       end
     end
   end

@@ -57,18 +57,32 @@ describe Login::OtpController do
         expect(session[:pending_otp_secret_key]).to be_nil
       end
 
-      it "sends otp to sms channel" do
-        Account.default.settings[:mfa_settings] = :required
-        Account.default.save!
+      describe "sends otp to sms channel" do
+        before do
+          Account.default.settings[:mfa_settings] = :required
+          Account.default.save!
+          @user.otp_secret_key = ROTP::Base32.random
+        end
 
-        @user.otp_secret_key = ROTP::Base32.random
-        cc = @user.otp_communication_channel = @user.communication_channels.sms.create!(path: "1234567890@txt.att.net")
-        expect_any_instantiation_of(cc).to receive(:send_otp!)
-        @user.save!
+        it "with a carrier domain (deprecated)" do
+          cc = @user.otp_communication_channel = @user.communication_channels.sms.create!(path: "1234567890@txt.att.net")
+          expect_any_instantiation_of(cc).to receive(:send_otp!)
+          @user.save!
 
-        get :new
-        expect(response).to be_successful
-        expect(session[:pending_otp_secret_key]).to be_nil
+          get :new
+          expect(response).to be_successful
+          expect(session[:pending_otp_secret_key]).to be_nil
+        end
+
+        it "without a carrier domain" do
+          cc = @user.otp_communication_channel = @user.communication_channels.sms.create!(path: "1234567890")
+          expect_any_instantiation_of(cc).to receive(:send_otp!)
+          @user.save!
+
+          get :new
+          expect(response).to be_successful
+          expect(session[:pending_otp_secret_key]).to be_nil
+        end
       end
     end
 
@@ -196,7 +210,8 @@ describe Login::OtpController do
       it "sets a cookie" do
         post :create, params: { otp_login: { verification_code: ROTP::TOTP.new(@user.otp_secret_key).now, remember_me: "1" } }
         expect(response).to redirect_to dashboard_url(login_success: 1)
-        expect(response["Set-Cookie"]).to include("SameSite=None")
+        lines = response["Set-Cookie"]
+        expect(lines.join).to include("SameSite=None")
         expect(cookies["canvas_otp_remember_me"]).not_to be_nil
         expect(request.env.fetch("extra-request-cost").to_f >= 150).to be_truthy
       end

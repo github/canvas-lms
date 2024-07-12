@@ -20,20 +20,20 @@ import React from 'react'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
 import {tabIdFromElement} from './course_settings_helper'
-import tz from '@canvas/timezone'
+import {isMidnight} from '@instructure/moment-utils'
 import '@canvas/jquery/jquery.ajaxJSON'
-import '@canvas/datetime' /* datetimeString, date_field */
-import '@canvas/forms/jquery/jquery.instructure_forms' /* formSubmit, fillFormData, getFormData, formErrors */
+import '@canvas/jquery/jquery.instructure_forms' /* formSubmit, fillFormData, getFormData, formErrors */
 import 'jqueryui/dialog'
 import '@canvas/util/jquery/fixDialogButtons'
 import '@canvas/jquery/jquery.instructure_misc_plugins' /* confirmDelete, fragmentChange, showIf */
-import '@canvas/keycodes'
+import '@canvas/jquery-keycodes'
 import '@canvas/loading-image'
 import '@canvas/rails-flash-notifications'
 import '@canvas/util/templateData' /* fillTemplateData, getTemplateData */
 import '@canvas/link-enrollment' /* global link_enrollment */
 import 'jquery-tinypubsub' /* /\.publish/ */
 import 'jquery-scroll-to-visible/jquery.scrollTo'
+import 'jqueryui/menu'
 import 'jqueryui/autocomplete'
 import 'jqueryui/sortable'
 import 'jqueryui/tabs'
@@ -184,11 +184,12 @@ $(document).ready(function () {
   $tabBar
     .on('tabsactivate', (event, ui) => {
       try {
-        const hash = new URL(ui.newTab.context.href).hash
+        const $tabLink = ui.newTab.children('a:first-child')
+        const hash = new URL($tabLink.prop('href')).hash
         if (window.location.hash !== hash) {
           window.history.pushState(null, null, hash)
         }
-        ui.newTab.focus(0)
+        $tabLink.focus()
       } catch (_ignore) {
         // if the URL can't be parsed, so be it.
       }
@@ -201,7 +202,7 @@ $(document).ready(function () {
     beforeSubmit(_data) {
       $add_section_form
         .find('button')
-        .attr('disabled', true)
+        .prop('disabled', true)
         .text(I18n.t('buttons.adding_section', 'Adding Section...'))
     },
     success(data) {
@@ -211,7 +212,7 @@ $(document).ready(function () {
 
       $add_section_form
         .find('button')
-        .attr('disabled', false)
+        .prop('disabled', false)
         .text(I18n.t('buttons.add_section', 'Add Section'))
       $section.fillTemplateData({
         data: section,
@@ -235,7 +236,7 @@ $(document).ready(function () {
       $add_section_form
         .formErrors(data)
         .find('button')
-        .attr('disabled', false)
+        .prop('disabled', false)
         .text(I18n.t('errors.section', 'Add Section Failed, Please Try Again'))
     },
   })
@@ -331,6 +332,7 @@ $(document).ready(function () {
       modal: true,
       resizable: false,
       width: 400,
+      zIndex: 1000,
     })
   })
 
@@ -368,10 +370,12 @@ $(document).ready(function () {
       .dialog({
         title: I18n.t('titles.move_course', 'Move Course'),
         width: 500,
+        modal: true,
+        zIndex: 1000,
       })
       .fixDialogButtons()
   })
-  $('#move_course_dialog').delegate('.cancel_button', 'click', () => {
+  $('#move_course_dialog').on('click', '.cancel_button', () => {
     $('#move_course_dialog').dialog('close')
   })
 
@@ -390,9 +394,9 @@ $(document).ready(function () {
           contextId={ENV.COURSE_ID}
           contextType="Course"
           initiallySelectedGradingSchemeId={selectedGradingSchemeId}
-          // TODO: remove after grading_scheme_updates feature flag is turned on globally
-          pointsBasedGradingSchemesEnabled={!!ENV.POINTS_BASED_GRADING_SCHEMES_ENABLED}
           onChange={gradingSchemeId => handleSelectedGradingSchemeIdChanged(gradingSchemeId)}
+          archivedGradingSchemesEnabled={ENV.ARCHIVED_GRADING_SCHEMES_ENABLED}
+          shrinkSearchBar={true}
         />,
         grading_scheme_selector
       )
@@ -408,9 +412,9 @@ $(document).ready(function () {
   $course_form
     .find('.grading_standard_checkbox')
     .change(function () {
-      $course_form.find('.grading_standard_link').showIf($(this).attr('checked'))
+      $course_form.find('.grading_standard_link').showIf($(this).prop('checked'))
       if (grading_scheme_selector) {
-        if ($(this).attr('checked')) {
+        if ($(this).prop('checked')) {
           $course_form.find('.grading_scheme_selector').show()
           renderGradingSchemeSelector($('#grading_standard_id').val())
         } else {
@@ -424,7 +428,7 @@ $(document).ready(function () {
   $course_form
     .find('.sync_enrollments_from_homeroom_checkbox')
     .change(function () {
-      $course_form.find('.sync_enrollments_from_homeroom_select').showIf($(this).attr('checked'))
+      $course_form.find('.sync_enrollments_from_homeroom_select').showIf($(this).prop('checked'))
     })
     .change()
   $course_form.find('.sync_enrollments_from_homeroom_progress').each(function () {
@@ -435,12 +439,29 @@ $(document).ready(function () {
     const $warning = $course_form.find('#course_conclude_at_warning')
     const $parent = $(this).parent()
     const date = $(this).data('unfudged-date')
-    const isMidnight = tz.isMidnight(date)
-    $warning.detach().appendTo($parent).showIf(isMidnight)
-    $(this).attr('aria-describedby', isMidnight ? 'course_conclude_at_warning' : null)
+    const isMidnight_ = isMidnight(date)
+    $warning.detach().appendTo($parent).showIf(isMidnight_)
+    $(this).attr('aria-describedby', isMidnight_ ? 'course_conclude_at_warning' : null)
   })
   $course_form.formSubmit({
     beforeSubmit(data) {
+      // If Restrict Quantitative Data is checked, then the course must have a default grading scheme selected
+      const rqdEnabled =
+        $course_form.find('#course_restrict_quantitative_data')?.prop('value') === 'true'
+      const hasCourseDefaultGradingScheme = !!$course_form
+        .find('.grading_standard_checkbox')
+        .prop('checked')
+
+      if (rqdEnabled && !hasCourseDefaultGradingScheme) {
+        $.flashError(
+          I18n.t(
+            'errors.restrict_quantitative_data',
+            'If "Restrict view of quantitative data" is enabled, then the course must have a default grading scheme enabled.'
+          )
+        )
+        return false
+      }
+
       $(this).loadingImage()
       $(this).find('.readable_license,.account_name,.term_name,.grading_scheme_set').text('...')
       $(this).find('.storage_quota_mb').text(data['course[storage_quota_mb]'])
@@ -491,25 +512,6 @@ $(document).ready(function () {
         $obj.focus().select()
       }
     })
-  $('.course_form_more_options_link').click(function (event) {
-    event.preventDefault()
-    const $moreOptions = $('.course_form_more_options')
-    const optionText = $moreOptions.is(':visible')
-      ? I18n.t('links.more_options', 'more options')
-      : I18n.t('links.fewer_options', 'fewer options')
-    $(this).text(optionText)
-    const csp = document.getElementById('csp_options')
-    if (csp) {
-      import('../react/renderCSPSelectionBox')
-        .then(({renderCSPSelectionBox}) => renderCSPSelectionBox(csp))
-        .catch(() => {
-          // We shouldn't get here, but if we do... do something.
-          const $message = $('<div />').text(I18n.t('Setting failed to load, try refreshing.'))
-          $(csp).append($message)
-        })
-    }
-    $moreOptions.slideToggle()
-  })
   $enrollment_dialog.find('.cancel_button').click(() => {
     $enrollment_dialog.dialog('close')
   })
@@ -540,7 +542,6 @@ $(document).ready(function () {
       }
     )
   })
-  $('.date_entry').datetime_field({alwaysShowTime: true})
 
   const $default_edit_roles_select = $('#course_default_wiki_editing_roles')
   $default_edit_roles_select.data(
@@ -562,7 +563,7 @@ $(document).ready(function () {
 
     $button
       .text(I18n.t('buttons.re_sending_all', 'Re-Sending Unaccepted Invitations...'))
-      .attr('disabled', true)
+      .prop('disabled', true)
     $.ajaxJSON(
       $button.attr('href'),
       'POST',
@@ -570,7 +571,7 @@ $(document).ready(function () {
       function (_data) {
         $button
           .text(I18n.t('buttons.re_sent_all', 'Re-Sent All Unaccepted Invitations!'))
-          .attr('disabled', false)
+          .prop('disabled', false)
         $('.user_list .user.pending').each(function () {
           const $user = $(this)
           $user.fillTemplateData({
@@ -584,14 +585,14 @@ $(document).ready(function () {
       () => {
         $button
           .text(I18n.t('errors.re_send_all', 'Send Failed, Please Try Again'))
-          .attr('disabled', false)
+          .prop('disabled', false)
       }
     )
   })
 
   $('.self_enrollment_checkbox')
     .change(function () {
-      $('.open_enrollment_holder').showIf($(this).attr('checked'))
+      $('.open_enrollment_holder').showIf($(this).prop('checked'))
     })
     .change()
 
@@ -609,6 +610,8 @@ $(document).ready(function () {
       $('#reset_course_content_dialog').dialog({
         title: I18n.t('titles.reset_course_content_dialog_help', 'Reset Course Content'),
         width: 500,
+        zIndex: 1000,
+        modal: true,
       })
 
       $('.ui-dialog').focus()

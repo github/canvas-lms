@@ -197,6 +197,9 @@ const locale = {
   "congruent_5a244acd": { "message": "Kongruentno" },
   "contains_311f37b7": { "message": "Vsebuje" },
   "content_1440204b": { "message": "Vsebina" },
+  "content_in_the_editor_will_be_changed_press_cancel_d5bf3357": {
+    "message": "Vsebina v urejevalniku bo spremenjena. Pritisnite Prekliči, da obdržite izvirno vsebino."
+  },
   "content_is_still_being_uploaded_if_you_continue_it_8f06d0cb": {
     "message": "Vsebina se še vedno nalaga. Če nadaljujete, ne bo pravilno vdelana."
   },
@@ -338,6 +341,10 @@ const locale = {
   "enter_at_least_3_characters_to_search_4f037ee0": {
     "message": "Za iskanje vnesite vsaj 3 znake"
   },
+  "enter_replacement_text_17631bbc": {
+    "message": "vnesite nadomestno besedilo"
+  },
+  "enter_search_text_26cb4459": { "message": "vnesite besedilo za iskanje" },
   "epsilon_54bb8afa": { "message": "Epsilon" },
   "epsilon_variant_d31f1e77": { "message": "Epsilon (različica)" },
   "equals_sign_c51bdc58": { "message": "Znak enakosti" },
@@ -380,6 +387,8 @@ const locale = {
   },
   "files_c300e900": { "message": "Datoteke" },
   "files_index_af7c662b": { "message": "Kazalo datotek" },
+  "find_8d605019": { "message": "Najdi" },
+  "find_and_replace_6e345933": { "message": "Najdi in zamenjaj" },
   "finish_bc343002": { "message": "Dokončaj" },
   "fix_heading_hierarchy_f60884c4": {
     "message": "Popravi hierarhijo naslovov"
@@ -500,6 +509,7 @@ const locale = {
   "in_element_of_19ca2f33": { "message": "V (element)" },
   "increase_indent_6af90f7c": { "message": "Povečaj zamik" },
   "indefinite_integral_6623307e": { "message": "Nedoločeni integral" },
+  "index_of_max_80dcf7a5": { "message": "{ index } od { max }" },
   "indigo_2035fc55": { "message": "Indigo" },
   "inference_fed5c960": { "message": "Sklepanje" },
   "infinity_7a10f206": { "message": "Neskončnost" },
@@ -671,6 +681,7 @@ const locale = {
   "nested_less_than_27d17e58": { "message": "Ugnezdeni znak za manjše kot" },
   "new_quiz_34aacba6": { "message": "Nov kviz" },
   "next_40e12421": { "message": "Naprej" },
+  "next_findtext_9d69f0fe": { "message": "Naslednji { findText }" },
   "no_accessibility_issues_were_detected_f8d3c875": {
     "message": "Ni zaznanih težav z dostopnostjo."
   },
@@ -716,6 +727,7 @@ const locale = {
   },
   "no_quizzes_found_c80c537a": { "message": "Najti ni mogoče nobenega kviza." },
   "no_results_940393cf": { "message": "Ni rezultatov." },
+  "no_results_found_58717065": { "message": "Ni rezultatov." },
   "no_results_found_for_filterterm_ad1b04c8": {
     "message": "Ni najdenih rezultatov za { filterTerm }"
   },
@@ -802,6 +814,9 @@ const locale = {
   "precedes_196b9aef": { "message": "Predhodnik" },
   "precedes_equal_20701e84": { "message": "Predhodnik enakosti" },
   "preformatted_d0670862": { "message": "Predoblikovano" },
+  "prepend_findtext_append_8e0e769a": {
+    "message": "{ prepend }{ findText }{ append }"
+  },
   "prev_f82cbc48": { "message": "Nazaj" },
   "preview_53003fd2": { "message": "Predogled" },
   "preview_a3f8f854": { "message": "PREDOGLED" },
@@ -809,6 +824,8 @@ const locale = {
     "message": "Predogled v prekrivnem elementu"
   },
   "preview_inline_9787330": { "message": "Vstavljen predogled" },
+  "previous_bd2ac015": { "message": "Nazaj" },
+  "previous_findtext_8dfbfd30": { "message": "Prejšnji { findText }" },
   "prime_917ea60e": { "message": "Pra" },
   "prime_numbers_13464f61": { "message": "Praštevila" },
   "product_39cf144f": { "message": "Zmnožek" },
@@ -837,11 +854,28 @@ const locale = {
   "religion_icon_246e0be1": { "message": "Ikona religije" },
   "remove_heading_style_5fdc8855": { "message": "Odstrani slog naslova" },
   "remove_link_d1f2f4d0": { "message": "Odstrani povezavo" },
+  "replace_all_d3d68b3": { "message": "Zamenjaj vse" },
+  "replace_all_findtext_with_replacetext_da574b32": {
+    "message": "Zamenjaj vse { findText } s/z { replaceText }"
+  },
   "replace_e61834a7": { "message": "Zamenjaj" },
+  "replace_findtext_with_replacetext_7b5c7fb3": {
+    "message": "Zamenjaj { findText } s/z { replaceText }"
+  },
+  "replace_with_eeff01ad": { "message": "Zamenjaj s/z" },
+  "replaced_alertfindtext_with_alertreplacetext_de5c1795": {
+    "message": "Zamenjano { alertFindText } s/z { alertReplaceText }"
+  },
+  "replaced_all_alertfindtext_with_alertreplacetext_83fdfe59": {
+    "message": "Zamenjano vse { alertFindText } s/z { alertReplaceText }"
+  },
   "reset_95a81614": { "message": "Obnovi" },
   "resize_ec83d538": { "message": "Spremeni velikost" },
   "restore_auto_save_deccd84b": {
     "message": "Obnovim samodejno shranjeno vsebino?"
+  },
+  "result_index_of_max_7db5ad8b": {
+    "message": "Rezultat { index } od { max }."
   },
   "reverse_turnstile_does_not_yield_7558be06": {
     "message": "Reverzni vrtilni križ (ni odnosa)"

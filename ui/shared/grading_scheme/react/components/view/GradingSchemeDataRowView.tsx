@@ -20,7 +20,7 @@ import React, {useState} from 'react'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import {Flex} from '@instructure/ui-flex'
 import {Table} from '@instructure/ui-table'
-import {GradingSchemeDataRow} from '@instructure/grading-utils'
+import type {GradingSchemeDataRow} from '@instructure/grading-utils'
 import {roundToTwoDecimalPlaces} from '../../helpers/roundDecimalPlaces'
 
 const I18n = useI18nScope('GradingSchemeManagement')
@@ -32,10 +32,6 @@ interface ComponentProps {
   isFirstRow: boolean
   viewAsPercentage: boolean
 }
-
-// Doing this to avoid TS2339 errors -- TODO: remove once we're on InstUI 8
-const {Item} = Flex as any
-const {Row, Cell} = Table as any
 
 const GradingSchemeDataRowView: React.FC<ComponentProps> = ({
   dataRow,
@@ -57,31 +53,27 @@ const GradingSchemeDataRowView: React.FC<ComponentProps> = ({
 
   return (
     <>
-      <Row theme={{borderColor: 'transparent'}}>
-        <Cell theme={{padding: 'none'}}>{dataRow.name}</Cell>
-        <Cell theme={{padding: 'none'}}>
+      <Table.Row themeOverride={{borderColor: 'transparent'}}>
+        <Table.Cell themeOverride={{padding: '0.5rem 0'}}>{dataRow.name}</Table.Cell>
+        <Table.Cell themeOverride={{padding: '0.5rem 0'}}>
           <Flex display="inline-flex">
-            <Item>
+            <Flex.Item>
               <span aria-label={I18n.t('Upper limit of range')}>
                 {isFirstRow ? '' : '< '}
                 {renderHighRange()}
                 {viewAsPercentage ? <>%</> : <></>}
               </span>
-            </Item>
-          </Flex>
-        </Cell>
-        <Cell theme={{padding: 'none'}}>
-          <Flex>
-            <Item padding="x-small">{I18n.t('to')}</Item>
-            <Item>
+            </Flex.Item>
+            <Flex.Item padding="none small">{I18n.t('to')}</Flex.Item>
+            <Flex.Item>
               <span aria-label={I18n.t('Lower limit of range')}>
                 {renderLowRange()}
                 {viewAsPercentage ? <>%</> : <></>}
               </span>
-            </Item>
+            </Flex.Item>
           </Flex>
-        </Cell>
-      </Row>
+        </Table.Cell>
+      </Table.Row>
     </>
   )
 }

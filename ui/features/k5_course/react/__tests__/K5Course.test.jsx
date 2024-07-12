@@ -68,6 +68,12 @@ const dtf = new Intl.DateTimeFormat('en', {
 
 const dateFormatter = d => dtf.format(d instanceof Date ? d : new Date(d))
 
+const getOneMonthAgo = () => {
+  const date = new Date()
+  date.setMonth(date.getMonth() - 1)
+  return ('0' + (date.getMonth() + 1)).slice(-2)
+}
+
 const defaultTabs = [
   {id: '0'},
   {id: '19'},
@@ -113,7 +119,7 @@ const defaultProps = {
     permissions: {
       update: true,
     },
-    posted_at: '2021-05-14T17:06:21-06:00',
+    posted_at: `2021-${getOneMonthAgo()}-14T17:06:21-06:00`,
   },
   pagesPath: '/courses/30/pages',
   hasWikiPages: true,
@@ -364,25 +370,25 @@ describe('K-5 Subject Course', () => {
 
   describe('Student View Button functionality', () => {
     it('Shows the Student View button when the user has student view mode access', () => {
-      const {queryByRole} = render(<K5Course {...defaultProps} showStudentView={true} />)
-      expect(queryByRole('link', {name: 'Student View'})).toBeInTheDocument()
+      const {getByTestId} = render(<K5Course {...defaultProps} showStudentView={true} />)
+      expect(getByTestId('student-view-btn')).toBeInTheDocument()
     })
 
     it('Does not show the Student View button when the user does not have student view mode access', () => {
-      const {queryByRole} = render(<K5Course {...defaultProps} />)
-      expect(queryByRole('link', {name: 'Student View'})).not.toBeInTheDocument()
+      const {queryByTestId} = render(<K5Course {...defaultProps} />)
+      expect(queryByTestId('student-view-btn')).not.toBeInTheDocument()
     })
 
     it('Should open student view path when clicked', () => {
-      const {getByRole} = render(<K5Course {...defaultProps} showStudentView={true} />)
-      const studentViewBtn = getByRole('link', {name: 'Student View'})
+      const {getByTestId} = render(<K5Course {...defaultProps} showStudentView={true} />)
+      const studentViewBtn = getByTestId('student-view-btn')
       expect(studentViewBtn.href).toBe('http://localhost/courses/30/student_view/1')
     })
 
     it('Should keep the navigation tab when accessing student view mode', () => {
-      const {getByRole} = render(<K5Course {...defaultProps} showStudentView={true} />)
+      const {getByRole, getByTestId} = render(<K5Course {...defaultProps} showStudentView={true} />)
       getByRole('tab', {name: 'Arts and Crafts Grades'}).click()
-      const studentViewBtn = getByRole('link', {name: 'Student View'})
+      const studentViewBtn = getByTestId('student-view-btn')
       expect(studentViewBtn.href).toBe('http://localhost/courses/30/student_view/1#grades')
     })
 
@@ -472,15 +478,9 @@ describe('K-5 Subject Course', () => {
   describe('Subject announcements', () => {
     it('shows the latest announcement, attachment, date, and edit button on the subject home', () => {
       const {getByText, getByRole} = render(<K5Course {...defaultProps} canManage={true} />)
-      expect(getByText('Important announcement')).toBeInTheDocument()
-      expect(getByText('Read this closely.')).toBeInTheDocument()
       const button = getByRole('link', {name: 'Edit announcement Important announcement'})
-      expect(button).toBeInTheDocument()
-      expect(button.href).toContain('/courses/30/discussion_topics/12')
       const attachment = getByRole('link', {name: 'hw.pdf'})
-      expect(attachment).toBeInTheDocument()
-      expect(attachment.href).toBe('http://address/to/hw.pdf')
-      const targetDate = new Date('2021-05-14T17:06:21Z')
+      const targetDate = new Date(`2021-${getOneMonthAgo()}-14T17:06:21Z`)
       const datePortion = new Intl.DateTimeFormat('en', {
         month: 'short',
         day: 'numeric',
@@ -493,8 +493,14 @@ describe('K-5 Subject Course', () => {
       })
         .format(targetDate)
         .replace(/ [AP]M$/i, '')
-      expect(getByText(new RegExp(datePortion))).toBeInTheDocument()
-      expect(getByText(new RegExp(timePortion))).toBeInTheDocument()
+
+      expect(getByText('Important announcement')).toBeInTheDocument()
+      expect(getByText('Read this closely.')).toBeInTheDocument()
+      expect(button).toBeInTheDocument()
+      expect(button.href).toContain('/courses/30/discussion_topics/12')
+      expect(attachment).toBeInTheDocument()
+      expect(attachment.href).toBe('http://address/to/hw.pdf')
+      expect(getByText(new RegExp(`${datePortion} at ${timePortion}`, 'i'))).toBeInTheDocument()
     })
 
     it('hides the edit button if student', () => {

@@ -17,9 +17,12 @@
 
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import {debounce} from 'underscore'
-import tz from '@canvas/timezone'
-import datePickerFormat from '../datePickerFormat'
+import {debounce} from 'lodash'
+import './datepicker'
+import * as tz from '@instructure/moment-utils'
+import fallbacks from 'translations/en.json'
+import datePickerFormat from '@instructure/moment-utils/datePickerFormat'
+import {fudgeDateForProfileTimezone, isMidnight} from '@instructure/moment-utils'
 import {isRTL} from '@canvas/i18n/rtlHelper'
 
 import moment from 'moment'
@@ -39,14 +42,23 @@ const DATE_FORMAT_OPTIONS = {
   year: 'numeric',
 }
 
+const EARLIEST_YEAR = 1980 // do not allow any manually entered year before this
+
+const PARSE_RESULTS = {
+  VALID: 0,
+  ERROR: 1,
+  BAD_YEAR: 2,
+}
+
 const DATETIME_FORMAT_OPTIONS = {...DATE_FORMAT_OPTIONS, ...TIME_FORMAT_OPTIONS}
 
 Object.freeze(TIME_FORMAT_OPTIONS)
 Object.freeze(DATE_FORMAT_OPTIONS)
 Object.freeze(DATETIME_FORMAT_OPTIONS)
+Object.freeze(PARSE_RESULTS)
 
 // for tests only
-export {TIME_FORMAT_OPTIONS, DATE_FORMAT_OPTIONS, DATETIME_FORMAT_OPTIONS}
+export {TIME_FORMAT_OPTIONS, DATE_FORMAT_OPTIONS, DATETIME_FORMAT_OPTIONS, PARSE_RESULTS}
 
 function formatter(zone, formatOptions = DATETIME_FORMAT_OPTIONS) {
   const options = {...formatOptions}
@@ -56,34 +68,71 @@ function formatter(zone, formatOptions = DATETIME_FORMAT_OPTIONS) {
 
 let datepickerDefaults
 
-const computeDatepickerDefaults = () => ({
-  constrainInput: false,
-  dateFormat: datePickerFormat(I18n.lookup('date.formats.medium')),
-  showOn: 'button',
-  buttonText: '<i class="icon-calendar-month"></i>',
-  buttonImageOnly: false,
-  disableButton: false,
+function computeDatepickerDefaults() {
+  datepickerDefaults = {
+    constrainInput: false,
+    showOn: 'button',
+    buttonText: '<i class="icon-calendar-month"></i>',
+    buttonImageOnly: false,
+    disableButton: false,
 
-  // localization values understood by $.datepicker
-  isRTL: isRTL(),
-  get prevText() {
-    return I18n.t('prevText', 'Prev')
-  }, // title text for previous month icon
-  get nextText() {
-    return I18n.t('nextText', 'Next')
-  }, // title text for next month icon
-  monthNames: I18n.lookup('date.month_names').slice(1), // names of months
-  monthNamesShort: I18n.lookup('date.abbr_month_names').slice(1), // abbreviated names of months
-  dayNames: I18n.lookup('date.day_names'), // title text for column headings
-  dayNamesShort: I18n.lookup('date.abbr_day_names'), // title text for column headings
-  dayNamesMin: I18n.lookup('date.datepicker.column_headings'), // column headings for days (Sunday = 0)
-  get firstDay() {
-    return I18n.t('first_day_index', '0')
-  }, // first day of the week (Sun = 0)
-  get showMonthAfterYear() {
-    return I18n.t('#date.formats.medium_month').slice(0, 2) === '%Y'
-  }, // "month year" or "year month"
-})
+    // localization values understood by $.datepicker
+    isRTL: isRTL(),
+    get prevText() {
+      return I18n.t('prevText', 'Prev')
+    }, // title text for previous month icon
+    get nextText() {
+      return I18n.t('nextText', 'Next')
+    }, // title text for next month icon
+    get firstDay() {
+      return I18n.t('first_day_index', '0')
+    }, // first day of the week (Sun = 0)
+    get showMonthAfterYear() {
+      try {
+        return I18n.lookup('date.formats.medium_month').slice(0, 2) === '%Y'
+      } catch {
+        // eslint-disable-next-line no-console
+        console.warn('WARNING Missing required datepicker keys in locale file')
+        return false // Assume English
+      }
+    }, // is it "year month" in this locale as opposed to "month year"?
+  }
+
+  // Fill in the rest from the locale date keys; if anything throws
+  // an error, then something is missing from the locale file, so just
+  // fall back to English
+  try {
+    datepickerDefaults.dateFormat = datePickerFormat(I18n.lookup('date.formats.medium')) // date format for input field
+    datepickerDefaults.monthNames = I18n.lookup('date.month_names').slice(1) // names of months
+    datepickerDefaults.monthNamesShort = I18n.lookup('date.abbr_month_names').slice(1) // abbreviated names of months
+    datepickerDefaults.dayNames = I18n.lookup('date.day_names') // title text for column headings
+    datepickerDefaults.dayNamesShort = I18n.lookup('date.abbr_day_names') // title text for column headings
+    datepickerDefaults.dayNamesMin = I18n.lookup('date.datepicker.column_headings') // column headings for days (Sunday = 0)
+  } catch {
+    // eslint-disable-next-line no-console
+    console.warn(
+      'WARNING Missing required datepicker keys in locale file, using US English datepicker'
+    )
+    datepickerDefaults.dateFormat = datePickerFormat(fallbacks['date.formats.medium'])
+    datepickerDefaults.monthNames = fallbacks['date.month_names'].slice(1)
+    datepickerDefaults.monthNamesShort = fallbacks['date.abbr_month_names'].slice(1)
+    datepickerDefaults.dayNames = fallbacks['date.day_names']
+    datepickerDefaults.dayNamesShort = fallbacks['date.abbr_day_names']
+    datepickerDefaults.dayNamesMin = fallbacks['date.datepicker.column_headings']
+  }
+}
+
+export function renderDatetimeField($fields, options) {
+  options = {...options}
+  $fields.each(function () {
+    const $field = $(this)
+    if (!$field.hasClass('datetime_field_enabled')) {
+      $field.addClass('datetime_field_enabled')
+      new DatetimeField($field, options)
+    }
+  })
+  return $fields
+}
 
 // adds datepicker and suggest functionality to the specified $field
 export default class DatetimeField {
@@ -121,6 +170,10 @@ export default class DatetimeField {
     } else {
       this.setFromValue()
     }
+  }
+
+  invalid() {
+    return this.valid !== PARSE_RESULTS.VALID
   }
 
   processTimeOptions(options) {
@@ -172,7 +225,7 @@ export default class DatetimeField {
       const $datepickerButton = this.$field.next()
       $datepickerButton.attr('aria-hidden', 'true')
       $datepickerButton.attr('tabindex', '-1')
-      if (options.disableButton) $datepickerButton.attr('disabled', 'true')
+      if (options.disableButton) $datepickerButton.prop('disabled', true)
     }
     return $wrapper
   }
@@ -259,31 +312,34 @@ export default class DatetimeField {
   }
 
   parseValue(val) {
+    const previousDate = this.datetime
     if (typeof val === 'undefined' && this.$field.data('inputdate')) {
       const inputdate = this.$field.data('inputdate')
       this.datetime = inputdate instanceof Date ? inputdate : new Date(inputdate)
       this.blank = false
-      this.invalid = this.datetime === null
+      this.valid = PARSE_RESULTS.VALID
+      if (this.datetime === null) this.valid = PARSE_RESULTS.ERROR
+      if (this.datetime && this.datetime.getFullYear() < EARLIEST_YEAR)
+        this.valid = PARSE_RESULTS.BAD_YEAR
       this.$field.data('inputdate', null)
     } else {
-      const previousDate = this.datetime
-      if (val) {
-        this.setFormattedDatetime(val, TIME_FORMAT_OPTIONS)
-      }
+      if (val) this.setFormattedDatetime(val, this.intlFormatType())
       const value = this.normalizeValue(this.$field.val())
       this.datetime = tz.parse(value)
       this.blank = !value
-      this.invalid = !this.blank && this.datetime === null
-      // If the date is invalid, revert to the previous date
-      if (this.invalid) {
-        this.datetime = previousDate
-      }
+      this.valid = PARSE_RESULTS.VALID
+      if (!this.blank && this.datetime === null) this.valid = PARSE_RESULTS.ERROR
+      if (this.datetime && this.datetime.getFullYear() < EARLIEST_YEAR)
+        this.valid = PARSE_RESULTS.BAD_YEAR
     }
+    // If the date is invalid, revert to the previous date
+    if (this.invalid()) this.datetime = previousDate
+
     if (this.datetime && !this.showDate && this.implicitDate) {
       this.datetime = tz.mergeTimeAndDate(this.datetime, this.implicitDate)
     }
-    this.fudged = $.fudgeDateForProfileTimezone(this.datetime)
-    this.showTime = this.alwaysShowTime || (this.allowTime && !tz.isMidnight(this.datetime))
+    this.fudged = fudgeDateForProfileTimezone(this.datetime)
+    this.showTime = this.alwaysShowTime || (this.allowTime && !isMidnight(this.datetime))
   }
 
   setFormattedDatetime(datetime, format) {
@@ -291,7 +347,7 @@ export default class DatetimeField {
       this.blank = false
       this.$field.data('inputdate', datetime.toISOString())
       this.datetime = datetime
-      this.fudged = $.fudgeDateForProfileTimezone(this.datetime)
+      this.fudged = fudgeDateForProfileTimezone(this.datetime)
       const fmtr = formatter(ENV.TIMEZONE, format)
       this.$field.val(fmtr.format(this.datetime))
     } else {
@@ -300,8 +356,8 @@ export default class DatetimeField {
       this.fudged = null
       this.$field.val('')
     }
-    this.invalid = false
-    this.showTime = this.alwaysShowTime || (this.allowTime && !tz.isMidnight(this.datetime))
+    this.valid = PARSE_RESULTS.VALID
+    this.showTime = this.alwaysShowTime || (this.allowTime && !isMidnight(this.datetime))
     this.update()
     this.updateSuggest(false)
   }
@@ -318,7 +374,7 @@ export default class DatetimeField {
       date: this.fudged,
       iso8601,
       blank: this.blank,
-      invalid: this.invalid,
+      invalid: this.invalid(),
     })
 
     if (this.$hiddenInput) {
@@ -328,7 +384,7 @@ export default class DatetimeField {
     // date_fields and time_fields don't have timepicker data fields
     if (!(this.showDate && this.allowTime)) return
 
-    if (this.invalid || this.blank || !this.showTime) {
+    if (this.invalid() || this.blank || !this.showTime) {
       this.$field.data({
         'time-hour': null,
         'time-minute': null,
@@ -358,8 +414,8 @@ export default class DatetimeField {
       }
       this.$contextSuggest.text(contextText).show()
     }
-    this.$suggest.toggleClass('invalid_datetime', this.invalid).text(localText)
-    if (show || this.$contextSuggest || this.invalid) {
+    this.$suggest.toggleClass('invalid_datetime', this.invalid()).text(localText)
+    if (show || this.$contextSuggest || this.invalid()) {
       this.$suggest.show()
       return
     }
@@ -381,7 +437,7 @@ export default class DatetimeField {
   }
 
   updateAria() {
-    this.$field.attr('aria-invalid', !!this.invalid)
+    this.$field.attr('aria-invalid', this.invalid())
   }
 
   intlFormatType() {
@@ -391,13 +447,13 @@ export default class DatetimeField {
   }
 
   formatSuggest() {
-    if (this.invalid) return this.parseError
+    if (this.invalid()) return this.parseError
     if (this.blank) return ''
     return formatter(ENV.TIMEZONE, this.intlFormatType()).format(this.datetime)
   }
 
   formatSuggestContext() {
-    if (this.invalid || !this.showTime || this.blank) return ''
+    if (this.invalid() || !this.showTime || this.blank) return ''
     return formatter(this.contextTimezone, this.intlFormatType()).format(this.datetime)
   }
 
@@ -406,14 +462,13 @@ export default class DatetimeField {
   }
 
   getDatepickerDefaults() {
-    if (!datepickerDefaults) {
-      datepickerDefaults = computeDatepickerDefaults()
-    }
+    if (!datepickerDefaults) computeDatepickerDefaults()
 
     return datepickerDefaults
   }
 
   get parseError() {
+    if (this.valid === PARSE_RESULTS.BAD_YEAR) return I18n.t('Year is too far in the past.')
     return I18n.t('errors.not_a_date', "That's not a date!")
   }
 }

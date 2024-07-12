@@ -20,6 +20,8 @@
 
 module SIS
   class EnrollmentImporter < BaseImporter
+    BATCH_SIZE = 100
+
     def process(messages)
       i = Work.new(@batch, @root_account, @logger, messages)
 
@@ -134,7 +136,7 @@ module SIS
         return if @batch.skip_deletes? && enrollment.status =~ /deleted/i
 
         @enrollment_batch << enrollment
-        process_batch if @enrollment_batch.size >= Setting.get("sis_enrollment_batch_size", "100").to_i # no idea if this is a good number
+        process_batch if @enrollment_batch.size >= BATCH_SIZE
       end
 
       def any_left_to_process?
@@ -167,9 +169,9 @@ module SIS
           end
 
           pseudo = if enrollment_info.user_integration_id.blank?
-                     root_account.pseudonyms.where(sis_user_id: enrollment_info.user_id).take
+                     root_account.pseudonyms.find_by(sis_user_id: enrollment_info.user_id)
                    else
-                     root_account.pseudonyms.where(integration_id: enrollment_info.user_integration_id).take
+                     root_account.pseudonyms.find_by(integration_id: enrollment_info.user_integration_id)
                    end
 
           unless pseudo
@@ -186,8 +188,8 @@ module SIS
             next
           end
 
-          @course ||= @root_account.all_courses.where(sis_source_id: enrollment_info.course_id).take unless enrollment_info.course_id.blank?
-          @section ||= @root_account.course_sections.where(sis_source_id: enrollment_info.section_id).take unless enrollment_info.section_id.blank?
+          @course ||= @root_account.all_courses.find_by(sis_source_id: enrollment_info.course_id) unless enrollment_info.course_id.blank?
+          @section ||= @root_account.course_sections.find_by(sis_source_id: enrollment_info.section_id) unless enrollment_info.section_id.blank?
           if @course.nil? && @section.nil?
             message = "Neither course nor section existed for user enrollment " \
                       "(Course ID: #{enrollment_info.course_id}, Section ID: #{enrollment_info.section_id}, User ID: #{enrollment_info.user_id})"
@@ -233,6 +235,7 @@ module SIS
           incrementally_update_account_associations if @section != @last_section && !@incrementally_update_account_associations_user_ids.empty?
 
           associated_user_id = nil
+          temporary_enrollment_source_user_id = nil
 
           role = nil
           if enrollment_info.role_id
@@ -271,7 +274,7 @@ module SIS
           role ||= Role.get_built_in_role(type, root_account_id: @root_account.id)
 
           if enrollment_info.associated_user_id && type == "ObserverEnrollment"
-            a_pseudo = root_account.pseudonyms.where(sis_user_id: enrollment_info.associated_user_id).take
+            a_pseudo = root_account.pseudonyms.find_by(sis_user_id: enrollment_info.associated_user_id)
             if a_pseudo
               associated_user_id = a_pseudo.user_id
             else
@@ -280,10 +283,28 @@ module SIS
               next
             end
           end
-          enrollment = @section.all_enrollments.where(user_id: user,
-                                                      type:,
-                                                      associated_user_id:,
-                                                      role_id: role).take
+
+          if enrollment_info.temporary_enrollment_source_user_id &&
+             @course.root_account&.feature_enabled?(:temporary_enrollments) &&
+             (a_pseudo = root_account.pseudonyms.find_by(sis_user_id: enrollment_info.temporary_enrollment_source_user_id))
+            if a_pseudo
+              temporary_enrollment_source_user_id = a_pseudo.user_id
+            else
+              message = "An enrollment referenced a non-existent temporary enrollment provider #{enrollment_info.temporary_enrollment_source_user_id}"
+              @messages << SisBatch.build_error(enrollment_info.csv, message, sis_batch: @batch, row: enrollment_info.lineno, row_info: enrollment_info.row_info)
+              next
+            end
+          elsif enrollment_info.temporary_enrollment_source_user_id
+            msg = "Temporary enrollments are not enabled"
+            @messages << SisBatch.build_error(enrollment_info.csv, msg, sis_batch: @batch, row: enrollment_info.lineno, row_info: enrollment_info.row_info)
+            next
+          end
+
+          enrollment = @section.all_enrollments.find_by(user_id: user,
+                                                        type:,
+                                                        associated_user_id:,
+                                                        temporary_enrollment_source_user_id:,
+                                                        role_id: role)
 
           enrollment ||= Enrollment.typed_enrollment(type).new
           enrollment.root_account = @root_account
@@ -297,7 +318,48 @@ module SIS
             enrollment.limit_privileges_to_course_section = Canvas::Plugin.value_to_boolean(enrollment_info.limit_section_privileges)
           end
 
-          next if enrollment_status(associated_user_id, enrollment, enrollment_info, pseudo, role, user)
+          if @course.root_account&.feature_enabled?(:temporary_enrollments) && temporary_enrollment_source_user_id
+            pairing = create_temp_enrollment_pairing(enrollment_info, temporary_enrollment_source_user_id, @section.course.id, enrollment.user_id)
+            next unless pairing
+
+            begin
+              pairing.save!
+              enrollment.temporary_enrollment_source_user_id = temporary_enrollment_source_user_id
+              enrollment.temporary_enrollment_pairing_id = pairing.id
+            rescue ActiveRecord::RecordInvalid
+              msg = "A temporary enrollment did not pass validation "
+              msg += "(" + "course: #{enrollment_info.course_id}, section: #{enrollment_info.section_id}, "
+              msg += "user: #{enrollment_info.user_id}, role: #{enrollment_info.role}, error: " +
+                     msg += enrollment.errors.full_messages.join(",") + ")"
+              @messages << SisBatch.build_error(enrollment_info.csv, msg, sis_batch: @batch, row: enrollment_info.lineno, row_info: enrollment_info.row_info)
+              next
+            rescue ActiveRecord::RecordNotUnique
+              if @retry == true
+                msg = "A temporary enrollment failed to save "
+                msg += "(course: #{enrollment_info.course_id}, section: #{enrollment_info.section_id}, "
+                msg += "user: #{enrollment_info.user_id}, role: #{enrollment_info.role}, error: " +
+                       msg += enrollment.errors.full_messages.join(",") + ")"
+                @messages << SisBatch.build_error(enrollment_info.csv, msg, sis_batch: @batch, row: enrollment_info.lineno, row_info: enrollment_info.row_info)
+                @retry = false
+              else
+                @enrollment_batch.unshift(enrollment_info)
+                @retry = true
+              end
+              next
+            end
+          elsif temporary_enrollment_source_user_id
+            msg = "Temporary enrollments are not enabled"
+            @messages << SisBatch.build_error(enrollment_info.csv, msg, sis_batch: @batch, row: enrollment_info.lineno, row_info: enrollment_info.row_info)
+            next
+          end
+
+          next if enrollment_status(associated_user_id,
+                                    temporary_enrollment_source_user_id,
+                                    enrollment,
+                                    enrollment_info,
+                                    pseudo,
+                                    role,
+                                    user)
 
           unless enrollment.stuck_sis_fields.intersect?([:start_at, :end_at])
             enrollment.start_at = enrollment_info.start_date
@@ -382,9 +444,23 @@ module SIS
 
       private
 
-      def enrollment_status(associated_user_id, enrollment, enrollment_info, pseudo, role, user)
+      def enrollment_status(associated_user_id, temporary_enrollment_source_user_id, enrollment, enrollment_info, pseudo, role, user)
         all_done = false
-        return true if enrollment.workflow_state == "deleted" && pseudo.workflow_state == "deleted"
+        if enrollment.deleted?
+          message = if user.deleted?
+                      invalid_active_enrollment(enrollment, enrollment_info)
+                    elsif pseudo.deleted?
+                      "Attempted enrolling with deleted sis login #{pseudo.unique_id} in course #{enrollment_info.course_id}"
+                    end
+          if message
+            @messages << SisBatch.build_error(enrollment_info.csv,
+                                              message,
+                                              sis_batch: @batch,
+                                              row: enrollment_info.lineno,
+                                              row_info: enrollment_info.row_info)
+            return true
+          end
+        end
 
         case enrollment_info.status
         when /\Aactive/i
@@ -398,7 +474,9 @@ module SIS
           # if any matching enrollment for the same user in the same course
           # exists, we will mark the enrollment as deleted, but if it is the
           # last enrollment it gets marked as completed
-          if @course.enrollments.active.where(user:, associated_user_id:, role:).where.not(id: enrollment.id).exists?
+          if @course.enrollments.active
+                    .where(user:, associated_user_id:, temporary_enrollment_source_user_id:, role:)
+                    .where.not(id: enrollment.id).exists?
             all_done = deleted_status(enrollment)
           else
             completed_status(enrollment)
@@ -411,6 +489,48 @@ module SIS
           all_done = deleted_status(enrollment)
         end
         all_done
+      end
+
+      def create_temp_enrollment_pairing(enrollment_info, source_id, course_id, user_id)
+        if user_id == source_id
+          msg = "A temporary enrollment provider and recipient are the same "
+          msg += "(temporary_source_user_id: #{enrollment_info.temporary_enrollment_source_user_id}, user: #{enrollment_info.user_id})"
+          @messages << SisBatch.build_error(enrollment_info.csv, msg, sis_batch: @batch, row: enrollment_info.lineno, row_info: enrollment_info.row_info)
+          return nil
+        end
+
+        if enrollment_info.start_date >= enrollment_info.end_date
+          msg = "A temporary enrollment end date is before the start date "
+          msg += "(start_date: #{enrollment_info.start_date}, end_date: #{enrollment_info.end_date})"
+          @messages << SisBatch.build_error(enrollment_info.csv, msg, sis_batch: @batch, row: enrollment_info.lineno, row_info: enrollment_info.row_info)
+          return nil
+        end
+
+        source_enrollments = Enrollment.all_active_or_pending.where(user_id: source_id)
+        error = true
+
+        source_enrollments.each do |enrollment|
+          if enrollment.course_id == course_id
+            error = false
+            next
+          end
+        end
+
+        if error
+          msg = "The temporary enrollment provider is not enrolled in the course "
+          msg += "(course: #{enrollment_info.course_id}, temporary_source_user_id: #{enrollment_info.temporary_enrollment_source_user_id})"
+          @messages << SisBatch.build_error(enrollment_info.csv, msg, sis_batch: @batch, row: enrollment_info.lineno, row_info: enrollment_info.row_info)
+          return nil
+        end
+
+        pairing = @root_account.temporary_enrollment_pairings.build(ending_enrollment_state: "deleted")
+        pairing.created_by_id = @batch.user_id
+
+        unless pairing&.ending_enrollment_state.in?(%w[completed inactive])
+          pairing.ending_enrollment_state = "deleted"
+        end
+
+        pairing
       end
 
       def completed_status(enrollment)
@@ -430,7 +550,7 @@ module SIS
           else
             @enrollments_to_delete << enrollment
           end
-          # we are done and we con go to the next enrollment
+          # we are done and we can go to the next enrollment
           true
         end
       end
@@ -455,7 +575,7 @@ module SIS
       end
 
       def invalid_active_enrollment(enrollment, enrollment_info)
-        enrollment.workflow_state = "deleted"
+        enrollment.workflow_state = "deleted" unless enrollment.deleted?
         "Attempted enrolling of deleted user #{enrollment_info.user_id} in course #{enrollment_info.course_id}"
       end
 

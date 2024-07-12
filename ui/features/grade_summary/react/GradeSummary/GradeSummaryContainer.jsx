@@ -23,19 +23,20 @@ import {AlertManagerContext} from '@canvas/alerts/react/AlertManager'
 import GenericErrorPage from '@canvas/generic-error-page'
 import errorShipUrl from '@canvas/images/ErrorShip.svg'
 
-import {CloseButton} from '@instructure/ui-buttons'
+import SubmissionCommentsTray from '../SubmissionCommentsTray'
+
 import {Flex} from '@instructure/ui-flex'
-import {Heading} from '@instructure/ui-heading'
 import {Responsive} from '@instructure/ui-responsive'
 import {Spinner} from '@instructure/ui-spinner'
-import {Tray} from '@instructure/ui-tray'
 import {View} from '@instructure/ui-view'
 
 import {ASSIGNMENTS} from '../../graphql/queries'
-import {UPDATE_SUBMISSIONS_READ_STATE} from '../../graphql/Mutations'
+import {
+  UPDATE_SUBMISSIONS_READ_STATE,
+  UPDATE_RUBRIC_ASSESSMENT_READ_STATE,
+} from '../../graphql/Mutations'
 
 import AssignmentTable from './AssignmentTable'
-import SubmissionComment from './SubmissionComment'
 import {getGradingPeriodID} from './utils'
 import {GradeSummaryContext} from './context'
 
@@ -43,12 +44,13 @@ const I18n = useI18nScope('grade_summary')
 
 const GradeSummaryContainer = () => {
   const {setOnFailure, setOnSuccess} = useContext(AlertManagerContext)
-  const [showTray, setShowTray] = useState(false)
-  const [selectedSubmission, setSelectedSubmission] = useState('')
   const [submissionIdsForUpdate, setSubmissionIdsForUpdate] = useState([])
+  const [submissionIdsForRubricUpdate, setSubmissionIdsForRubricUpdate] = useState([])
+  const [submissionAssignmentId, setSubmissionAssignmentId] = useState('')
 
   const gradingPeriod = ENV?.grading_period?.id || getGradingPeriodID()
   const viewingUserId = ENV?.student_id
+  const hideTotalRow = ENV?.hide_final_grades
 
   const variables = {
     courseID: ENV.course_id,
@@ -88,6 +90,28 @@ const GradeSummaryContainer = () => {
     },
   })
 
+  const [readStateChangeRubric] = useMutation(UPDATE_RUBRIC_ASSESSMENT_READ_STATE, {
+    onCompleted(data) {
+      if (data.updateRubricAssessmentReadState.errors) {
+        setOnFailure(I18n.t('Rubric read state change operation failed'))
+      } else {
+        setOnSuccess(
+          I18n.t(
+            {
+              one: 'Rubric read state Changed!',
+              other: 'Rubric read states Changed!',
+            },
+            {count: '1000'}
+          )
+        )
+        setSubmissionIdsForRubricUpdate([])
+      }
+    },
+    onError() {
+      setOnFailure(I18n.t('Rubric read state change failed'))
+    },
+  })
+
   useEffect(() => {
     const interval = setInterval(() => {
       if (submissionIdsForUpdate.length > 0) {
@@ -102,6 +126,20 @@ const GradeSummaryContainer = () => {
 
     return () => clearInterval(interval)
   }, [submissionIdsForUpdate, readStateChangeSubmission])
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (submissionIdsForRubricUpdate.length > 0) {
+        readStateChangeRubric({
+          variables: {
+            submissionIds: submissionIdsForRubricUpdate,
+          },
+        })
+      }
+    }, 3000)
+
+    return () => clearInterval(interval)
+  }, [submissionIdsForRubricUpdate, readStateChangeRubric])
 
   if (assignmentQuery.loading) {
     return (
@@ -137,21 +175,13 @@ const GradeSummaryContainer = () => {
     )
   }
 
-  const renderCloseButton = () => {
-    return (
-      <Flex>
-        <Flex.Item shouldGrow={true} shouldShrink={true}>
-          <Heading>Submission Comments</Heading>
-        </Flex.Item>
-        <Flex.Item>
-          <CloseButton
-            placement="end"
-            offset="small"
-            screenReaderLabel="Close"
-            onClick={() => setShowTray(false)}
-          />
-        </Flex.Item>
-      </Flex>
+  const handleRubricReadStateChange = submissionID => {
+    if (!submissionID) return
+    const arr = [...submissionIdsForRubricUpdate, submissionID]
+    setSubmissionIdsForRubricUpdate(
+      arr.filter(
+        (item, index) => item !== null && item !== undefined && arr.indexOf(item) === index
+      )
     )
   }
 
@@ -168,30 +198,24 @@ const GradeSummaryContainer = () => {
     >
       {({layout}) => (
         <GradeSummaryContext.Provider value={gradeSummaryContext}>
-          <View as="div">
+          <View as="div" padding="medium">
             <AssignmentTable
               queryData={assignmentQuery?.data?.legacyNode}
               layout={layout}
-              setShowTray={setShowTray}
-              setSelectedSubmission={setSelectedSubmission}
               handleReadStateChange={handleReadStateChange}
+              handleRubricReadStateChange={handleRubricReadStateChange}
+              setSubmissionAssignmentId={setSubmissionAssignmentId}
+              submissionAssignmentId={submissionAssignmentId}
+              hideTotalRow={hideTotalRow}
             />
-            <Tray
-              label={I18n.t('Submission Comments Tray')}
-              open={showTray}
+            <SubmissionCommentsTray
               onDismiss={() => {
-                setShowTray(false)
+                document
+                  .querySelector(`[data-testid="submission_comment_tray_${submissionAssignmentId}"`)
+                  .focus()
+                setSubmissionAssignmentId('')
               }}
-              size="medium"
-              placement="end"
-            >
-              <View as="div" padding="medium">
-                {renderCloseButton()}
-                {selectedSubmission?.commentsConnection?.nodes?.map(comment => {
-                  return <SubmissionComment comment={comment} key={comment?._id} />
-                })}
-              </View>
-            </Tray>
+            />
           </View>
         </GradeSummaryContext.Provider>
       )}

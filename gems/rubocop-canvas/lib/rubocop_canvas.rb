@@ -30,12 +30,12 @@ require "rubocop_canvas/helpers/migration_tags"
 require "rubocop_canvas/helpers/new_tables"
 require "rubocop_canvas/helpers/current_def"
 require "rubocop_canvas/helpers/indifferent"
-require "rubocop_canvas/helpers/legacy_migrations"
 require "rubocop_canvas/helpers/non_transactional"
 
 # cops
 ## datafixup
 require "rubocop_canvas/cops/datafixup/eager_load"
+require "rubocop_canvas/cops/datafixup/strand_downstream_jobs"
 ## lint
 require "rubocop_canvas/cops/lint/no_file_utils_rm_rf"
 require "rubocop_canvas/cops/lint/no_sleep"
@@ -88,8 +88,6 @@ module RuboCop
         AST::Node.include(Indifferent)
         AST::SymbolNode.include(IndifferentSymbol)
         Cop::Style::ConcatArrayLiterals.prepend(Cop::Style::ConcatArrayLiteralsWithIgnoredReceivers)
-        Cop::Rails::ThreeStateBooleanColumn.prepend(LegacyMigrations)
-        Cop::Rails::ThreeStateBooleanColumn.legacy_cutoff_date = "20220628134809"
       end
     end
   end

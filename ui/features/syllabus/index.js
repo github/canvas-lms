@@ -17,14 +17,13 @@
  */
 
 import $ from 'jquery'
-import _ from 'underscore'
+import {map} from 'lodash'
 import SyllabusBehaviors from '@canvas/syllabus/backbone/behaviors/SyllabusBehaviors'
 import SyllabusCollection from './backbone/collections/SyllabusCollection'
 import SyllabusCalendarEventsCollection from './backbone/collections/SyllabusCalendarEventsCollection'
 import SyllabusAppointmentGroupsCollection from './backbone/collections/SyllabusAppointmentGroupsCollection'
 import SyllabusPlannerCollection from './backbone/collections/SyllabusPlannerCollection'
 import SyllabusView from './backbone/views/SyllabusView'
-import {monitorLtiMessages} from '@canvas/lti/jquery/messages'
 import {attachImmersiveReaderButton} from './util/utils'
 import ready from '@instructure/ready'
 
@@ -59,7 +58,7 @@ if (!(ENV.IN_PACED_COURSE && !ENV.current_user_is_student) && showCourseSummary)
 
   // Perform a fetch on each collection
   //   The fetch continues fetching until no next link is returned
-  deferreds = _.map(collections, collection => {
+  deferreds = map(collections, collection => {
     const deferred = $.Deferred()
 
     const error = () => deferred.reject()
@@ -134,8 +133,6 @@ ready(() => {
   SyllabusBehaviors.bindToEditSyllabus(true)
   SyllabusBehaviors.bindToMiniCalendar()
 })
-
-monitorLtiMessages()
 
 function renderCoursePacingNotice() {
   const contextInfo = ENV.context_asset_string.split('_')

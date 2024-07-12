@@ -18,12 +18,14 @@
 
 import ReactDOM from 'react-dom'
 
+import {waitFor} from '@testing-library/dom'
 import TrayController, {CONTAINER_ID} from '../TrayController'
 import FakeEditor from '../../../../__tests__/FakeEditor'
 import VideoOptionsTrayDriver from './VideoOptionsTrayDriver'
 import * as contentSelection from '../../../shared/ContentSelection'
 import RCEGlobals from '../../../../RCEGlobals'
 import {createLiveRegion, removeLiveRegion} from '../../../../__tests__/liveRegionHelper'
+import bridge from '../../../../../bridge'
 
 const mockVideoPlayers = [
   {
@@ -167,10 +169,10 @@ describe('RCE "Videos" Plugin > VideoOptionsTray > TrayController', () => {
   })
 
   describe('#hideTrayForEditor()', () => {
-    it('closes the tray when open for the given editor', () => {
+    it('closes the tray when open for the given editor', async () => {
       trayController.showTrayForEditor(editors[0])
       trayController.hideTrayForEditor(editors[0])
-      expect(getTray()).toBeNull()
+      await waitFor(() => expect(getTray()).toBeNull(), {timeout: 2000}) // the tray is closed after a transition
     })
 
     it('does not close the tray when open for a different editor', () => {
@@ -196,7 +198,7 @@ describe('RCE "Videos" Plugin > VideoOptionsTray > TrayController', () => {
       jest.resetAllMocks()
     })
 
-    it('updates the video', () => {
+    it('updates the video', async () => {
       const updateMediaObject = jest.fn().mockResolvedValue()
       trayController.showTrayForEditor(editors[0])
       trayController._applyVideoOptions({
@@ -207,7 +209,7 @@ describe('RCE "Videos" Plugin > VideoOptionsTray > TrayController', () => {
         media_object_id: 'm_somevideo',
         updateMediaObject,
       })
-      expect(getTray()).toBeNull() // the tray is closed
+      await waitFor(() => expect(getTray()).toBeNull(), {timeout: 2000}) // the tray is closed after a transition
       const videoIframe = trayController.$videoContainer
       const videoContainer = videoIframe.parentElement
       expect(videoContainer.getAttribute('data-mce-p-title')).toBe('new title')
@@ -256,7 +258,7 @@ describe('RCE "Videos" Plugin > VideoOptionsTray > TrayController', () => {
       })
     })
 
-    it('does not updates the video w/o a media_object_id', () => {
+    it('does not update the video w/o a media_object_id', async () => {
       const updateMediaObject = jest.fn().mockResolvedValue()
       trayController.showTrayForEditor(editors[0])
       trayController._applyVideoOptions({
@@ -267,7 +269,7 @@ describe('RCE "Videos" Plugin > VideoOptionsTray > TrayController', () => {
         media_object_id: undefined,
         updateMediaObject,
       })
-      expect(getTray()).toBeNull() // the tray is closed
+      await waitFor(() => expect(getTray()).toBeNull(), {timeout: 2000}) // the tray is closed after a transition
       const videoIframe = trayController.$videoContainer
       const videoContainer = videoIframe.parentElement
       expect(videoContainer.getAttribute('data-mce-p-title')).toBe('new title')
@@ -281,14 +283,14 @@ describe('RCE "Videos" Plugin > VideoOptionsTray > TrayController', () => {
       const updateMediaObject = jest.fn().mockResolvedValue()
       trayController.showTrayForEditor(editors[0])
       trayController._applyVideoOptions({
-        isLocked: true,
+        editLocked: true,
         media_object_id: 'm_somevideo',
         updateMediaObject,
       })
       expect(updateMediaObject).not.toHaveBeenCalled()
     })
 
-    it('replaces the video with a link', () => {
+    it('replaces the video with a link', async () => {
       const updateMediaObject = jest.fn().mockResolvedValue()
       const ed = editors[0]
       trayController.showTrayForEditor(ed)
@@ -298,7 +300,7 @@ describe('RCE "Videos" Plugin > VideoOptionsTray > TrayController', () => {
         media_object_id: 'm_somevideo',
         updateMediaObject,
       })
-      expect(getTray()).toBeNull() // the tray is closed
+      await waitFor(() => expect(getTray()).toBeNull(), {timeout: 2000}) // the tray is closed after a transition
       const videoContainer = trayController.$videoContainer
       expect(videoContainer).toBe(null)
       const sel = ed.selection.getNode()
@@ -306,6 +308,56 @@ describe('RCE "Videos" Plugin > VideoOptionsTray > TrayController', () => {
       expect(sel.getAttribute('href')).toBe('http://video.is.here/')
       expect(sel.innerHTML).toBe('new &lt;em&gt;fancy&lt;/em&gt; title') // see, html is not evaluated
       expect(updateMediaObject).toHaveBeenCalled()
+    })
+  })
+
+  describe('#requestSubtitlesFromIframe', () => {
+    let previousOrigin = ''
+
+    beforeAll(() => {
+      previousOrigin = bridge.canvasOrigin
+      bridge.canvasOrigin = 'http://localhost'
+    })
+
+    afterAll(() => {
+      bridge.canvasOrigin = previousOrigin
+    })
+
+    it('posts message to iframe onload', () => {
+      const postMessageMock = jest.fn()
+      const iframe = contentSelection.findMediaPlayerIframe(editors[0].selection.getNode())
+      iframe.contentWindow.postMessage = postMessageMock;
+      trayController.showTrayForEditor(editors[0])
+      expect(postMessageMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('cleans up event listener on tray close', () => {
+      const postMessageMock = jest.fn()
+      const iframe = contentSelection.findMediaPlayerIframe(editors[0].selection.getNode())
+      iframe.contentWindow.postMessage = postMessageMock;
+      trayController.showTrayForEditor(editors[0])
+      trayController.hideTrayForEditor(editors[0])
+      trayController.showTrayForEditor(editors[0])
+      expect(postMessageMock).toHaveBeenCalledTimes(2)
+    })
+
+    it('adds an event listener with a callback', () => {
+      const eventMock = jest.fn()
+      trayController.requestSubtitlesFromIframe(eventMock)
+      const msgEvent = new Event('message')
+      msgEvent.data = {subject: 'media_tracks_response', payload: [{locale: 'en'}]}
+      window.dispatchEvent(msgEvent)
+      expect(eventMock).toHaveBeenCalledTimes(1)
+      expect(eventMock).toHaveBeenCalledWith([{locale: 'en'}])
+    })
+
+    it('event listener ignores events with wrong subject', () => {
+      const eventMock = jest.fn()
+      trayController.requestSubtitlesFromIframe(eventMock)
+      const msgEvent = new Event('message')
+      msgEvent.data = {subject: 'wrong_response', payload: [{locale: 'en'}]}
+      window.dispatchEvent(msgEvent)
+      expect(eventMock).toHaveBeenCalledTimes(0)
     })
   })
 })

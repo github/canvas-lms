@@ -18,6 +18,8 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
+require "feedjira"
+
 describe ConversationsController do
   before do
     allow(InstStatsd::Statsd).to receive(:count)
@@ -55,35 +57,6 @@ describe ConversationsController do
       get "index"
       expect(response).to be_successful
       expect(assigns[:js_env]).not_to be_nil
-    end
-
-    it "tallies legacy inbox stats" do
-      user_session(@student)
-
-      # counts toward inbox and sent, and unread
-      c1 = conversation
-      c1.update_attribute :workflow_state, "unread"
-
-      # counts toward inbox, sent, and starred
-      c2 = conversation
-      c2.update(starred: true)
-
-      # counts toward sent, and archived
-      c3 = conversation
-      c3.update_attribute :workflow_state, "archived"
-
-      term = @course.root_account.enrollment_terms.create! name: "Fall"
-      @course.update! enrollment_term: term
-
-      get "index"
-      expect(response).to be_successful
-
-      expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.visit.legacy")
-      expect(InstStatsd::Statsd).to have_received(:count).with("inbox.visit.scope.inbox.count.legacy", 2).once
-      expect(InstStatsd::Statsd).to have_received(:count).with("inbox.visit.scope.sent.count.legacy", 3).once
-      expect(InstStatsd::Statsd).to have_received(:count).with("inbox.visit.scope.unread.count.legacy", 1).once
-      expect(InstStatsd::Statsd).to have_received(:count).with("inbox.visit.scope.starred.count.legacy", 1).once
-      expect(InstStatsd::Statsd).to have_received(:count).with("inbox.visit.scope.archived.count.legacy", 1).once
     end
 
     it "assigns variables for json" do
@@ -304,10 +277,6 @@ describe ConversationsController do
     end
 
     context "react-inbox" do
-      before do
-        Account.default.enable_feature! :react_inbox
-      end
-
       context "metrics" do
         it "does not increment visit count if not authorized to open inbox" do
           get "index"
@@ -1004,6 +973,34 @@ describe ConversationsController do
       end
     end
 
+    context "soft-concluded course with with active enrollment overrides" do
+      before do
+        course_with_student_logged_in(active_all: true)
+        @course.enrollment_term.start_at = 2.days.ago
+        @course.enrollment_term.end_at = 1.day.ago
+        @course.restrict_student_future_view = true
+        @course.restrict_student_past_view = true
+        @course.enrollment_term.set_overrides(Account.default, "TeacherEnrollment" => { start_at: 1.day.ago, end_at: 2.days.from_now })
+        @course.enrollment_term.set_overrides(Account.default, "StudentEnrollment" => { start_at: 1.day.ago, end_at: 2.days.from_now })
+        @course.save!
+        @course.enrollment_term.save!
+      end
+
+      it "allows a teacher to create a new conversation in soft_concluded course if enrollment override is active" do
+        user_session(@teacher)
+        expect(@course.soft_concluded?).to be_truthy
+        post "create", params: { recipients: [@student.id.to_s], body: "yo", context_code: @course.asset_string }
+        expect(response).to be_successful
+      end
+
+      it "allows a student to create a new conversation in soft_concluded course if enrollment override is active" do
+        user_session(@student)
+        expect(@course.soft_concluded?).to be_truthy
+        post "create", params: { recipients: [@teacher.id.to_s], body: "yo", context_code: @course.asset_string }
+        expect(response).to be_successful
+      end
+    end
+
     context "soft concluded course" do
       before do
         course_with_student_logged_in(active_all: true)
@@ -1281,10 +1278,10 @@ describe ConversationsController do
     it "returns basic feed attributes" do
       conversation
       get "public_feed", params: { feed_code: @student.feed_code }, format: "atom"
-      feed = Atom::Feed.load_feed(response.body) rescue nil
+      feed = Feedjira.parse(response.body) rescue nil
       expect(feed).not_to be_nil
       expect(feed.title).to eq "Conversations Feed"
-      expect(feed.links.first.href).to match(/conversations/)
+      expect(feed.feed_url).to match(/conversations/)
     end
 
     it "includes message entries" do
@@ -1305,7 +1302,7 @@ describe ConversationsController do
       message = "Sending a test message to some random users, in the hopes that it really works."
       conversation(message:)
       get "public_feed", params: { feed_code: @student.feed_code }, format: "atom"
-      feed = Atom::Feed.load_feed(response.body) rescue nil
+      feed = Feedjira.parse(response.body) rescue nil
       expect(feed).not_to be_nil
       expect(feed.entries.first.title).to match(/Sending a test/)
       expect(feed.entries.first.title).not_to match(message)
@@ -1315,7 +1312,7 @@ describe ConversationsController do
       message = "Sending a test message to some random users, in the hopes that it really works."
       conversation(message:)
       get "public_feed", params: { feed_code: @student.feed_code }, format: "atom"
-      feed = Atom::Feed.load_feed(response.body) rescue nil
+      feed = Feedjira.parse(response.body) rescue nil
       expect(feed).not_to be_nil
       expect(feed.entries.first.content).to match(message)
     end
@@ -1324,7 +1321,7 @@ describe ConversationsController do
       message = "Sending a test message to some random users, in the hopes that it really works."
       conversation(num_other_users: 4, message:)
       get "public_feed", params: { feed_code: @student.feed_code }, format: "atom"
-      feed = Atom::Feed.load_feed(response.body) rescue nil
+      feed = Feedjira.parse(response.body) rescue nil
       expect(feed).not_to be_nil
       expect(feed.entries.first.content).to match(/Message Course/)
       expect(feed.entries.first.content).to match(/User/)
@@ -1337,7 +1334,7 @@ describe ConversationsController do
       @conversation.add_message("test attachment", attachment_ids: [attachment.id])
       allow(HostUrl).to receive(:context_host).and_return("test.host")
       get "public_feed", params: { feed_code: @student.feed_code }, format: "atom"
-      feed = Atom::Feed.load_feed(response.body) rescue nil
+      feed = Feedjira.parse(response.body) rescue nil
       expect(feed).not_to be_nil
       expect(feed.entries.first.content).to match(/somefile\.doc/)
     end

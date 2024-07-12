@@ -18,7 +18,6 @@
 import ModuleCollection from '@canvas/modules/backbone/collections/ModuleCollection'
 import {savedObservedId} from '@canvas/observer-picker/ObserverGetObservee'
 import PaginatedCollection from '@canvas/pagination/backbone/collections/PaginatedCollection'
-import _ from 'underscore'
 import AssignmentGroup from '../models/AssignmentGroup'
 import SubmissionCollection from './SubmissionCollection'
 
@@ -37,7 +36,8 @@ export default class AssignmentGroupCollection extends PaginatedCollection {
       }
 
       for (const assignment of this.assignments()) {
-        const assignmentModuleNames = _(assignment.get('module_ids')).map(id => moduleNames[id])
+        const moduleIds = assignment.get('module_ids') || []
+        const assignmentModuleNames = moduleIds.map(id => moduleNames[id])
         assignment.set('modules', assignmentModuleNames)
       }
     })
@@ -64,12 +64,17 @@ export default class AssignmentGroupCollection extends PaginatedCollection {
       const collection = new SubmissionCollection()
       const observedUser = this.getObservedUserId()
 
+      let baseUrl
       if (observedUser) {
-        collection.url = () =>
-          `${this.courseSubmissionsURL}?student_ids[]=${observedUser}&per_page=${PER_PAGE_LIMIT}`
+        baseUrl = `${this.courseSubmissionsURL}?student_ids[]=${observedUser}&per_page=${PER_PAGE_LIMIT}`
       } else {
-        collection.url = () => `${this.courseSubmissionsURL}?per_page=${PER_PAGE_LIMIT}`
+        baseUrl = `${this.courseSubmissionsURL}?per_page=${PER_PAGE_LIMIT}`
       }
+      collection.url = () =>
+        ENV.FEATURES.discussion_checkpoints
+          ? `${baseUrl}&include[]=sub_assignment_submissions`
+          : `${baseUrl}`
+
       collection.loadAll = true
       collection.on('fetched:last', () => this.loadGradesFromSubmissions(collection.toArray()))
       return collection.fetch()

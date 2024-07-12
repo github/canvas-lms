@@ -15,33 +15,37 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import Assignment from '@canvas/assignments/backbone/models/Assignment'
+import DateAvailableColumnView from '@canvas/assignments/backbone/views/DateAvailableColumnView'
+import DateDueColumnView from '@canvas/assignments/backbone/views/DateDueColumnView'
 import Backbone from '@canvas/backbone'
+import CyoeHelper from '@canvas/conditional-release-cyoe-helper'
+import DirectShareCourseTray from '@canvas/direct-sharing/react/components/DirectShareCourseTray'
+import DirectShareUserModal from '@canvas/direct-sharing/react/components/DirectShareUserModal'
+import {scoreToPercentage} from '@canvas/grading/GradeCalculationHelper'
+import {useScope as useI18nScope} from '@canvas/i18n'
+import {ListViewCheckpoints} from '@canvas/list-view-checkpoints/react/ListViewCheckpoints'
+import {TeacherCheckpointsInfo} from '@canvas/list-view-checkpoints/react/TeacherCheckpointsInfo'
+import LockIconView from '@canvas/lock-icon'
+import * as MoveItem from '@canvas/move-item-tray'
+import PublishIconView from '@canvas/publish-icon-view'
+import '@canvas/rails-flash-notifications'
+import round from '@canvas/round'
+import SisButtonView from '@canvas/sis/backbone/views/SisButtonView'
+import {StudentViewPeerReviews} from '@canvas/student_view_peer_reviews/react/StudentViewPeerReviews'
+import {shimGetterShorthand} from '@canvas/util/legacyCoffeesScriptHelpers'
+import preventDefault from '@canvas/util/preventDefault'
+import {scoreToGrade} from '@instructure/grading-utils'
 import $ from 'jquery'
+import 'jqueryui/tooltip'
 import React from 'react'
 import ReactDOM from 'react-dom'
-import CyoeHelper from '@canvas/conditional-release-cyoe-helper'
-import DirectShareUserModal from '@canvas/direct-sharing/react/components/DirectShareUserModal'
-import DirectShareCourseTray from '@canvas/direct-sharing/react/components/DirectShareCourseTray'
-import * as MoveItem from '@canvas/move-item-tray'
-import Assignment from '@canvas/assignments/backbone/models/Assignment'
-import PublishIconView from '@canvas/publish-icon-view'
-import LockIconView from '@canvas/lock-icon'
-import DateDueColumnView from '@canvas/assignments/backbone/views/DateDueColumnView'
-import DateAvailableColumnView from '@canvas/assignments/backbone/views/DateAvailableColumnView'
-import CreateAssignmentView from './CreateAssignmentView'
-import SisButtonView from '@canvas/sis/backbone/views/SisButtonView'
-import preventDefault from '@canvas/util/preventDefault'
 import template from '../../jst/AssignmentListItem.handlebars'
 import scoreTemplate from '../../jst/_assignmentListItemScore.handlebars'
-import round from '@canvas/round'
 import AssignmentKeyBindingsMixin from '../mixins/AssignmentKeyBindingsMixin'
-import 'jqueryui/tooltip'
-import '@canvas/rails-flash-notifications'
-import {shimGetterShorthand} from '@canvas/util/legacyCoffeesScriptHelpers'
-import {StudentViewPeerReviews} from '../../react/components/StudentViewPeerReviews'
-import {scoreToGrade} from '@instructure/grading-utils'
-import {scoreToPercentage} from '@canvas/grading/GradeCalculationHelper'
+import CreateAssignmentView from './CreateAssignmentView'
+import ItemAssignToTray from '@canvas/context-modules/differentiated-modules/react/Item/ItemAssignToTray'
+import {captureException} from '@sentry/browser'
 
 const I18n = useI18nScope('AssignmentListItemView')
 
@@ -61,6 +65,8 @@ export default AssignmentListItemView = (function () {
       this.onDuplicateFailedRetry = this.onDuplicateFailedRetry.bind(this)
       this.onMigrateFailedRetry = this.onMigrateFailedRetry.bind(this)
       this.onDuplicateOrImportFailedCancel = this.onDuplicateOrImportFailedCancel.bind(this)
+      this.renderItemAssignToTray = this.renderItemAssignToTray.bind(this)
+      this.onAssign = this.onAssign.bind(this)
       this.onDelete = this.onDelete.bind(this)
       this.onSendAssignmentTo = this.onSendAssignmentTo.bind(this)
       this.onCopyAssignmentTo = this.onCopyAssignmentTo.bind(this)
@@ -82,6 +88,8 @@ export default AssignmentListItemView = (function () {
       this.focusOnGroup = this.focusOnGroup.bind(this)
       this.focusOnGroupByID = this.focusOnGroupByID.bind(this)
       this.focusOnFirstGroup = this.focusOnFirstGroup.bind(this)
+      this.onAlignmentCloneFailedRetry = this.onAlignmentCloneFailedRetry.bind(this)
+      this.updateAssignmentCollectionItem = this.updateAssignmentCollectionItem.bind(this)
     }
 
     static initClass() {
@@ -107,6 +115,7 @@ export default AssignmentListItemView = (function () {
       this.prototype.events = {
         'click .delete_assignment': 'onDelete',
         'click .duplicate_assignment': 'onDuplicate',
+        'click .assign-to-link': 'onAssign',
         'click .send_assignment_to': 'onSendAssignmentTo',
         'click .copy_assignment_to': 'onCopyAssignmentTo',
         'click .tooltip_link': preventDefault(function () {}),
@@ -119,6 +128,8 @@ export default AssignmentListItemView = (function () {
         'click .migrate-failed-retry': 'onMigrateFailedRetry',
         'click .duplicate-failed-cancel': 'onDuplicateOrImportFailedCancel',
         'click .import-failed-cancel': 'onDuplicateOrImportFailedCancel',
+        'click .alignment-clone-failed-retry': 'onAlignmentCloneFailedRetry',
+        'click .alignment-clone-failed-cancel': 'onDuplicateOrImportFailedCancel',
       }
 
       this.prototype.messages = shimGetterShorthand(
@@ -297,6 +308,7 @@ export default AssignmentListItemView = (function () {
 
       super.render(...arguments)
       this.initializeSisButton()
+      $('.ig-details').addClass('rendered')
       // reset the model's view property; it got overwritten by child views
       if (this.model) {
         return (this.model.view = this)
@@ -314,7 +326,45 @@ export default AssignmentListItemView = (function () {
       }
 
       const {attributes = {}} = this.model
-      const {assessment_requests: assessmentRequests} = attributes
+      const {assessment_requests: assessmentRequests, checkpoints} = attributes
+
+      if (checkpoints && checkpoints.length && !this.canManage()) {
+        try {
+          const checkpointsElem =
+          this.$el.find(`#assignment_student_checkpoints_${this.model.id}`) ?? []
+          const mountPoint = checkpointsElem[0]
+
+          ReactDOM.render(
+            React.createElement(ListViewCheckpoints, {
+              assignment: attributes,
+            }),
+            mountPoint
+          )
+        } catch (error) {
+          const errorMessage = I18n.t('Checkpoints mount point element not found')
+          // eslint-disable-next-line no-console
+          console.error(errorMessage, error)
+          captureException(new Error(errorMessage), error)
+        }
+      } else if(checkpoints && checkpoints.length && this.canManage()) {
+        const checkpointsElem = this.$el.find(`#assignment_teacher_checkpoint_info_${this.model.id}`)
+        const mountPoint = checkpointsElem[0]
+        if (mountPoint) {
+          try {
+            ReactDOM.render(
+              React.createElement(TeacherCheckpointsInfo, {
+                assignment: this.model.attributes,
+              }),
+              mountPoint
+            )
+          } catch (error) {
+            const errorMessage = I18n.t('Checkpoints mount point element not found')
+            console.error(errorMessage, error)
+            captureException(new Error(errorMessage), error)
+          }
+        }
+      }
+
       if (assessmentRequests && assessmentRequests.length) {
         const peerReviewElem =
           this.$el.find(`#assignment_student_peer_review_${this.model.id}`) ?? []
@@ -370,6 +420,7 @@ export default AssignmentListItemView = (function () {
         data = this._setJSONForGrade(data)
       }
       data.courseId = this.model.get('course_id')
+      data.differentiatedModulesFlag = ENV.FEATURES?.selective_release_ui_api
       data.showSpeedGraderLinkFlag = ENV.FLAGS?.show_additional_speed_grader_link
       data.showSpeedGraderLink = ENV.SHOW_SPEED_GRADER_LINK
       // publishing and unpublishing the underlying model does not rerender this view.
@@ -380,11 +431,15 @@ export default AssignmentListItemView = (function () {
       data.canMove = this.canMove()
       data.canDelete = this.canDelete()
       data.canDuplicate = this.canDuplicate()
+      data.canManageAssignTo = this.canManageAssignTo()
       data.is_locked = this.model.isRestrictedByMasterCourse()
+      data.isCheckpoint = this.model.get('checkpoints') && this.model.get('checkpoints').length > 0
       data.showAvailability =
+        !data.isCheckpoint &&
         !(this.model.inPacedCourse() && this.canManage()) &&
         (this.model.multipleDueDates() || !this.model.defaultDates().available())
       data.showDueDate =
+        !data.isCheckpoint &&
         !(this.model.inPacedCourse() && this.canManage()) &&
         (this.model.multipleDueDates() || this.model.singleSectionDueDate())
 
@@ -398,6 +453,12 @@ export default AssignmentListItemView = (function () {
 
       data.DIRECT_SHARE_ENABLED = !!ENV.DIRECT_SHARE_ENABLED
       data.canOpenManageOptions = this.canOpenManageOptions()
+
+      data.item_assignment_type = data.is_quiz_assignment
+        ? 'quiz'
+        : data.isQuizLTIAssignment
+        ? 'lti-quiz'
+        : 'assignment'
 
       if (data.canManage) {
         data.spanWidth = 'span3'
@@ -420,7 +481,11 @@ export default AssignmentListItemView = (function () {
             `&discussion_topics[]=${__guard__(this.model.get('discussion_topic'), x => x.id)}`)
         })
       } else {
-        data.menu_tools = ENV.assignment_menu_tools || []
+        const isNewQuizzes = this.model.isQuizLTIAssignment()
+        const isShareToCommons = (tool) => tool.canvas_icon_class === 'icon-commons'
+        const tools = ENV.assignment_menu_tools || []
+
+        data.menu_tools =  isNewQuizzes ? tools.filter(tool => !isShareToCommons(tool)) : tools
         data.menu_tools.forEach(tool => {
           return (tool.url = tool.base_url + `&assignments[]=${this.model.get('id')}`)
         })
@@ -489,6 +554,30 @@ export default AssignmentListItemView = (function () {
         .always(() => $button.prop('disabled', false))
     }
 
+    onAlignmentCloneFailedRetry(e) {
+      e.preventDefault()
+      const $button = $(e.target)
+      $button.prop('disabled', true)
+      return this.model
+        .alignment_clone_failed(response => {
+          return this.updateAssignmentCollectionItem(response)
+        })
+        .always(() => $button.prop('disabled', false))
+    }
+
+    updateAssignmentCollectionItem(response) {
+      if (!response) {
+        return
+      }
+      this.model.collection.forEach(a => {
+        if (a.get('id') === response.id) {
+          a.set('workflow_state', response.workflow_state)
+          a.set('duplication_started_at', response.duplication_started_at)
+          a.set('updated_at', response.updated_at)
+        }
+      })
+    }
+
     onMigrateFailedRetry(e) {
       e.preventDefault()
       const $button = $(e.target)
@@ -504,6 +593,44 @@ export default AssignmentListItemView = (function () {
     onDuplicateOrImportFailedCancel(e) {
       e.preventDefault()
       return this.delete({silent: true})
+    }
+
+    renderItemAssignToTray(open, returnFocusTo, itemProps) {
+      ReactDOM.render(
+        <ItemAssignToTray
+          open={open}
+          onClose={() => {
+            ReactDOM.unmountComponentAtNode(document.getElementById('assign-to-mount-point'))
+          }}
+          onDismiss={() => {
+            this.renderItemAssignToTray(false, returnFocusTo, itemProps)
+            returnFocusTo.focus()
+          }}
+          itemType="assignment"
+          locale={ENV.LOCALE || 'en'}
+          timezone={ENV.TIMEZONE || 'UTC'}
+          {...itemProps}
+        />,
+        document.getElementById('assign-to-mount-point')
+      )
+    }
+
+    onAssign(e) {
+      e.preventDefault()
+      const returnFocusTo = $(e.target).closest('ul').prev('.al-trigger')
+
+      const courseId = e.target.getAttribute('data-assignment-context-id')
+      const itemName = e.target.getAttribute('data-assignment-name')
+      const itemContentId = e.target.getAttribute('data-assignment-id')
+      const pointsPossible = this.model.get('points_possible')
+      const iconType = e.target.getAttribute('data-assignment-type')
+      this.renderItemAssignToTray(true, returnFocusTo, {
+        courseId,
+        itemName,
+        itemContentId,
+        pointsPossible,
+        iconType,
+      })
     }
 
     onDelete(e) {
@@ -646,6 +773,10 @@ export default AssignmentListItemView = (function () {
       return ENV.PERMISSIONS.manage
     }
 
+    canManageAssignTo() {
+      return ENV.PERMISSIONS.by_assignment_id?.[this.model.id]?.manage_assign_to
+    }
+
     canShowBuildLink() {
       return !!(ENV.FLAGS && this.model.isQuizLTIAssignment())
     }
@@ -708,20 +839,29 @@ export default AssignmentListItemView = (function () {
         }
         json.submission = submissionJSON
         let grade = submission.get('grade')
-
-        if (json.restrict_quantitative_data && gradingType !== 'pass_fail') {
+        // it should skip this logic if it is a pass/fail assignment or if the
+        // grading type is letter grade and the grade represents the letter grade
+        // and the score represents the numerical grade
+        // this is usually how the grade is stored when the assignment is letter grade
+        // but this does not happen when points possible is 0, then the grade is not saved as a letter grade
+        // and needs to be converted
+        if (
+          json.restrict_quantitative_data &&
+          gradingType !== 'pass_fail' &&
+          !(gradingType === 'letter_grade' && String(grade) !== String(score))
+        ) {
           gradingType = 'letter_grade'
-
           if (json.pointsPossible === 0 && json.submission.score < 0) {
             grade = json.submission.score
           } else if (json.pointsPossible === 0 && json.submission.score > 0) {
-            grade = scoreToGrade(100, ENV.grading_scheme)
+            grade = scoreToGrade(100, ENV.grading_scheme, ENV.points_based)
           } else if (json.pointsPossible === 0 && json.submission.score === 0) {
             grade = 'complete'
           } else {
             grade = scoreToGrade(
               scoreToPercentage(json.submission.score, json.pointsPossible),
-              ENV.grading_scheme
+              ENV.grading_scheme,
+              ENV.points_based
             )
           }
         }

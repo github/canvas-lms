@@ -335,7 +335,7 @@ describe BasicLTI::BasicOutcomes do
       end
 
       it "replace_result succeeds when section dates override course dates" do
-        cs = CourseSection.where(id: @course.enrollments.where(user_id: @user).pluck(:course_section_id)).take
+        cs = CourseSection.find_by(id: @course.enrollments.where(user_id: @user).pluck(:course_section_id))
         cs.start_at = 1.day.ago
         cs.end_at = 1.day.from_now
         cs.restrict_enrollments_to_section_dates = true
@@ -858,7 +858,7 @@ describe BasicLTI::BasicOutcomes do
       stub_const("BasicLTI::BasicOutcomes::MAX_ATTEMPTS", 1)
       stub_request(:get, "http://example.com/download").to_return(status: 500)
       run_jobs
-      expect(Delayed::Job.strand_size("file_download/example.com/failed")).to be == 0
+      expect(Delayed::Job.strand_size("file_download/example.com/failed")).to eq 0
       submission = assignment.submissions.find_by(user: @user)
       expect(submission.reload.versions.count).to eq 1
       expect(submission.attachments.count).to eq 1
@@ -875,7 +875,7 @@ describe BasicLTI::BasicOutcomes do
       end
       Timecop.freeze(6.seconds.from_now) do
         run_jobs
-        expect(Delayed::Job.strand_size("file_download/example.com/failed")).to be == 0
+        expect(Delayed::Job.strand_size("file_download/example.com/failed")).to eq 0
         submission = assignment.submissions.find_by(user: @user)
         expect(submission.reload.versions.count).to eq 1
         expect(submission.attachments.count).to eq 1

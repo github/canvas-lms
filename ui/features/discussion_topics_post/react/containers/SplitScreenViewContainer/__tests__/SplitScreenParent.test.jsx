@@ -72,12 +72,11 @@ describe('SplitScreenParent', () => {
     onSuccessStub.mockClear()
   })
 
-
   it('should render the reply preview', () => {
     const quotedEntry = {
       quotedEntry: {
         createdAt: '2021-08-10T12:10:38-06:00',
-        previewMessage:
+        message:
           'Differences of habit and language are nothing at all if our aims are identical and our hearts are open.',
         author: {
           shortName: 'Albus Dumbledore',
@@ -126,7 +125,7 @@ describe('SplitScreenParent', () => {
       expect(onDelete).toHaveBeenCalled()
     })
 
-    it('only shows the speed grader option if you have permission', () => {
+    it('only shows the SpeedGrader option if you have permission', () => {
       const props = defaultProps({overrides: {onOpenInSpeedGrader: jest.fn()}})
       props.discussionTopic.permissions.speedGrader = false
       const {getByTestId, queryByTestId} = setup(props)
@@ -179,7 +178,6 @@ describe('SplitScreenParent', () => {
     const {queryByText} = setup(
       defaultProps({
         discussionEntryOverrides: {
-          isolatedEntryId: '77',
           parentId: '77',
           depth: 4,
         },
@@ -201,7 +199,6 @@ describe('SplitScreenParent', () => {
     const {queryByText} = setup(
       defaultProps({
         discussionEntryOverrides: {
-          isolatedEntryId: '77',
           parentId: '77',
           depth: 3,
         },
@@ -240,6 +237,10 @@ describe('SplitScreenParent', () => {
   })
 
   describe('Report Reply', () => {
+    beforeAll(() => {
+      window.ENV.discussions_reporting = true
+    })
+
     it('show Report', () => {
       const {getByTestId, queryByText} = setup(defaultProps())
 
@@ -300,5 +301,39 @@ describe('SplitScreenParent', () => {
       expect(container.queryByText('Sorry, Something Broke')).toBeNull()
       expect(container.getByText('Anonymous 1')).toBeInTheDocument()
     })
+  })
+
+  describe('rating', () => {
+    it('should react on liked', async() => {
+      const onToggleRating = jest.fn()
+      const {queryByTestId} = setup(
+        defaultProps({
+            overrides: {onToggleRating}
+        })
+      )
+      const likeButton = await queryByTestId('not-liked-icon')
+      expect(likeButton).toBeInTheDocument();
+      fireEvent.click(likeButton)
+      expect(onToggleRating).toHaveBeenCalled()
+    })
+
+    it('should react on not_liked', async() => {
+      const onToggleRating = jest.fn()
+      const {queryByTestId} = setup(
+        defaultProps(
+          {
+            discussionEntryOverrides: {
+              entryParticipant: {
+                rating: true,
+              },
+            }, overrides: {onToggleRating}
+          })
+      )
+      const likeButton = await queryByTestId('liked-icon')
+      expect(likeButton).toBeInTheDocument();
+      fireEvent.click(likeButton)
+      expect(onToggleRating).toHaveBeenCalled()
+    })
+
   })
 })

@@ -19,14 +19,16 @@
 import {DiscussionEdit} from '../DiscussionEdit/DiscussionEdit'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import PropTypes from 'prop-types'
-import React, {useContext} from 'react'
-import {getDisplayName, responsiveQuerySizes} from '../../utils'
-import {SearchContext} from '../../utils/constants'
+import React, {useContext, useEffect, useState} from 'react'
+import {getDisplayName, responsiveQuerySizes, getTranslation} from '../../utils'
+import {DiscussionManagerUtilityContext, SearchContext} from '../../utils/constants'
 import {SearchSpan} from '../SearchSpan/SearchSpan'
 
 import {AccessibleContent} from '@instructure/ui-a11y-content'
 import {Responsive} from '@instructure/ui-responsive'
 import {Text} from '@instructure/ui-text'
+import {Flex} from '@instructure/ui-flex'
+import {Spinner} from '@instructure/ui-spinner'
 import theme from '@instructure/canvas-theme'
 import {View} from '@instructure/ui-view'
 
@@ -34,6 +36,45 @@ const I18n = useI18nScope('discussion_posts')
 
 export function PostMessage({...props}) {
   const {searchTerm} = useContext(SearchContext)
+
+  useEffect(() => {
+    if (ENV.SEQUENCE !== undefined && props.isTopic) {
+      // eslint-disable-next-line promise/catch-or-return
+      import('@canvas/modules/jquery/prerequisites_lookup').then(() => {
+        INST.lookupPrerequisites()
+      })
+    }
+  }, [props.isTopic])
+
+  let heading = 'h2'
+
+  if (props.discussionEntry) {
+    const depth = Math.min(props.discussionEntry.depth + 2, 5)
+    heading = 'h' + depth.toString()
+  }
+
+  const {translateTargetLanguage} = useContext(DiscussionManagerUtilityContext)
+  const [translatedTitle, setTranslatedTitle] = useState(props.title)
+  const [translatedMessage, setTranslatedMessage] = useState(props.message)
+  const [isTranslating, setIsTranslating] = useState(false)
+
+  // Shouldn't fire if not feature flagged.
+  useEffect(() => {
+    if (translateTargetLanguage == null) {
+      // Since the SearchSpan depends on translatedMessage, we want to make sure that it gets set to the latest props.message
+      // Value if it changes, even if no translation occurs.
+      setTranslatedMessage(props.message)
+      return
+    }
+
+    getTranslation(translatedTitle, translateTargetLanguage, setTranslatedTitle, setIsTranslating)
+    getTranslation(
+      translatedMessage,
+      translateTargetLanguage,
+      setTranslatedMessage,
+      setIsTranslating
+    )
+  }, [translateTargetLanguage, props.message])
 
   return (
     <Responsive
@@ -44,31 +85,42 @@ export function PostMessage({...props}) {
           titleMargin: '0',
           titleTextSize: 'small',
           titleTextWeight: 'bold',
-          messageTextSize: 'fontSizeSmall',
+          messageTextSize: 'fontSizeXSmall',
+          messageLeftPadding: undefined,
         },
         desktop: {
           titleMargin: props.threadMode ? '0' : '0 0 small 0',
           titleTextSize: props.threadMode ? 'medium' : 'x-large',
           titleTextWeight: props.threadMode ? 'bold' : 'normal',
           messageTextSize: props.threadMode ? 'fontSizeSmall' : 'fontSizeMedium',
+          messageLeftPadding:
+            props.discussionEntry && props.discussionEntry.depth === 1 && !props.threadMode
+              ? theme.variables.spacing.xxSmall
+              : undefined,
         },
       }}
       render={responsiveProps => (
         <View>
           {props.title ? (
             <View
-              as="h2"
+              as={heading}
               margin={responsiveProps.titleMargin}
               padding={props.isTopic ? 'small 0 0 0' : '0'}
             >
               <Text size={responsiveProps.titleTextSize} weight={responsiveProps.titleTextWeight}>
-                <AccessibleContent alt={I18n.t('Discussion Topic: %{title}', {title: props.title})}>
-                  {props.title}
+                <AccessibleContent
+                  alt={I18n.t('Discussion Topic: %{title}', {title: translatedTitle})}
+                >
+                  {translateTargetLanguage ? (
+                    <span lang={translateTargetLanguage}>{translatedTitle}</span>
+                  ) : (
+                    translatedTitle
+                  )}
                 </AccessibleContent>
               </Text>
             </View>
           ) : (
-            <View as="h2" margin={responsiveProps.titleMargin}>
+            <View as={heading} margin={responsiveProps.titleMargin}>
               <Text size={responsiveProps.titleTextSize} weight={responsiveProps.titleTextWeight}>
                 <AccessibleContent
                   alt={I18n.t('Reply from %{author}', {
@@ -78,6 +130,16 @@ export function PostMessage({...props}) {
               </Text>
             </View>
           )}
+          {isTranslating && (
+            <Flex justifyItems="start">
+              <Flex.Item>
+                <Spinner renderTitle={I18n.t('Translating')} size="x-small" />
+              </Flex.Item>
+              <Flex.Item margin="0 0 0 x-small">
+                <Text>{I18n.t('Translating Text')}</Text>
+              </Flex.Item>
+            </Flex>
+          )}
           {props.isEditing ? (
             <View display="inline-block" margin="small none none none" width="100%">
               <DiscussionEdit
@@ -85,30 +147,34 @@ export function PostMessage({...props}) {
                 discussionAnonymousState={props.discussionAnonymousState}
                 canReplyAnonymously={props.canReplyAnonymously}
                 onCancel={props.onCancel}
-                value={props.draftMessage || props.message}
+                value={translatedMessage}
                 attachment={props.attachment}
+                quotedEntry={props.discussionEntry.quotedEntry}
                 onSubmit={props.onSave}
                 isEdit={true}
-                onSetDraftSaved={props.onSetDraftSaved}
-                draftSaved={props.draftSaved}
-                updateDraft={newDraftMessage => {
-                  props.onCreateDiscussionEntryDraft(newDraftMessage)
-                }}
+                isAnnouncement={props.discussionTopic?.isAnnouncement}
               />
             </View>
           ) : (
             <>
-              <span
+              <div
                 style={{
+                  marginLeft: responsiveProps.messageLeftPadding,
                   fontSize: theme.variables.typography[responsiveProps.messageTextSize],
                 }}
               >
                 <SearchSpan
-                  isIsolatedView={props.isIsolatedView}
+                  lang={translateTargetLanguage}
+                  isSplitView={props.isSplitView}
                   searchTerm={searchTerm}
-                  text={props.message}
+                  text={translatedMessage}
+                  isAnnouncement={props.discussionTopic?.isAnnouncement}
+                  isTopic={props.isTopic}
+                  resourceId={
+                    props.isTopic ? props.discussionTopic?._id : props.discussionEntry?._id
+                  }
                 />
-              </span>
+              </div>
               <View display="block">{props.children}</View>
             </>
           )}
@@ -151,19 +217,16 @@ PostMessage.propTypes = {
    * Callback for when Editor Cancel button is pressed
    */
   onCancel: PropTypes.func,
-  isIsolatedView: PropTypes.bool,
-  onCreateDiscussionEntryDraft: PropTypes.func,
-  draftMessage: PropTypes.string,
-  onSetDraftSaved: PropTypes.func,
+  isSplitView: PropTypes.bool,
   discussionAnonymousState: PropTypes.string,
   canReplyAnonymously: PropTypes.bool,
-  draftSaved: PropTypes.bool,
   threadMode: PropTypes.bool,
   isTopic: PropTypes.bool,
+  discussionTopic: PropTypes.object,
 }
 
 PostMessage.defaultProps = {
-  isIsolatedView: false,
+  isSplitView: false,
 }
 
 export default PostMessage

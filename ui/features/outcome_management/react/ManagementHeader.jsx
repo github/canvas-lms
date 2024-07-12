@@ -58,10 +58,10 @@ const ManagementHeader = ({
   return (
     <div className="management-header" data-testid="managementHeader">
       <Flex justifyItems="space-between" width="100%">
-        <View as="div">
-          <h2 aria-hidden="true" className="title">
+        <View as="div" margin="0">
+          <h1 aria-hidden="true" className="title outcomes-management-title">
             {I18n.t('Outcomes')}
-          </h2>
+          </h1>
         </View>
         <View as="div">
           {isMobileView && (canManage || canImport) ? (
@@ -94,7 +94,11 @@ const ManagementHeader = ({
           ) : (
             <>
               {canImport && (
-                <Button onClick={showImportModal} renderIcon={IconImportLine} margin="x-small">
+                <Button
+                  onClick={showImportModal}
+                  renderIcon={IconImportLine}
+                  margin="x-small xx-small x-small"
+                >
                   {I18n.t('Import')}
                 </Button>
               )}
@@ -103,14 +107,14 @@ const ManagementHeader = ({
                   <Button
                     onClick={openCreateOutcomeModal}
                     renderIcon={IconPlusSolid}
-                    margin="x-small"
+                    margin="x-small xx-small x-small"
                   >
                     {I18n.t('Create')}
                   </Button>
                   <Button
                     onClick={openFindOutcomeModal}
                     renderIcon={IconSearchLine}
-                    margin="x-small"
+                    margin="x-small 0 x-small xx-small"
                   >
                     {I18n.t('Find')}
                   </Button>

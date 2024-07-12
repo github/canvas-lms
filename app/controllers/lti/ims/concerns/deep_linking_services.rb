@@ -19,8 +19,6 @@
 
 module Lti::IMS::Concerns
   module DeepLinkingServices
-    extend ActiveSupport::Concern
-
     CLAIM_PREFIX = "https://purl.imsglobal.org/spec/lti-dl/claim/"
 
     def return_url_parameters
@@ -62,6 +60,11 @@ module Lti::IMS::Concerns
 
     def tool
       @tool ||= ContextExternalTool.find_active_external_tool_by_client_id(client_id, @context)
+    end
+
+    def replace_editor_contents?
+      tool_has_scope = tool.respond_to?(:developer_key) ? tool.developer_key.scopes.include?(TokenScopes::LTI_REPLACE_EDITOR_CONTENT_SCOPE) : false
+      @replace_editor_contents ||= tool_has_scope && (deep_linking_jwt["https://canvas.instructure.com/lti/replace_editor_contents"] || false)
     end
 
     def lti_resource_links

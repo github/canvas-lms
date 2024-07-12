@@ -15,42 +15,51 @@
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
 import React from 'react'
-import {render, fireEvent, waitFor} from '@testing-library/react'
+import {render as testingLibraryRender, waitFor} from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import MobileNavigation from '../MobileNavigation'
+import {QueryProvider, queryClient} from '@canvas/query'
+import axios from 'axios'
+
+const render = children => testingLibraryRender(<QueryProvider>{children}</QueryProvider>)
+
+jest.mock('axios')
 
 describe('MobileNavigation', () => {
-  function navComponent() {
-    return {
-      ensureLoaded: () => {},
-      state: {
-        unreadInboxCount: 4242,
-        unreadSharesCount: 1234,
-        accountsAreLoaded: true,
-        accounts: [{id: '1', name: 'account'}],
-        coursesAreLoaded: true,
-        courses: [{id: '1', name: 'course', enrollment_term_id: 2, term: {name: 'term'}}],
-        groupsAreLoaded: true,
-        groups: [{id: '1', name: 'group'}],
-        profileAreLoaded: true,
-        profile: [{id: '1', html_url: '/foo', label: 'foo'}],
-        helpAreLoaded: false,
-        help: [],
-        historyAreLoaded: false,
-      },
+  beforeEach(() => {
+    // mocks for ui/features/navigation_header/react/utils.ts:37
+    window.ENV = {
+      ACCOUNT_ID: 'test-account-id',
     }
-  }
+    axios.get.mockImplementation(url => {
+      if (url === '/api/v1/accounts/test-account-id/lti_apps?per_page=50') {
+        return Promise.resolve({
+          data: [],
+        })
+      }
+      if (url === '/api/v1/courses/1/external_tools/1') {
+        return Promise.resolve({
+          data: {},
+        })
+      }
+    })
+  })
+
+  afterEach(() => {
+    jest.clearAllMocks()
+  })
 
   it('renders the inbox badge based on incoming state', async () => {
-    const nav = navComponent()
+    queryClient.setQueryData(['unread_count', 'conversations'], 123)
     const hamburgerMenu = document.createElement('div')
     hamburgerMenu.setAttribute('class', 'mobile-header-hamburger')
     document.body.appendChild(hamburgerMenu)
-    const {findByText, queryByText} = render(<MobileNavigation DesktopNavComponent={nav} />)
-    fireEvent.click(hamburgerMenu)
+    const {findByText, queryByText} = render(<MobileNavigation />)
+    await userEvent.click(hamburgerMenu)
     await waitFor(() => {
       expect(queryByText('Loading ...')).not.toBeInTheDocument()
     })
-    const count = await findByText(nav.state.unreadInboxCount.toString())
+    const count = await findByText('123')
     expect(count).toBeInTheDocument()
   })
 })

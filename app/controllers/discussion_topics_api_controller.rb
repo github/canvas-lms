@@ -18,17 +18,21 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
+require "benchmark"
+
 # @API Discussion Topics
 class DiscussionTopicsApiController < ApplicationController
   include Api::V1::DiscussionTopics
   include Api::V1::User
   include SubmittableHelper
+  include LocaleSelection
 
   before_action :require_context_and_read_access
-  before_action :require_topic
+  before_action :require_topic, except: %i[mark_all_topic_read]
   before_action :require_initial_post, except: %i[add_entry
                                                   mark_topic_read
                                                   mark_topic_unread
+                                                  mark_all_topic_read
                                                   show
                                                   unsubscribe_topic]
   before_action only: %i[replies
@@ -76,6 +80,170 @@ class DiscussionTopicsApiController < ApplicationController
                                             include_sections: include_params.include?("sections"),
                                             include_sections_user_count: include_params.include?("sections_user_count"),
                                             include_overrides: include_params.include?("overrides")).first)
+  end
+
+  # @API Summary
+  #
+  # Generates a summary for a discussion topic.
+  #
+  # @argument userInput [String]
+  #   Areas or topics for the summary to focus on.
+  #
+  # @example_request
+  #
+  #     curl https://<canvas>/api/v1/courses/<course_id>/discussion_topics/<topic_id>/summaries \
+  #         -H 'Authorization: Bearer <token>'
+  #
+  # @example_response
+  #
+  #     {
+  #       "id": 1,
+  #       "text": "This is a summary of the discussion topic."
+  #     }
+  def summary
+    return render_unauthorized_action unless @topic.user_can_summarize?(@current_user)
+
+    llm_config_raw = LLMConfigs.config_for("discussion_topic_summary_raw")
+    llm_config_refined = LLMConfigs.config_for("discussion_topic_summary_refined")
+
+    if llm_config_raw.nil? || llm_config_refined.nil?
+      logger.error("No LLM config found for discussion topic summary")
+      return render(json: { error: t("Sorry, we are unable to summarize this discussion at this time. Please try again later.") }, status: :unprocessable_entity)
+    end
+
+    user_input = params[:userInput]
+    focus = DiscussionTopic::PromptPresenter.focus_for_summary(user_input:)
+
+    raw_dynamic_content = {
+      CONTENT: DiscussionTopic::PromptPresenter.new(@topic).content_for_summary,
+      FOCUS: focus
+    }
+    raw_dynamic_content_hash = Digest::SHA256.hexdigest(raw_dynamic_content.to_json)
+    raw_summary = fetch_or_create_summary(
+      llm_config: llm_config_raw,
+      dynamic_content: raw_dynamic_content,
+      dynamic_content_hash: raw_dynamic_content_hash,
+      user_input:
+    )
+
+    locale = @current_user.locale || I18n.default_locale.to_s
+    pretty_locale = available_locales[locale] || "English"
+    refined_dynamic_content = {
+      CONTENT: DiscussionTopic::PromptPresenter.raw_summary_for_refinement(raw_summary: raw_summary.summary),
+      FOCUS: focus,
+      LOCALE: pretty_locale
+    }
+    refined_dynamic_content_hash = Digest::SHA256.hexdigest(refined_dynamic_content.to_json)
+    refined_summary = fetch_or_create_summary(
+      llm_config: llm_config_refined,
+      dynamic_content: refined_dynamic_content,
+      dynamic_content_hash: refined_dynamic_content_hash,
+      user_input:,
+      parent_summary: raw_summary,
+      locale:
+    )
+
+    unless @topic.summary_enabled
+      @topic.update!(summary_enabled: true)
+    end
+
+    render(json: { id: refined_summary.id, text: refined_summary.summary })
+  rescue => e
+    logger.error("Error summarizing discussion topic: #{e.class} - #{e.message}")
+
+    case e
+    when InstLLM::ServiceQuotaExceededError
+      render(json: { error: t("Sorry, we are currently experiencing high demand. Please try again later.") }, status: :service_unavailable)
+    when InstLLM::ThrottlingError
+      render(json: { error: t("Sorry, the service is currently busy. Please try again later.") }, status: :service_unavailable)
+    when InstLLM::ValidationTooLongError
+      render(json: { error: t("Sorry, we are unable to summarize this discussion as it is too long.") }, status: :unprocessable_entity)
+    when InstLLM::ValidationError
+      render(json: { error: t("Oops! There was an error validating the service request. Please try again later.") }, status: :unprocessable_entity)
+    when InstLLMHelper::RateLimitExceededError
+      render(json: { error: t("Sorry, you have reached the maximum number of summary generations allowed (%{limit}) for now. Please try again later.", limit: e.limit) }, status: :too_many_requests)
+    else
+      Canvas::Errors.capture_exception(:discussion_summary, e, :error)
+      render(json: { error: t("Sorry, we are unable to summarize this discussion at this time. Please try again later.") }, status: :unprocessable_entity)
+    end
+  end
+
+  # @API Disable summary
+  #
+  # Disables the summary for a discussion topic.
+  #
+  # @example_request
+  #
+  #     curl -X PUT https://<canvas>/api/v1/courses/<course_id>/discussion_topics/<topic_id>/disable_summary \
+  #
+  # @example_response
+  #
+  #     {
+  #       "success": true
+  #     }
+  def disable_summary
+    return render_unauthorized_action unless @topic.user_can_summarize?(@current_user)
+
+    @topic.update!(summary_enabled: false)
+
+    render(json: { success: true })
+  end
+
+  # @API Summary Feedback
+  #
+  # Persists feedback on a discussion topic summary.
+  #
+  # @argument _action [String] Required
+  #   The action to take on the summary. Possible values are:
+  #   - "seen": Marks the summary as seen. This action saves the feedback if it's not already persisted.
+  #   - "like": Marks the summary as liked.
+  #   - "dislike": Marks the summary as disliked.
+  #   - "reset_like": Resets the like status of the summary.
+  #   - "regenerate": Regenerates the summary feedback.
+  #   - "disable_summary": Disables the summary feedback.
+  #   Any other value will result in an error response.
+  #
+  # @example_request
+  #
+  #     curl -X POST https://<canvas>/api/v1/courses/<course_id>/discussion_topics/<topic_id>/summaries/<summary_id>/feedback \
+  #          -F '_action=like' \
+  #          -H "Authorization: Bearer
+  #
+  # @example_response
+  #
+  #     {
+  #       "liked": true,
+  #       "disliked": false
+  #     }
+  def summary_feedback
+    return render_unauthorized_action unless @topic.user_can_summarize?(@current_user)
+
+    begin
+      dts = @topic.summaries.find(params[:summary_id])
+    rescue ActiveRecord::RecordNotFound
+      return render(json: { error: "Summary not found." }, status: :not_found)
+    end
+
+    feedback = dts.feedback.find_or_initialize_by(user: @current_user)
+    action = params[:_action].to_sym
+
+    case action
+    when :seen
+      feedback.save! unless feedback.persisted?
+    when :like
+      feedback.like
+    when :dislike
+      feedback.dislike
+    when :reset_like
+      feedback.reset_like
+    when :disable_summary
+      feedback.disable_summary
+    else
+      logger.warn("Invalid discussion topic summary feedback action: #{action}")
+      return render(json: { error: "Invalid action." }, status: :bad_request)
+    end
+
+    render(json: { liked: feedback.liked, disliked: feedback.disliked })
   end
 
   # @API Get the full topic
@@ -541,6 +709,37 @@ class DiscussionTopicsApiController < ApplicationController
     change_topic_read_state("read")
   end
 
+  # @API Mark all topic as read
+  # Mark the initial text of all the discussion topics as read in  the context.
+  #
+  # No request fields are necessary.
+  #
+  # On success, the response will be 204 No Content with an empty body.
+  #
+  # @example_request
+  #
+  #   curl 'https://<canvas>/api/v1/courses/<course_id>/discussion_topics/read_all' \
+  #        -X POST \
+  #        -H "Authorization: Bearer <token>" \
+  #        -H "Content-Length: 0"
+  def mark_all_topic_read
+    scope = if params[:only_announcements] == "true"
+              @context.announcements
+            else
+              @context.discussion_topics.only_discussion_topics.published
+            end
+
+    scope = scope.unread_for(@current_user)
+                 .where.not("unlock_at > ?", Time.now)
+                 .or(scope.where(unlock_at: nil))
+
+    scope.each do |announcement|
+      announcement.change_read_state("read", @current_user)
+    end
+
+    head :no_content
+  end
+
   # @API Mark topic as unread
   # Mark the initial text of the discussion topic as unread.
   #
@@ -743,7 +942,7 @@ class DiscussionTopicsApiController < ApplicationController
   end
 
   def create_attachment
-    context = (@current_user || @context)
+    context = @current_user || @context
     attachment_params = {}
     if @topic.for_assignment?
       attachment_params[:folder_id] = @current_user.submissions_folder(@context)
@@ -832,5 +1031,47 @@ class DiscussionTopicsApiController < ApplicationController
     end
 
     true
+  end
+
+  def fetch_or_create_summary(llm_config:, dynamic_content:, dynamic_content_hash:, user_input:, parent_summary: nil, locale: nil)
+    summary = @topic.summaries.where(llm_config_version: llm_config.name, dynamic_content_hash:, parent: parent_summary)
+                    .order(created_at: :desc)
+                    .first
+    return summary if summary
+
+    prompt, options = llm_config.generate_prompt_and_options(substitutions: dynamic_content)
+    content, input_tokens, output_tokens, generation_time = generate_llm_response(llm_config, prompt, options)
+
+    @topic.summaries.create!(
+      llm_config_version: llm_config.name,
+      dynamic_content_hash:,
+      user: @current_user,
+      user_input:,
+      summary: content,
+      input_tokens:,
+      output_tokens:,
+      generation_time:,
+      parent: parent_summary,
+      locale:
+    )
+  end
+
+  def generate_llm_response(llm_config, prompt, options)
+    response = nil
+    time = Benchmark.measure do
+      InstLLMHelper.with_rate_limit(user: @current_user, llm_config:) do
+        response = InstLLMHelper.client(llm_config.model_id).chat(
+          [{ role: "user", content: prompt }],
+          **options.symbolize_keys
+        )
+      end
+    end
+
+    [
+      response.message[:content],
+      response.usage[:input_tokens],
+      response.usage[:output_tokens],
+      time.real.round(2)
+    ]
   end
 end

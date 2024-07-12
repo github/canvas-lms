@@ -24,6 +24,10 @@ module WikiAndTinyCommon
     f("textarea.body")
   end
 
+  def wiki_page_title_input
+    f("input[data-testid='wikipage-title-input']")
+  end
+
   def clear_wiki_rce
     wait_for_rce
     clear_tiny(element)
@@ -46,11 +50,11 @@ module WikiAndTinyCommon
       .create!(filename: "text_file.txt", context: @course) { |a| a.content_type = "text/plain" }
     @image1 = @root_folder.attachments.build(context: @course)
     path = File.expand_path(File.dirname(__FILE__) + "/../../../public/images/email.png")
-    @image1.uploaded_data = Rack::Test::UploadedFile.new(path, Attachment.mimetype(path))
+    @image1.uploaded_data = Canvas::UploadedFile.new(path, Attachment.mimetype(path))
     @image1.save!
     @image2 = @root_folder.attachments.build(context: @course)
     path = File.expand_path(File.dirname(__FILE__) + "/../../../public/images/graded.png")
-    @image2.uploaded_data = Rack::Test::UploadedFile.new(path, Attachment.mimetype(path))
+    @image2.uploaded_data = Canvas::UploadedFile.new(path, Attachment.mimetype(path))
     @image2.save!
     get "/courses/#{@course.id}/pages/front-page/edit"
     @tree1 = driver.find_element(:id, :tree1) unless skip_tree
@@ -98,7 +102,7 @@ module WikiAndTinyCommon
     f(".new_page").click
     wait_for_ajaximations
     wait_for_rce
-    replace_content(f("#title"), title)
+    replace_content(wiki_page_title_input, title)
     type_in_tiny("textarea.body", body)
     expect_new_page_load { f("form.edit-form button.submit").click }
     expect(f(".page-title")).to include_text(title)

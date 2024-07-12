@@ -191,6 +191,9 @@ const locale = {
   "congruent_5a244acd": { "message": "Kongruent" },
   "contains_311f37b7": { "message": "Innehåller" },
   "content_1440204b": { "message": "Innehåll" },
+  "content_in_the_editor_will_be_changed_press_cancel_d5bf3357": {
+    "message": "Innehåll i redigeraren kommer att ändras. Tryck på Avbryt för att behålla det ursprungliga innehållet."
+  },
   "content_is_still_being_uploaded_if_you_continue_it_8f06d0cb": {
     "message": "Innehåll laddas fortfarande upp, om du fortsätter kommer det inte att bäddas in korrekt."
   },
@@ -330,6 +333,8 @@ const locale = {
   "enter_at_least_3_characters_to_search_4f037ee0": {
     "message": "Skriv in minst 3 tecken för att söka"
   },
+  "enter_replacement_text_17631bbc": { "message": "ange ersättningstext" },
+  "enter_search_text_26cb4459": { "message": "ange söktext" },
   "epsilon_54bb8afa": { "message": "Epsilon" },
   "epsilon_variant_d31f1e77": { "message": "Epsilon (variant)" },
   "equals_sign_c51bdc58": { "message": "Lika med-tecken" },
@@ -374,6 +379,8 @@ const locale = {
   },
   "files_c300e900": { "message": "Filer" },
   "files_index_af7c662b": { "message": "Filindex" },
+  "find_8d605019": { "message": "Hitta" },
+  "find_and_replace_6e345933": { "message": "Sök och ersätt" },
   "finish_bc343002": { "message": "Avsluta" },
   "fix_heading_hierarchy_f60884c4": { "message": "Fast rubrikhierarki" },
   "flat_music_76d5a5c3": { "message": "Platt (Musik)" },
@@ -496,6 +503,7 @@ const locale = {
   "in_element_of_19ca2f33": { "message": "I (element av)" },
   "increase_indent_6af90f7c": { "message": "Öka indrag" },
   "indefinite_integral_6623307e": { "message": "Obestämd integral" },
+  "index_of_max_80dcf7a5": { "message": "{ index } av { max }" },
   "indigo_2035fc55": { "message": "Indigo" },
   "inference_fed5c960": { "message": "Slutsats" },
   "infinity_7a10f206": { "message": "Oändlighet" },
@@ -669,6 +677,7 @@ const locale = {
   "nested_less_than_27d17e58": { "message": "Kapslad mindre än" },
   "new_quiz_34aacba6": { "message": "Ny quiz" },
   "next_40e12421": { "message": "Nästa" },
+  "next_findtext_9d69f0fe": { "message": "Nästa { findText }" },
   "no_accessibility_issues_were_detected_f8d3c875": {
     "message": "Inga tillgänglighetsproblem upptäcktes."
   },
@@ -700,6 +709,7 @@ const locale = {
   "no_quizzes_created_yet_1a2370b9": { "message": "Inga quiz har skapats än." },
   "no_quizzes_found_c80c537a": { "message": "Inga quiz hittades." },
   "no_results_940393cf": { "message": "Inga resultat." },
+  "no_results_found_58717065": { "message": "Inga resultat hittades" },
   "no_results_found_for_filterterm_ad1b04c8": {
     "message": "Inga resultat hittades för { filterTerm }"
   },
@@ -788,11 +798,16 @@ const locale = {
   "precedes_196b9aef": { "message": "Föregår" },
   "precedes_equal_20701e84": { "message": "Föregår lika med" },
   "preformatted_d0670862": { "message": "Förformaterad" },
+  "prepend_findtext_append_8e0e769a": {
+    "message": "{ prepend }{ findText }{ append }"
+  },
   "prev_f82cbc48": { "message": "Föregående" },
   "preview_53003fd2": { "message": "Förhandsgranska" },
   "preview_a3f8f854": { "message": "FÖRHANDSGRANSKA" },
   "preview_in_overlay_ed772c46": { "message": "Förhandsgranskning i överlägg" },
   "preview_inline_9787330": { "message": "Inbäddad förhandsgranskning" },
+  "previous_bd2ac015": { "message": "Föregående" },
+  "previous_findtext_8dfbfd30": { "message": "Föregående { findText }" },
   "prime_917ea60e": { "message": "Prim" },
   "prime_numbers_13464f61": { "message": "Primtal" },
   "product_39cf144f": { "message": "Produkt" },
@@ -821,11 +836,28 @@ const locale = {
   "religion_icon_246e0be1": { "message": "Religiös ikon" },
   "remove_heading_style_5fdc8855": { "message": "Ta bort rubrikstil" },
   "remove_link_d1f2f4d0": { "message": "Ta bort länk" },
+  "replace_all_d3d68b3": { "message": "Ersätt alla" },
+  "replace_all_findtext_with_replacetext_da574b32": {
+    "message": "Ersätt alla { findText } med { replaceText }"
+  },
   "replace_e61834a7": { "message": "Ersätt" },
+  "replace_findtext_with_replacetext_7b5c7fb3": {
+    "message": "Ersätt { findText } med { replaceText }"
+  },
+  "replace_with_eeff01ad": { "message": "Ersätt med" },
+  "replaced_alertfindtext_with_alertreplacetext_de5c1795": {
+    "message": "Ersatte { alertFindText } med { alertReplaceText }"
+  },
+  "replaced_all_alertfindtext_with_alertreplacetext_83fdfe59": {
+    "message": "Ersatte alla { alertFindText } med { alertReplaceText }"
+  },
   "reset_95a81614": { "message": "Återställ" },
   "resize_ec83d538": { "message": "Ändra storlek" },
   "restore_auto_save_deccd84b": {
     "message": "Vill du återställa funktionen Spara automatiskt?"
+  },
+  "result_index_of_max_7db5ad8b": {
+    "message": "Resultat { index } av { max }."
   },
   "reverse_turnstile_does_not_yield_7558be06": { "message": "Vändkors" },
   "rho_a0244a36": { "message": "Rho" },

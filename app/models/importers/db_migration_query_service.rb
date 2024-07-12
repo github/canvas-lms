@@ -42,30 +42,41 @@ module Importers
 
     # Looks up a wiki page slug for a migration id
     def convert_wiki_page_migration_id_to_slug(migration_id)
-      @context.wiki_pages.where(migration_id:).limit(1).pick(:url)
+      @context.wiki_pages.where(migration_id:).pick(:url)
     end
 
     # looks up a discussion topic
     def convert_discussion_topic_migration_id(migration_id)
-      @context.discussion_topics.where(migration_id:).limit(1).pick(:id)
+      @context.discussion_topics.where(migration_id:).pick(:id)
     end
 
     def convert_context_module_tag_migration_id(migration_id)
-      @context.context_module_tags.where(migration_id:).limit(1).pick(:id)
+      @context.context_module_tags.where(migration_id:).pick(:id)
     end
 
     def convert_attachment_migration_id(migration_id)
-      @context.attachments.where(migration_id:).limit(1).pick(:id)
+      @context.attachments.where(migration_id:).pick(:id)
+    end
+
+    def convert_attachment_media_id(media_entry_id)
+      @context.attachments.where(media_entry_id:).pick(:id)
     end
 
     def convert_migration_id(type, migration_id)
       if CanvasLinkMigrator::LinkParser::KNOWN_REFERENCE_TYPES.include? type
-        @context.send(type).scope.where(migration_id:).limit(1).pick(:id)
+        @context.send(type).scope.where(migration_id:).pick(:id)
       end
     end
 
     def lookup_attachment_by_migration_id(migration_id)
-      @context.attachments.where(migration_id:).first
+      # CanvasLinkMigrator treats the presence of the UUID as needing to add
+      # it to the URL as a verifier, which we don't want to do with links inside
+      # of Canvas, so we're excluding it
+      att = @context.attachments.find_by(migration_id:)
+      return nil unless att
+
+      att.media_entry_id ||= att.media_object&.media_id
+      att.attributes.except("uuid")
     end
 
     def root_folder_name

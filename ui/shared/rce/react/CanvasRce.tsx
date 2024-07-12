@@ -53,6 +53,8 @@ const CanvasRce = forwardRef(function CanvasRce(
     onBlur,
     onContentChange,
     onInit,
+    resourceType,
+    resourceId,
     ...rest
   } = props
 
@@ -114,7 +116,6 @@ const CanvasRce = forwardRef(function CanvasRce(
       }
       instRecordDisabled={window.ENV?.RICH_CONTENT_INST_RECORD_TAB_DISABLED}
       language={window.ENV?.LOCALES?.[0] || 'en'}
-      lockedAttachments={window.ENV?.CHILD_COURSE_ATTACHMENTS_LOCKED_STATUSES}
       userCacheKey={window.ENV?.user_cache_key}
       liveRegion={() => document.getElementById('flash_screenreader_holder')}
       ltiTools={window.INST?.editorButtons}
@@ -130,6 +131,9 @@ const CanvasRce = forwardRef(function CanvasRce(
       onContentChange={onContentChange}
       onInit={onInit}
       use_rce_icon_maker={shouldUseFeature(Feature.IconMaker, window.ENV)}
+      resourceType={resourceType}
+      resourceId={resourceId}
+      ai_text_tools={window.ENV?.RICH_CONTENT_AI_TEXT_TOOLS}
       externalToolsConfig={{
         ltiIframeAllowances: window.ENV?.LTI_LAUNCH_FRAME_ALLOWANCES,
         isA2StudentView: window.ENV?.a2_student_view,
@@ -215,6 +219,16 @@ export interface CanvasRcePropTypes {
    * Don't mistake this as an indication CanvasRce is a controlled component
    */
   onContentChange?: (content: string) => void
+
+  /**
+   * type of the resource where the RCE is used (i.e., 'discussion_topic')
+   */
+  resourceType?: string
+
+  /**
+   * id of the resource where the RCE is used
+   */
+  resourceId?: number
 }
 
 const defaultProps: Partial<CanvasRcePropTypes> = {

@@ -16,10 +16,13 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {arrayOf, bool, shape, string} from 'prop-types'
+import {arrayOf, bool, shape, string, number} from 'prop-types'
 import {Section} from './Section'
 import gql from 'graphql-tag'
+import {Attachment} from './Attachment'
 import {GroupSet} from './GroupSet'
+import {Assignment} from './Assignment'
+import {AssignmentOverride} from './AssignmentOverride'
 
 export const DiscussionTopic = {
   fragment: gql`
@@ -39,15 +42,38 @@ export const DiscussionTopic = {
       onlyGradersCanRate
       delayedPostAt
       lockAt
+      locked
+      published
+      canGroup
+      replyToEntryRequiredCount
+      visibleToEveryone
+      onlyVisibleToOverrides
       courseSections {
         ...Section
       }
       groupSet {
         ...GroupSet
       }
+      attachment {
+        ...Attachment
+      }
+      assignment {
+        ...Assignment
+      }
+      ungradedDiscussionOverrides {
+        nodes {
+          ...AssignmentOverride
+        }
+      }
+      entryCounts {
+        repliesCount
+      }
     }
+    ${Attachment.fragment}
+    ${Assignment.fragment}
     ${Section.fragment}
     ${GroupSet.fragment}
+    ${AssignmentOverride.fragment}
   `,
 
   shape: shape({
@@ -67,8 +93,15 @@ export const DiscussionTopic = {
     delayedPostAt: string,
     lockAt: string,
     published: bool,
+    replyToEntryRequiredCount: number,
+    visibleToEveryone: bool,
+    onlyVisibleToOverrides: bool,
     courseSections: arrayOf(Section.shape),
     groupSet: GroupSet.shape,
+    attachment: Attachment.shape,
+    assignment: Assignment.shape,
+    canGroup: bool,
+    ungradedDiscussionOverrides: AssignmentOverride.shape(),
   }),
 
   mock: ({
@@ -88,8 +121,15 @@ export const DiscussionTopic = {
     delayedPostAt = null,
     lockAt = null,
     published = true,
+    replyToEntryRequiredCount = 1,
+    visibleToEveryone = false,
+    onlyVisibleToOverrides = false,
     courseSections = [Section.mock()],
     groupSet = GroupSet.mock(),
+    attachment = Attachment.mock(),
+    assignment = null,
+    canGroup = false,
+    ungradedDiscussionOverrides = null,
   } = {}) => ({
     _id,
     id,
@@ -107,8 +147,15 @@ export const DiscussionTopic = {
     delayedPostAt,
     lockAt,
     published,
+    replyToEntryRequiredCount,
+    visibleToEveryone,
+    onlyVisibleToOverrides,
     courseSections,
     groupSet,
+    attachment,
+    assignment,
+    canGroup,
+    ungradedDiscussionOverrides,
     __typename: 'Discussion',
   }),
 }

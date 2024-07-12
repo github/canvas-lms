@@ -76,7 +76,7 @@ describe('Library', () => {
     fireEvent.click(getByText('2'), {detail: 1})
     fireEvent.click(getByText('great comment 2'), {detail: 1})
     expect(setCommentMock).toHaveBeenCalledWith('great comment 2')
-    await act(async () => jest.runAllTimers())
+    await act(async () => jest.advanceTimersByTime(1000))
     expect(queryByText('Manage Comment Library')).not.toBeInTheDocument()
   })
 
@@ -84,7 +84,7 @@ describe('Library', () => {
     const {getByText, queryByText} = render(<Library {...defaultProps()} />)
     fireEvent.click(getByText('2'))
     fireEvent.click(getByText('Close comment library'))
-    await act(async () => jest.runAllTimers())
+    await act(async () => jest.advanceTimersByTime(1000))
     expect(queryByText('Manage Comment Library')).not.toBeInTheDocument()
   })
 
@@ -114,7 +114,8 @@ describe('Library', () => {
       expect(getByText('new result!')).toBeInTheDocument()
     })
 
-    it('renders a flash alert when new results are available', () => {
+    // EVAL-3907 - remove or rewrite to remove spies on imports
+    it.skip('renders a flash alert when new results are available', () => {
       const showFlashAlertSpy = jest.spyOn(FlashAlert, 'showFlashAlert')
       const {rerender} = render(<Library {...defaultProps()} />)
 

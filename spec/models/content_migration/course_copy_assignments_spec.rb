@@ -169,7 +169,7 @@ describe ContentMigration do
     end
 
     it "copies assignment attributes" do
-      assignment_model(course: @copy_from, points_possible: 40, submission_types: "file_upload", grading_type: "points")
+      assignment_model(course: @copy_from, points_possible: 0, submission_types: "file_upload", grading_type: "points")
       @assignment.turnitin_enabled = true
       @assignment.vericite_enabled = true
       @assignment.vericite_settings = {
@@ -185,7 +185,7 @@ describe ContentMigration do
       @assignment.allowed_extensions = ["doc", "xls"]
       @assignment.position = 2
       @assignment.muted = true
-      @assignment.hide_in_gradebook = false
+      @assignment.hide_in_gradebook = true
       @assignment.omit_from_final_grade = true
       @assignment.only_visible_to_overrides = true
       @assignment.post_to_sis = true
@@ -692,6 +692,17 @@ describe ContentMigration do
         expect(@copy_to.grading_standard).to eq gs
       end
 
+      it "retains reference to points based account grading standard" do
+        gs = make_grading_standard(@copy_from.root_account, { points_based: true, scaling_factor: 4.0 })
+        @copy_from.grading_standard = gs
+        @copy_from.grading_standard_enabled = true
+        @copy_from.save!
+
+        run_course_copy
+
+        expect(@copy_to.grading_standard).to eq gs
+      end
+
       it "copies a course grading standard not owned by the copy_from course" do
         @other_course = course_model
         gs = make_grading_standard(@other_course)
@@ -878,9 +889,9 @@ describe ContentMigration do
         a2 = assignment_model(context: @copy_from, title: "a2", submission_types: "wiki_page", only_visible_to_overrides: false)
         a2.build_wiki_page(title: a2.title, context: a2.context).save!
         run_course_copy
-        a1_to = @copy_to.assignments.where(migration_id: mig_id(a1)).take
+        a1_to = @copy_to.assignments.find_by(migration_id: mig_id(a1))
         expect(a1_to.only_visible_to_overrides).to be true
-        a2_to = @copy_to.assignments.where(migration_id: mig_id(a2)).take
+        a2_to = @copy_to.assignments.find_by(migration_id: mig_id(a2))
         expect(a2_to.only_visible_to_overrides).to be false
       end
 
@@ -888,7 +899,7 @@ describe ContentMigration do
         a1 = assignment_model(context: @copy_from, title: "a1", submission_types: "wiki_page", only_visible_to_overrides: true)
         a1.build_wiki_page(title: a1.title, context: a1.context).save!
         run_course_copy
-        page_to = @copy_to.wiki_pages.where(migration_id: mig_id(a1.wiki_page)).take
+        page_to = @copy_to.wiki_pages.find_by(migration_id: mig_id(a1.wiki_page))
         expect(page_to.assignment).to be_nil
         expect(@copy_to.assignments.where(migration_id: mig_id(a1)).exists?).to be false
       end

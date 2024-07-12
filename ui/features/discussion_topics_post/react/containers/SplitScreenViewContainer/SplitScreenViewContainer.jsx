@@ -24,12 +24,16 @@ import {
   getOptimisticResponse,
   buildQuotedReply,
   getDisplayName,
+  getCheckpointSubmission,
 } from '../../utils'
-import {DiscussionManagerUtilityContext} from '../../utils/constants'
+import {
+  DiscussionManagerUtilityContext,
+  REPLY_TO_TOPIC,
+  REPLY_TO_ENTRY,
+} from '../../utils/constants'
 import {AlertManagerContext} from '@canvas/alerts/react/AlertManager'
 import {CloseButton} from '@instructure/ui-buttons'
 import {
-  CREATE_DISCUSSION_ENTRY_DRAFT,
   DELETE_DISCUSSION_ENTRY,
   UPDATE_DISCUSSION_ENTRY_PARTICIPANT,
   UPDATE_DISCUSSION_ENTRY,
@@ -46,7 +50,7 @@ import {SplitScreenThreadsContainer} from '../SplitScreenThreadsContainer/SplitS
 import {SplitScreenParent} from './SplitScreenParent'
 import LoadingIndicator from '@canvas/loading-indicator'
 import PropTypes from 'prop-types'
-import React, {useCallback, useContext, useEffect, useMemo, useState} from 'react'
+import React, {useCallback, useContext, useEffect, useMemo, useRef, useState} from 'react'
 import {useMutation, useQuery} from 'react-apollo'
 import {View} from '@instructure/ui-view'
 import * as ReactDOMServer from 'react-dom/server'
@@ -59,31 +63,38 @@ export const SplitScreenViewContainer = props => {
   const {replyFromId, setReplyFromId} = useContext(DiscussionManagerUtilityContext)
   const [fetchingMoreOlderReplies, setFetchingMoreOlderReplies] = useState(false)
   const [fetchingMoreNewerReplies, setFetchingMoreNewerReplies] = useState(false)
-  const [draftSaved, setDraftSaved] = useState(true)
+  const [isEditing, setIsEditing] = useState(false)
+  const closeButtonRef = useRef()
+
+  const replyButtonRef = useRef()
+  const moreOptionsButtonRef = useRef()
 
   const updateCache = (cache, result) => {
     const newDiscussionEntry = result.data.createDiscussionEntry.discussionEntry
     const variables = {
       discussionEntryID: newDiscussionEntry.parentId,
-      last: ENV.isolated_view_initial_page_size,
+      last: ENV.split_screen_view_initial_page_size,
       sort: 'asc',
-      courseID: window.ENV?.course_id,
       includeRelativeEntry: false,
     }
 
     updateDiscussionTopicEntryCounts(cache, props.discussionTopic.id, {repliesCountChange: 1})
-    props.removeDraftFromDiscussionCache(cache, result)
     addReplyToDiscussionEntry(cache, variables, newDiscussionEntry)
 
     props.setHighlightEntryId(newDiscussionEntry._id)
   }
 
-  const onEntryCreationCompletion = data => {
-    props.setHighlightEntryId(data.createDiscussionEntry.discussionEntry._id)
-    if (splitScreenEntryOlderDirection.data.legacyNode.depth > 3) {
-      props.onOpenSplitScreenView(data.createDiscussionEntry.discussionEntry.rootEntryId, false)
-    } else if (splitScreenEntryOlderDirection.data.legacyNode.depth === 3) {
-      props.onOpenSplitScreenView(data.createDiscussionEntry.discussionEntry.parentId, false)
+  const onEntryCreationCompletion = (data, success) => {
+    if (success) {
+      props.setRCEOpen(false)
+      props.setHighlightEntryId(data.createDiscussionEntry.discussionEntry._id)
+      if (splitScreenEntryOlderDirection.data.legacyNode.depth > 3) {
+        props.onOpenSplitScreenView(data.createDiscussionEntry.discussionEntry.rootEntryId, false)
+      } else if (splitScreenEntryOlderDirection.data.legacyNode.depth === 3) {
+        props.onOpenSplitScreenView(data.createDiscussionEntry.discussionEntry.parentId, false)
+      }
+      props.setReplyToTopicSubmission(getCheckpointSubmission(data, REPLY_TO_TOPIC))
+      props.setReplyToEntrySubmission(getCheckpointSubmission(data, REPLY_TO_ENTRY))
     }
   }
 
@@ -104,6 +115,7 @@ export const SplitScreenViewContainer = props => {
     onCompleted: data => {
       if (!data.updateDiscussionEntry.errors) {
         setOnSuccess(I18n.t('The reply was successfully updated.'))
+        setIsEditing(false)
       } else {
         setOnFailure(I18n.t('There was an unexpected error while updating the reply.'))
       }
@@ -132,7 +144,11 @@ export const SplitScreenViewContainer = props => {
       updateDiscussionTopicEntryCounts(cache, props.discussionTopic.id, {
         unreadCountChange: discussionUnreadCountChange,
       })
-      updateDiscussionEntryRootEntryCounts(cache, result, discussionUnreadCountChange)
+      updateDiscussionEntryRootEntryCounts(
+        cache,
+        result.data.updateDiscussionEntryParticipant.discussionEntry,
+        discussionUnreadCountChange
+      )
     }
   }
 
@@ -153,7 +169,7 @@ export const SplitScreenViewContainer = props => {
     updateDiscussionEntryParticipant({
       variables: {
         discussionEntryId: discussionEntry._id,
-        rating: discussionEntry.entryParticipants?.rating ? 'not_liked' : 'liked',
+        rating: discussionEntry.entryParticipant?.rating ? 'not_liked' : 'liked',
       },
     })
   }
@@ -179,13 +195,16 @@ export const SplitScreenViewContainer = props => {
     }
   }
 
-  const onUpdate = (discussionEntry, message, file) => {
+  const onUpdate = (message, quotedEntryId, file) => {
+    const discussionEntry = splitScreenEntryOlderDirection.data.legacyNode
+
     updateDiscussionEntry({
       variables: {
         discussionEntryId: discussionEntry._id,
         message,
         fileId: file?._id,
         removeAttachment: !file?._id,
+        quotedEntryId,
       },
     })
   }
@@ -218,7 +237,6 @@ export const SplitScreenViewContainer = props => {
       isAnonymousAuthor,
       message,
       fileId: file?._id,
-      courseID: ENV.course_id,
       quotedEntryId,
     }
     const optimisticResponse = getOptimisticResponse({
@@ -237,59 +255,31 @@ export const SplitScreenViewContainer = props => {
     props.setHighlightEntryId('DISCUSSION_ENTRY_PLACEHOLDER')
   }
 
-  const [createDiscussionEntryDraft] = useMutation(CREATE_DISCUSSION_ENTRY_DRAFT, {
-    update: props.updateDraftCache,
-    onCompleted: () => {
-      setOnSuccess('Draft message saved.')
-      setDraftSaved(true)
-    },
-    onError: () => {
-      setOnFailure(I18n.t('Unable to save draft message.'))
-    },
-  })
-
-  const findDraftMessage = rootId => {
-    let rootEntryDraftMessage = ''
-    props.discussionTopic?.discussionEntryDraftsConnection?.nodes.every(draftEntry => {
-      if (
-        draftEntry.rootEntryId &&
-        draftEntry.rootEntryId === rootId &&
-        !draftEntry.discussionEntryId
-      ) {
-        rootEntryDraftMessage = draftEntry.message
-        return false
-      }
-      return true
-    })
-    return rootEntryDraftMessage
-  }
-
   const getRCEStartingValue = () => {
-    let draftValue = ''
-    if (ENV.draft_discussions) {
-      draftValue = findDraftMessage(
-        splitScreenEntryOlderDirection.data.legacyNode.root_entry_id ||
-          splitScreenEntryOlderDirection.data.legacyNode._id
-      )
+    // Check if mentions in discussions are enabled
+    if (!ENV.rce_mentions_in_discussions) {
+      return ''
     }
     const mentionsValue =
       splitScreenEntryOlderDirection.data.legacyNode.depth >= 3
         ? ReactDOMServer.renderToString(
-            <span className="mceNonEditable mention" data-mention="1">
+            <span
+              className="mceNonEditable mention"
+              data-mention={splitScreenEntryOlderDirection?.data?.legacyNode.author?._id}
+            >
               @{getDisplayName(splitScreenEntryOlderDirection.data.legacyNode)}
             </span>
           )
         : ''
 
-    return mentionsValue + draftValue
+    return mentionsValue
   }
 
   const splitScreenEntryOlderDirection = useQuery(DISCUSSION_SUBENTRIES_QUERY, {
     variables: {
       discussionEntryID: props.discussionEntryId,
-      last: ENV.isolated_view_initial_page_size,
+      last: ENV.split_screen_view_initial_page_size,
       sort: 'asc',
-      courseID: window.ENV?.course_id,
       ...(props.relativeEntryId &&
         props.relativeEntryId !== props.discussionEntryId && {
           relativeEntryId: props.relativeEntryId,
@@ -304,7 +294,6 @@ export const SplitScreenViewContainer = props => {
       discussionEntryID: props.discussionEntryId,
       first: 0,
       sort: 'asc',
-      courseID: window.ENV?.course_id,
       ...(props.relativeEntryId && {relativeEntryId: props.relativeEntryId}),
       includeRelativeEntry: false,
       beforeRelativeEntry: false,
@@ -320,7 +309,6 @@ export const SplitScreenViewContainer = props => {
           splitScreenEntryOlderDirection.data.legacyNode.discussionSubentriesConnection.pageInfo
             .startCursor,
         sort: 'asc',
-        courseID: window.ENV?.course_id,
       },
       updateQuery: (previousResult, {fetchMoreResult}) => {
         setFetchingMoreOlderReplies(false)
@@ -350,7 +338,6 @@ export const SplitScreenViewContainer = props => {
           splitScreenEntryNewerDirection.data.legacyNode.discussionSubentriesConnection.pageInfo
             .endCursor,
         sort: 'asc',
-        courseID: window.ENV?.course_id,
         beforeRelativeEntry: false,
         includeRelativeEntry: false,
       },
@@ -430,6 +417,10 @@ export const SplitScreenViewContainer = props => {
     if (!props.RCEOpen) setReplyFromId(null)
   }, [props.RCEOpen, setReplyFromId])
 
+  useEffect(() => {
+    closeButtonRef?.current?.focus()
+  }, [props.discussionEntryId])
+
   const renderSplitScreenView = () => {
     return (
       <>
@@ -443,11 +434,15 @@ export const SplitScreenViewContainer = props => {
           }
           onToggleRating={() => toggleRating(splitScreenEntryOlderDirection.data.legacyNode)}
           onSave={onUpdate}
+          isEditing={isEditing}
+          setIsEditing={setIsEditing}
           onOpenSplitScreenView={props.onOpenSplitScreenView}
           setRCEOpen={props.setRCEOpen}
           RCEOpen={props.RCEOpen}
           goToTopic={props.goToTopic}
           isHighlighted={props.highlightEntryId === props.discussionEntryId}
+          replyButtonRef={replyButtonRef}
+          moreOptionsButtonRef={moreOptionsButtonRef}
         >
           {props.RCEOpen && props.isTrayFinishedOpening && (
             <View
@@ -463,9 +458,13 @@ export const SplitScreenViewContainer = props => {
                 canReplyAnonymously={props.discussionTopic?.canReplyAnonymously}
                 onSubmit={(message, quotedEntryId, file, anonymousAuthorState) => {
                   onReplySubmit(message, file, quotedEntryId, anonymousAuthorState)
-                  props.setRCEOpen(false)
                 }}
-                onCancel={() => props.setRCEOpen(false)}
+                onCancel={() => {
+                  props.setRCEOpen(false)
+                  setTimeout(() => {
+                    replyButtonRef?.current?.focus()
+                  }, 0)
+                }}
                 quotedEntry={buildQuotedReply(
                   [
                     splitScreenEntryOlderDirection.data.legacyNode,
@@ -475,17 +474,6 @@ export const SplitScreenViewContainer = props => {
                   replyFromId
                 )}
                 value={getRCEStartingValue()}
-                onSetDraftSaved={setDraftSaved}
-                draftSaved={draftSaved}
-                updateDraft={newDraftMessage => {
-                  createDiscussionEntryDraft({
-                    variables: {
-                      discussionTopicId: props.discussionTopic._id,
-                      message: newDraftMessage,
-                      parentId: replyFromId,
-                    },
-                  })
-                }}
                 onInit={() => {
                   // TinyMCE popup menus' z-index should be greater than tray.
                   const menus = document.querySelector('.tox.tox-tinymce-aux')
@@ -493,6 +481,7 @@ export const SplitScreenViewContainer = props => {
                     menus.style.zIndex = '10000'
                   }
                 }}
+                isAnnouncement={props.discussionTopic.isAnnouncement}
               />
             </View>
           )}
@@ -527,7 +516,7 @@ export const SplitScreenViewContainer = props => {
               }
               fetchingMoreOlderReplies={fetchingMoreOlderReplies}
               fetchingMoreNewerReplies={fetchingMoreNewerReplies}
-              updateDraftCache={props.updateDraftCache}
+              moreOptionsButtonRef={moreOptionsButtonRef}
             />
           </View>
         )}
@@ -542,7 +531,7 @@ export const SplitScreenViewContainer = props => {
     >
       <Flex>
         <Flex.Item width="480px" shouldGrow={true} shouldShrink={true}>
-          <Heading margin="medium medium none" theme={{h2FontWeight: 700}}>
+          <Heading margin="medium medium none" themeOverride={{h2FontWeight: 700}}>
             {I18n.t('Thread')}
           </Heading>
         </Flex.Item>
@@ -561,6 +550,9 @@ export const SplitScreenViewContainer = props => {
               if (props.onClose) {
                 props.onClose()
               }
+            }}
+            elementRef={el => {
+              closeButtonRef.current = el
             }}
           />
         </Flex.Item>
@@ -581,9 +573,9 @@ SplitScreenViewContainer.propTypes = {
   highlightEntryId: PropTypes.string,
   setHighlightEntryId: PropTypes.func,
   relativeEntryId: PropTypes.string,
-  removeDraftFromDiscussionCache: PropTypes.func,
-  updateDraftCache: PropTypes.func,
   isTrayFinishedOpening: PropTypes.bool,
+  setReplyToTopicSubmission: PropTypes.func,
+  setReplyToEntrySubmission: PropTypes.func,
 }
 
 export default SplitScreenViewContainer

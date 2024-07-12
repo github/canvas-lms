@@ -18,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "atom"
-
 # @API Users
 # API for accessing information on the current and other users.
 #
@@ -178,6 +176,11 @@ require "atom"
 #           "description": "Optional: The user's bio.",
 #           "example": "I like the Muppets.",
 #           "type": "string"
+#         },
+#         "pronouns": {
+#           "description": "Optional: This field is only returned if pronouns are enabled, and will return the pronouns of the user.",
+#           "example": "he/him",
+#           "type": "string"
 #         }
 #       }
 #     }
@@ -281,6 +284,7 @@ class UsersController < ApplicationController
     end
     grade_data[:restrict_quantitative_data] = enrollment.course.restrict_quantitative_data?(@current_user)
     grade_data[:grading_scheme] = enrollment.course.grading_standard_or_default.data
+    grade_data[:points_based_grading_scheme] = enrollment.course.grading_standard_or_default.points_based?
 
     render json: grade_data
   end
@@ -382,17 +386,17 @@ class UsersController < ApplicationController
         )
         oauth_request.destroy
 
-        flash[:notice] = t("twitter_added", "Twitter access authorized!")
+        flash[:notice] = t("twitter_added", "X.com access authorized!")
       rescue => e
         Canvas::Errors.capture_exception(:oauth, e)
-        flash[:error] = t("twitter_fail_whale", "Twitter authorization failed. Please try again")
+        flash[:error] = t("twitter_fail_whale", "X.com authorization failed. Please try again")
       end
       return_to(oauth_request.return_url, user_profile_url(@current_user))
     end
   end
 
   # @API List users in account
-  # A paginated list of of users associated with this account.
+  # A paginated list of users associated with this account.
   #
   # @argument search_term [String]
   #   The partial name or full ID of the users to match and return in the
@@ -414,6 +418,10 @@ class UsersController < ApplicationController
   #
   # @argument order [String, "asc"|"desc"]
   #   The order to sort the given column by.
+  #
+  # @argument include_deleted_users [Boolean]
+  #   When set to true and used with an account context, returns users who have deleted
+  #   pseudonyms for the context
   #
   #  @example_request
   #    curl https://<canvas>/api/v1/accounts/self/users?search_term=<search value> \
@@ -438,7 +446,8 @@ class UsersController < ApplicationController
                                                order: params[:order],
                                                sort: params[:sort],
                                                enrollment_role_id: params[:role_filter_id],
-                                               enrollment_type: params[:enrollment_type]
+                                               enrollment_type: params[:enrollment_type],
+                                               include_deleted_users: value_to_boolean(params[:include_deleted_users])
                                              })
     else
       users = UserSearch.scope_for(@context,
@@ -450,13 +459,14 @@ class UsersController < ApplicationController
                                      enrollment_type: params[:enrollment_type],
                                      ui_invoked: includes.include?("ui_invoked"),
                                      temporary_enrollment_recipients: value_to_boolean(params[:temporary_enrollment_recipients]),
-                                     temporary_enrollment_providers: value_to_boolean(params[:temporary_enrollment_providers])
+                                     temporary_enrollment_providers: value_to_boolean(params[:temporary_enrollment_providers]),
+                                     include_deleted_users: value_to_boolean(params[:include_deleted_users])
                                    })
       users = users.with_last_login if params[:sort] == "last_login"
     end
 
     page_opts = { total_entries: nil }
-    if includes.include?("ui_invoked") && Setting.get("ui_invoked_count_pages", "true") == "true"
+    if includes.include?("ui_invoked")
       page_opts = {} # let Folio calculate total entries
       includes.delete("ui_invoked")
     end
@@ -491,7 +501,6 @@ class UsersController < ApplicationController
         return_to(return_url, request.referer || dashboard_url)
       end
     else
-      js_bundle :act_as_modal
       css_bundle :act_as_modal
 
       @page_title = t("Act as %{user_name}", user_name: @user.short_name)
@@ -1206,6 +1215,7 @@ class UsersController < ApplicationController
       planner_overrides = includes.include?("planner_overrides")
       include_course = includes.include?("course")
       ActiveRecord::Associations.preload(assignments, :context) if include_course
+      DatesOverridable.preload_override_data_for_objects(assignments)
 
       json = assignments.map do |as|
         assmt_json = assignment_json(as, user, session, include_planner_override: planner_overrides)
@@ -1351,6 +1361,9 @@ class UsersController < ApplicationController
 
       @context_account = @context.is_a?(Account) ? @context : @domain_root_account
       @user = api_find_all(@context&.all_users || User, [params[:id]]).first
+      if !@user && @context.is_a?(Account)
+        @user = api_find_all(@context&.deleted_users, [params[:id]]).first
+      end
       allowed = @user&.grants_right?(@current_user, session, :read_full_profile)
 
       return render_unauthorized_action unless allowed
@@ -1390,20 +1403,45 @@ class UsersController < ApplicationController
       respond_to do |format|
         format.html do
           @body_classes << "full-width"
-          js_env(
-            CONTEXT_USER_DISPLAY_NAME: @user.short_name,
-            USER_ID: @user.id,
-            PERMISSIONS: {
-              can_manage_sis_pseudonyms: @context_account.root_account.grants_right?(@current_user, :manage_sis)
-            }
-          )
+
+          js_permissions = {
+            can_manage_sis_pseudonyms: @context_account.root_account.grants_right?(@current_user, :manage_sis),
+          }
+          if @context_account.root_account.feature_enabled?(:temporary_enrollments)
+            js_permissions[:can_read_sis] = @context_account.grants_right?(@current_user, session, :read_sis)
+            js_permissions[:can_add_temporary_enrollments] = @context_account.grants_right?(@current_user, session, :temporary_enrollments_add)
+            js_permissions[:can_edit_temporary_enrollments] = @context_account.grants_right?(@current_user, session, :temporary_enrollments_edit)
+            js_permissions[:can_delete_temporary_enrollments] = @context_account.grants_right?(@current_user, session, :temporary_enrollments_delete)
+            js_permissions[:can_view_temporary_enrollments] =
+              @context_account.grants_any_right?(@current_user, session, *RoleOverride::MANAGE_TEMPORARY_ENROLLMENT_PERMISSIONS)
+            if @context_account.root_account.feature_enabled?(:granular_permissions_manage_users)
+              js_permissions[:can_allow_course_admin_actions] = @context_account.grants_right?(@current_user, session, :allow_course_admin_actions)
+              js_permissions[:can_add_ta] = @context_account.grants_right?(@current_user, session, :add_ta_to_course)
+              js_permissions[:can_add_student] = @context_account.grants_right?(@current_user, session, :add_student_to_course)
+              js_permissions[:can_add_teacher] = @context_account.grants_right?(@current_user, session, :add_teacher_to_course)
+              js_permissions[:can_add_designer] = @context_account.grants_right?(@current_user, session, :add_designer_to_course)
+              js_permissions[:can_add_observer] = @context_account.grants_right?(@current_user, session, :add_observer_to_course)
+            else
+              js_permissions[:can_manage_admin_users] = @context_account.grants_right?(@current_user, session, :manage_admin_users)
+            end
+          end
+
+          js_env({
+                   CONTEXT_USER_DISPLAY_NAME: @user.short_name,
+                   USER_ID: @user.id,
+                   COURSE_ROLES: Role.course_role_data_for_account(@context_account, @current_user),
+                   PERMISSIONS: js_permissions,
+                   ROOT_ACCOUNT_ID: @context_account.root_account.id,
+                 })
           render status:
         end
         format.json do
+          includes = %w[locale avatar_url]
+          includes << "deleted_pseudonyms" if @context.is_a?(Account)
           render json: user_json(@user,
                                  @current_user,
                                  session,
-                                 %w[locale avatar_url],
+                                 includes,
                                  @current_user.pseudonym.account),
                  status:
         end
@@ -1463,7 +1501,8 @@ class UsersController < ApplicationController
 
   def external_tool
     timing_start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-    @tool = ContextExternalTool.find_for(params[:id], @domain_root_account, :user_navigation)
+    placement = :user_navigation
+    @tool = ContextExternalTool.find_for(params[:id], @domain_root_account, placement)
     @opaque_id = @tool.opaque_identifier_for(@current_user, context: @domain_root_account)
     @resource_type = "user_navigation"
 
@@ -1480,11 +1519,15 @@ class UsersController < ApplicationController
       link_code: @opaque_id,
       domain: HostUrl.context_host(@domain_root_account, request.host)
     }
+
+    @tool_form_id = random_lti_tool_form_id
+    js_env(LTI_TOOL_FORM_ID: @tool_form_id)
+
     variable_expander = Lti::VariableExpander.new(@domain_root_account, @context, self, {
                                                     current_user: @current_user,
                                                     current_pseudonym: @current_pseudonym,
                                                     tool: @tool,
-                                                    placement: :user_navigation
+                                                    placement:
                                                   })
     Canvas::LiveEvents.asset_access(@tool, "external_tools", @current_user.class.name, nil)
     adapter = if @tool.use_1_3?
@@ -1502,10 +1545,10 @@ class UsersController < ApplicationController
               end
 
     @lti_launch.params = adapter.generate_post_payload
-    @lti_launch.resource_url = @tool.login_or_launch_url(extension_type: :user_navigation)
-    @lti_launch.link_text = @tool.label_for(:user_navigation, I18n.locale)
+    @lti_launch.resource_url = @tool.login_or_launch_url(extension_type: placement)
+    @lti_launch.link_text = @tool.label_for(placement, I18n.locale)
     @lti_launch.analytics_id = @tool.tool_id
-    InstStatsd::Statsd.increment("lti.launch", tags: { lti_version: @tool.lti_version, type: :user_navigation })
+    Lti::LogService.new(tool: @tool, context: @domain_root_account, user: @current_user, session_id: session[:session_id], placement:, launch_type: :direct_link).call
 
     set_active_tab @tool.asset_string
     add_crumb(@current_user.short_name, user_profile_path(@current_user))
@@ -2112,7 +2155,8 @@ class UsersController < ApplicationController
       managed_attributes << :title if @user.grants_right?(@current_user, :rename)
     end
 
-    if @domain_root_account.can_change_pronouns? && @user.grants_right?(@current_user, :manage_user_details)
+    can_admin_change_pronouns = @domain_root_account.can_add_pronouns? && @user.grants_right?(@current_user, :manage_user_details)
+    if can_admin_change_pronouns || (@domain_root_account.can_change_pronouns? && @user.grants_right?(@current_user, :change_pronoun))
       managed_attributes << :pronouns
     end
 
@@ -2248,6 +2292,23 @@ class UsersController < ApplicationController
     render json: "ok"
   end
 
+  # @API Log users out of all mobile apps
+  #
+  # Permanently expires any active mobile sessions, forcing them to re-authorize.
+  #
+  # The route that takes a user id will expire mobile sessions for that user.
+  # The route that doesn't take a user id will expire mobile sessions for *all* users
+  # in the institution.
+  #
+  def expire_mobile_sessions
+    return unless authorized_action(@domain_root_account, @current_user, :manage_user_logins)
+
+    user = api_find(User, params[:id]) if params.key?(:id)
+    AccessToken.delay_if_production.invalidate_mobile_tokens!(@domain_root_account, user:)
+
+    render json: "ok"
+  end
+
   def media_download
     fetcher = MediaSourceFetcher.new(CanvasKaltura::ClientV3.new)
     extension = params[:type]
@@ -2341,10 +2402,10 @@ class UsersController < ApplicationController
         render json: @user
       end
     else
-      unless session["reported_#{@user.id}".to_sym]
+      unless session[:"reported_#{@user.id}"]
         @user.report_avatar_image!
       end
-      session["reports_#{@user.id}".to_sym] = true
+      session[:"reports_#{@user.id}"] = true
       render json: { reported: true }
     end
   end
@@ -2371,12 +2432,10 @@ class UsersController < ApplicationController
   def public_feed
     return unless get_feed_context(only: [:user])
 
-    feed = Atom::Feed.new do |f|
-      f.title = "#{@context.name} Feed"
-      f.links << Atom::Link.new(href: dashboard_url, rel: "self")
-      f.updated = Time.now
-      f.id = user_url(@context)
-    end
+    title = "#{@context.name} Feed"
+    link = dashboard_url
+    id = user_url(@context)
+
     @entries = []
     cutoff = 1.week.ago
     @context.courses.each do |context|
@@ -2387,11 +2446,9 @@ class UsersController < ApplicationController
       end)
       @entries.concat WikiPages::ScopedToUser.new(context, @current_user, context.wiki_pages.published.where("wiki_pages.updated_at>?", cutoff)).scope
     end
-    @entries.each do |entry|
-      feed.entries << entry.to_atom(include_context: true, context: @context)
-    end
+
     respond_to do |format|
-      format.atom { render plain: feed.to_xml }
+      format.atom { render plain: AtomFeedHelper.render_xml(title:, link:, id:, entries: @entries, include_context: true, context: @context) }
     end
   end
 
@@ -2744,27 +2801,7 @@ class UsersController < ApplicationController
       return render json: { message: "Developer key not authorized" }, status: :forbidden
     end
 
-    key = nil
-    sekrit = nil
-    token_prefixes.each do |prefix|
-      next unless params[:app_key] == pandata_credentials["#{prefix}_key"]
-
-      key = pandata_credentials["#{prefix}_key"]
-      sekrit = pandata_credentials["#{prefix}_secret"]
-    end
-
-    unless key
-      return render json: { message: "Invalid app key" }, status: :bad_request
-    end
-
-    expires_at = Time.zone.now + 1.day.to_i
-    auth_body = {
-      iss: key,
-      exp: expires_at.to_i,
-      aud: "PANDATA",
-      sub: @current_user.global_id,
-    }
-
+    service = PandataEvents::CredentialService.new(app_key: params[:app_key], valid_prefixes: token_prefixes)
     props_body = {
       user_id: @current_user.global_id,
       shard: @domain_root_account.shard.id,
@@ -2772,15 +2809,15 @@ class UsersController < ApplicationController
       root_account_uuid: @domain_root_account.uuid
     }
 
-    private_key = OpenSSL::PKey::EC.new(Base64.decode64(sekrit))
-    auth_token = Canvas::Security.create_jwt(auth_body, expires_at, private_key, :ES512)
-    props_token = Canvas::Security.create_jwt(props_body, nil, private_key, :ES512)
+    expires_at = 1.day.from_now
     render json: {
-      url: DynamicSettings.find("pandata/events", service: "canvas")["url"],
-      auth_token:,
-      props_token:,
+      url: PandataEvents.endpoint,
+      auth_token: service.auth_token(@current_user.global_id, expires_at:, cache: false),
+      props_token: service.token(props_body),
       expires_at: expires_at.to_f * 1000
     }
+  rescue PandataEvents::Errors::InvalidAppKey
+    render json: { message: "Invalid app key" }, status: :bad_request
   end
 
   # @API Get a users most recently graded submissions
@@ -2864,7 +2901,7 @@ class UsersController < ApplicationController
 
     # find last interactions
     last_comment_dates = SubmissionCommentInteraction.in_course_between(course, teacher.id, ids)
-    last_comment_dates.each do |(user_id, _author_id), date|
+    last_comment_dates.each do |(user_id, _author_id), date| # rubocop:disable Style/HashEachMethods
       next unless (student = data[user_id])
 
       student[:last_interaction] = [student[:last_interaction], date].compact.max
@@ -2895,7 +2932,7 @@ class UsersController < ApplicationController
     end
 
     if course.root_account.enable_user_notes?
-      data.each { |_k, v| v[:last_user_note] = nil }
+      data.each_value { |v| v[:last_user_note] = nil }
       # find all last user note times in one query
       note_dates = UserNote.active
                            .group(:user_id)
@@ -2942,10 +2979,6 @@ class UsersController < ApplicationController
     # nil and '' will get converted to 0 in the .to_i call
     id = period_id.to_i
     (id == 0) ? nil : id
-  end
-
-  def pandata_credentials
-    @pandata_credentials ||= Rails.application.credentials.pandata_creds.with_indifferent_access || {}
   end
 
   def render_new_user_tutorial_statuses(user)
@@ -3092,7 +3125,7 @@ class UsersController < ApplicationController
 
     notify_policy = Users::CreationNotifyPolicy.new(manage_user_logins, params[:pseudonym])
 
-    includes = %w[locale]
+    includes = %w[locale uuid]
 
     cc_params = params[:communication_channel]
 

@@ -19,12 +19,22 @@
 import React from 'react'
 import {BrowserRouter, Route, Routes} from 'react-router-dom'
 import {MockedProvider} from '@apollo/react-testing'
-import {render, fireEvent, waitFor} from '@testing-library/react'
-import {AccountStatusManagement} from '../AccountStatusManagement'
+import {render, fireEvent, waitFor, act} from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import {
+  AccountStatusManagement,
+  type AccountStatusManagementProps,
+} from '../AccountStatusManagement'
 import {setupGraphqlMocks} from './fixtures'
 
 describe('Account Grading Status Management', () => {
-  const renderGradingStatusManagement = () => {
+  const renderGradingStatusManagement = (props: Partial<AccountStatusManagementProps>) => {
+    const componentProps: AccountStatusManagementProps = {
+      rootAccountId: '2',
+      isRootAccount: true,
+      isExtendedStatusEnabled: true,
+      ...props,
+    }
     return render(
       <BrowserRouter basename="">
         <Routes>
@@ -32,7 +42,7 @@ describe('Account Grading Status Management', () => {
             path="/"
             element={
               <MockedProvider mocks={setupGraphqlMocks()} addTypename={false}>
-                <AccountStatusManagement accountId="2" />
+                <AccountStatusManagement {...componentProps} />
               </MockedProvider>
             }
           />
@@ -41,142 +51,212 @@ describe('Account Grading Status Management', () => {
     )
   }
 
-  const getStatusColor = (element: HTMLElement) => {
-    const style = window.getComputedStyle(element.firstChild as Element) as {[key: string]: any}
-    const backgroundKey = Object.keys(style._values).find(key => key.includes('background'))
-
-    if (!backgroundKey) return ''
-
-    return style._values[backgroundKey]
-  }
+  const getSRAlert = () => document.querySelector('#flash_screenreader_holder')?.textContent
 
   beforeEach(async () => {
     await new Promise(resolve => setTimeout(resolve, 0))
   })
 
-  it('should render the component and children successfully', async () => {
-    const {getByText, queryAllByTestId} = renderGradingStatusManagement()
-    await new Promise(resolve => setTimeout(resolve, 0))
-    expect(getByText('Standard Statuses')).toBeInTheDocument()
-    expect(getByText('Custom Statuses')).toBeInTheDocument()
+  describe('when the account is a root account', () => {
+    it('should render the component and children successfully', async () => {
+      const {getByText, queryAllByTestId} = renderGradingStatusManagement({isRootAccount: true})
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0))
+      })
+      expect(getByText('Standard Statuses')).toBeInTheDocument()
+      expect(getByText('Custom Statuses')).toBeInTheDocument()
 
-    expect(queryAllByTestId(/standard-status-/)).toHaveLength(6)
-    expect(queryAllByTestId(/custom\-status\-[0-9]/)).toHaveLength(2)
-    expect(queryAllByTestId(/custom\-status\-new\-[0-2]/)).toHaveLength(1)
+      expect(queryAllByTestId(/standard-status-/)).toHaveLength(6)
+      expect(queryAllByTestId(/custom\-status\-[0-9]/)).toHaveLength(2)
+      expect(queryAllByTestId(/custom\-status\-new\-[0-2]/)).toHaveLength(1)
+    })
+
+    it('should not render extended status when isExtendedStatusEnabled is false', async () => {
+      const {queryByText, queryAllByTestId, queryByTestId} = renderGradingStatusManagement({
+        isRootAccount: true,
+        isExtendedStatusEnabled: false,
+      })
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0))
+      })
+
+      expect(queryAllByTestId(/standard-status-/)).toHaveLength(5)
+      expect(queryByText('Extended')).not.toBeInTheDocument()
+      expect(queryByTestId('standard-status-extended')).not.toBeInTheDocument()
+    })
+
+    it('should open a single edit popover when clicking on the edit button', async () => {
+      const {getByTestId, queryAllByTestId} = renderGradingStatusManagement({isRootAccount: true})
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0))
+      })
+      expect(queryAllByTestId('edit-status-popover')).toHaveLength(0)
+
+      const standardStatusItem = getByTestId('standard-status-1')
+      expect(standardStatusItem).toBeInTheDocument()
+      const standardEditButton = standardStatusItem?.querySelector('button') as Element
+      expect(standardEditButton).toBeInTheDocument()
+      await userEvent.click(standardEditButton)
+      expect(queryAllByTestId('edit-status-popover')).toHaveLength(1)
+
+      const customStatusItem = getByTestId('custom-status-1')
+      expect(customStatusItem).toBeInTheDocument()
+      const customEditButton = customStatusItem?.querySelector('button') as Element
+      expect(customEditButton).toBeInTheDocument()
+      await userEvent.click(customEditButton)
+      expect(queryAllByTestId('edit-status-popover')).toHaveLength(1)
+    })
+
+    it('should close popover if edit button clicked again', async () => {
+      const {getByTestId, queryAllByTestId} = renderGradingStatusManagement({isRootAccount: true})
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0))
+      })
+      expect(queryAllByTestId('edit-status-popover')).toHaveLength(0)
+
+      const standardStatusItem = getByTestId('standard-status-1')
+      expect(standardStatusItem).toBeInTheDocument()
+      const standardEditButton = standardStatusItem?.querySelector('button') as Element
+      expect(standardEditButton).toBeInTheDocument()
+      fireEvent.doubleClick(standardEditButton)
+      expect(queryAllByTestId('edit-status-popover')).toHaveLength(0)
+    })
+
+    it('should pick new color for status item', async () => {
+      const {getByTestId} = renderGradingStatusManagement({isRootAccount: true})
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0))
+      })
+      const standardStatusItem = getByTestId('standard-status-1')
+      expect(standardStatusItem.firstChild).toHaveStyle('background-color: #E40606')
+
+      const standardEditButton = standardStatusItem?.querySelector('button') as Element
+      await userEvent.click(standardEditButton)
+      const newColor = getByTestId('color-picker-#F0E8EF')
+      await userEvent.click(newColor)
+      const saveButton = getByTestId('save-status-button')
+      await userEvent.click(saveButton)
+
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0))
+      })
+      const updatedStatusItem = getByTestId('standard-status-1')
+      expect(updatedStatusItem.firstChild).toHaveStyle('background-color: #F0E8EF')
+    })
+
+    it('should delete a custom status item', async () => {
+      const {getByTestId, queryAllByTestId} = renderGradingStatusManagement({isRootAccount: true})
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0))
+      })
+      expect(queryAllByTestId(/custom\-status\-[0-9]/)).toHaveLength(2)
+      expect(queryAllByTestId(/custom\-status\-new\-[0-2]/)).toHaveLength(1)
+      const statusToDelete = getByTestId('custom-status-2')
+
+      const deleteButton = statusToDelete?.querySelectorAll('button')[1]
+      await userEvent.click(deleteButton)
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0))
+      })
+      const confirmDeleteButton = getByTestId('confirm-button')
+      await userEvent.click(confirmDeleteButton)
+      await waitFor(() => expect(queryAllByTestId(/custom\-status\-[0-9]/)).toHaveLength(1))
+      expect(queryAllByTestId(/custom\-status\-new\-[0-2]/)).toHaveLength(2)
+
+      expect(getSRAlert()).toEqual('Successfully deleted custom status custom 2')
+    })
+
+    it('should pick edit color & name of custom status item', async () => {
+      const {getByTestId} = renderGradingStatusManagement({isRootAccount: true})
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0))
+      })
+      const customStatusItem = getByTestId('custom-status-1')
+
+      const customEditButton = customStatusItem?.querySelector('button') as Element
+      await userEvent.click(customEditButton)
+      const newColor = getByTestId('color-picker-#E5F3FC')
+      await userEvent.click(newColor)
+      const nameInput = getByTestId('custom-status-name-input')
+      fireEvent.change(nameInput, {target: {value: 'New Status 10'}})
+      expect(nameInput).toHaveValue('New Status 10')
+
+      const saveButton = getByTestId('save-status-button')
+      await userEvent.click(saveButton)
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0))
+      })
+
+      const customStatusItemUpdated = getByTestId('custom-status-1')
+      expect(customStatusItemUpdated.textContent).toContain('New Status 10')
+
+      expect(getSRAlert()).toEqual('Custom status New Status 10 updated')
+    })
+
+    it('should add a new custom status item', async () => {
+      const {getByTestId, queryAllByTestId} = renderGradingStatusManagement({isRootAccount: true})
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0))
+      })
+      const newStatusItem = getByTestId('custom-status-new-0').querySelector('span') as Element
+      await userEvent.click(newStatusItem)
+
+      const newColor = getByTestId('color-picker-#E5F3FC')
+      await userEvent.click(newColor)
+      const nameInput = getByTestId('custom-status-name-input')
+      fireEvent.change(nameInput, {target: {value: 'New Status 11'}})
+      expect(nameInput).toHaveValue('New Status 11')
+
+      const saveButton = getByTestId('save-status-button')
+      await userEvent.click(saveButton)
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0))
+      })
+
+      const customStatusItems = queryAllByTestId(/custom\-status\-[0-9]/)
+      expect(customStatusItems).toHaveLength(3)
+      expect(queryAllByTestId(/custom\-status\-new\-[0-2]/)).toHaveLength(0)
+      const newItem = customStatusItems[2]
+
+      expect(newItem.textContent).toContain('New Status 11')
+      expect(newItem.firstChild).toHaveStyle('background-color: #E5F3FC')
+    })
   })
 
-  it('should open a single edit popover when clicking on the edit button', async () => {
-    const {getByTestId, queryAllByTestId} = renderGradingStatusManagement()
-    await new Promise(resolve => setTimeout(resolve, 0))
-    expect(queryAllByTestId('edit-status-popover')).toHaveLength(0)
+  describe('when the account is a sub account', () => {
+    it('should render the component and children successfully', async () => {
+      const {getByText, queryAllByTestId} = renderGradingStatusManagement({isRootAccount: false})
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0))
+      })
+      expect(getByText('Standard Statuses')).toBeInTheDocument()
+      expect(getByText('Custom Statuses')).toBeInTheDocument()
 
-    const standardStatusItem = getByTestId('standard-status-1')
-    expect(standardStatusItem).toBeInTheDocument()
-    const standardEditButton = standardStatusItem?.querySelector('button') as Element
-    expect(standardEditButton).toBeInTheDocument()
-    fireEvent.click(standardEditButton)
-    expect(queryAllByTestId('edit-status-popover')).toHaveLength(1)
+      expect(queryAllByTestId(/standard-status-/)).toHaveLength(6)
+      expect(queryAllByTestId(/custom\-status\-[0-9]/)).toHaveLength(2)
+      // cannot add new statuses from a sub account
+      expect(queryAllByTestId(/custom\-status\-new\-[0-2]/)).toHaveLength(0)
+    })
 
-    const customStatusItem = getByTestId('custom-status-1')
-    expect(customStatusItem).toBeInTheDocument()
-    const customEditButton = customStatusItem?.querySelector('button') as Element
-    expect(customEditButton).toBeInTheDocument()
-    fireEvent.click(customEditButton)
-    expect(queryAllByTestId('edit-status-popover')).toHaveLength(1)
-  })
+    it('should display status but not allow editing or deleting them', async () => {
+      const {getByTestId, queryAllByTestId} = renderGradingStatusManagement({isRootAccount: false})
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0))
+      })
+      expect(queryAllByTestId('edit-status-popover')).toHaveLength(0)
 
-  it('should close popover if edit button clicked again', async () => {
-    const {getByTestId, queryAllByTestId} = renderGradingStatusManagement()
-    await new Promise(resolve => setTimeout(resolve, 0))
-    expect(queryAllByTestId('edit-status-popover')).toHaveLength(0)
+      const standardStatusItem = getByTestId('standard-status-1')
+      expect(standardStatusItem).toBeInTheDocument()
+      const standardEditButton = standardStatusItem?.querySelector('button') as Element
+      expect(standardEditButton).not.toBeInTheDocument()
 
-    const standardStatusItem = getByTestId('standard-status-1')
-    expect(standardStatusItem).toBeInTheDocument()
-    const standardEditButton = standardStatusItem?.querySelector('button') as Element
-    expect(standardEditButton).toBeInTheDocument()
-    fireEvent.doubleClick(standardEditButton)
-    expect(queryAllByTestId('edit-status-popover')).toHaveLength(0)
-  })
+      const customStatusItem = getByTestId('custom-status-1')
+      expect(customStatusItem).toBeInTheDocument()
+      const customEditButton = customStatusItem?.querySelector('button') as Element
+      expect(customEditButton).not.toBeInTheDocument()
 
-  it('should pick new color for status item', async () => {
-    const {getByTestId} = renderGradingStatusManagement()
-    await new Promise(resolve => setTimeout(resolve, 0))
-    const standardStatusItem = getByTestId('standard-status-1')
-    const statusColor = getStatusColor(standardStatusItem)
-    expect(statusColor).toEqual('#E40606')
-
-    const standardEditButton = standardStatusItem?.querySelector('button') as Element
-    fireEvent.click(standardEditButton)
-    const newColor = getByTestId('color-picker-#F0E8EF')
-    fireEvent.click(newColor)
-    const saveButton = getByTestId('save-status-button')
-    fireEvent.click(saveButton)
-
-    await new Promise(resolve => setTimeout(resolve, 0))
-    const updatedStatusItem = getByTestId('standard-status-1')
-    const updatedStatusColor = getStatusColor(updatedStatusItem)
-    expect(updatedStatusColor).toEqual('#F0E8EF')
-  })
-
-  it('should delete a custom status item', async () => {
-    const {getByTestId, queryAllByTestId} = renderGradingStatusManagement()
-    await new Promise(resolve => setTimeout(resolve, 0))
-    expect(queryAllByTestId(/custom\-status\-[0-9]/)).toHaveLength(2)
-    expect(queryAllByTestId(/custom\-status\-new\-[0-2]/)).toHaveLength(1)
-    const statusToDelete = getByTestId('custom-status-2')
-
-    const deleteButton = statusToDelete?.querySelectorAll('button')[1]
-    fireEvent.click(deleteButton)
-    await new Promise(resolve => setTimeout(resolve, 0))
-    const confirmDeleteButton = getByTestId('confirm-button')
-    fireEvent.click(confirmDeleteButton)
-    await waitFor(() => expect(queryAllByTestId(/custom\-status\-[0-9]/)).toHaveLength(1))
-    expect(queryAllByTestId(/custom\-status\-new\-[0-2]/)).toHaveLength(2)
-  })
-
-  it('should pick edit color & name of custom status item', async () => {
-    const {getByTestId} = renderGradingStatusManagement()
-    await new Promise(resolve => setTimeout(resolve, 0))
-    const customStatusItem = getByTestId('custom-status-1')
-
-    const customEditButton = customStatusItem?.querySelector('button') as Element
-    fireEvent.click(customEditButton)
-    const newColor = getByTestId('color-picker-#E5F3FC')
-    fireEvent.click(newColor)
-    const nameInput = getByTestId('custom-status-name-input')
-    fireEvent.change(nameInput, {target: {value: 'New Status 10'}})
-    expect(nameInput).toHaveValue('New Status 10')
-
-    const saveButton = getByTestId('save-status-button')
-    fireEvent.click(saveButton)
-    await new Promise(resolve => setTimeout(resolve, 0))
-
-    const customStatusItemUpdated = getByTestId('custom-status-1')
-    expect(customStatusItemUpdated.textContent).toContain('New Status 10')
-  })
-
-  it('should add a new custom status item', async () => {
-    const {getByTestId, queryAllByTestId} = renderGradingStatusManagement()
-    await new Promise(resolve => setTimeout(resolve, 0))
-    const newStatusItem = getByTestId('custom-status-new-0').querySelector('span') as Element
-    fireEvent.click(newStatusItem)
-
-    const newColor = getByTestId('color-picker-#E5F3FC')
-    fireEvent.click(newColor)
-    const nameInput = getByTestId('custom-status-name-input')
-    fireEvent.change(nameInput, {target: {value: 'New Status 11'}})
-    expect(nameInput).toHaveValue('New Status 11')
-
-    const saveButton = getByTestId('save-status-button')
-    fireEvent.click(saveButton)
-    await new Promise(resolve => setTimeout(resolve, 0))
-
-    const customStatusItems = queryAllByTestId(/custom\-status\-[0-9]/)
-    expect(customStatusItems).toHaveLength(3)
-    expect(queryAllByTestId(/custom\-status\-new\-[0-2]/)).toHaveLength(0)
-    const newItem = customStatusItems[2]
-
-    expect(newItem.textContent).toContain('New Status 11')
-    expect(getStatusColor(newItem)).toEqual('#E5F3FC')
+      const customDeleteButton = customStatusItem?.querySelector('button') as Element
+      expect(customDeleteButton).not.toBeInTheDocument()
+    })
   })
 })

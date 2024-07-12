@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /*
  * Copyright (C) 2022 - present Instructure, Inc.
  *
@@ -62,6 +63,14 @@ describe('ConferenceAddressBook', () => {
     fireEvent.change(input, {target: {value: 'Caleb'}})
     const item = container.queryByText('Allison')
     expect(item).toBeFalsy()
+  })
+
+  it('should filter case-insensitive', () => {
+    const container = setup()
+    const input = container.getByTestId('address-input')
+    fireEvent.change(input, {target: {value: 'caleb'}})
+    const item = container.queryByText('Caleb')
+    expect(item).toBeTruthy()
   })
 
   it('should add tag when user is selected', () => {

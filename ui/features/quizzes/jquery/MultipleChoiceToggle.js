@@ -16,12 +16,12 @@
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
 import $ from 'jquery'
-import htmlEscape from 'html-escape'
+import htmlEscape from '@instructure/html-escape'
 import EditorToggle from '@canvas/editor-toggle'
-import {send} from '@canvas/rce/RceCommandShim'
-import _inherits from '@babel/runtime/helpers/esm/inheritsLoose'
+import {send} from '@canvas/rce-command-shim'
+import {extend} from '@canvas/backbone/utils'
 
-_inherits(MultipleChoiceToggle, EditorToggle)
+extend(MultipleChoiceToggle, EditorToggle)
 // #
 // Toggles a multiple choice quiz answer between an editor and an element
 

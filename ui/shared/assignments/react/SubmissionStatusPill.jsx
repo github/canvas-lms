@@ -23,27 +23,45 @@ import {Pill} from '@instructure/ui-pill'
 
 const I18n = useI18nScope('assignments_2')
 
+export const isStatusPillPresent = submission => {
+  return (
+    submission &&
+    (submission.customGradeStatus ||
+      submission.excused ||
+      submission.submissionStatus === 'missing' ||
+      submission.submissionStatus === 'late' ||
+      submission.submissionStatus === 'extended')
+  )
+}
+
+const StatusPill = ({label, testId, color = 'primary'}) => {
+  return window.ENV.FEATURES?.instui_nav ? (
+    <Pill data-testid={testId} color={color}>
+      {label}
+    </Pill>
+  ) : (
+    <Pill data-testid={testId} color={color}>
+      {label}
+    </Pill>
+  )
+}
+
 export default function SubmissionStatusPill(props) {
-  if (props.excused) {
-    return <Pill data-testid="excused-pill">{I18n.t('Excused')}</Pill>
+  if (props.customGradeStatus) {
+    return (
+      <StatusPill
+        label={props.customGradeStatus}
+        testId={`custom-grade-pill-${props.customGradeStatus}`}
+      />
+    )
+  } else if (props.excused) {
+    return <StatusPill label={I18n.t('Excused')} testId="excused-pill" />
   } else if (props.submissionStatus === 'missing') {
-    return (
-      <Pill data-testid="missing-pill" color="danger">
-        {I18n.t('Missing')}
-      </Pill>
-    )
+    return <StatusPill label={I18n.t('Missing')} testId="missing-pill" color="danger" />
   } else if (props.submissionStatus === 'late') {
-    return (
-      <Pill data-testid="late-pill" color="info">
-        {I18n.t('Late')}
-      </Pill>
-    )
+    return <StatusPill label={I18n.t('Late')} testId="late-pill" color="info" />
   } else if (props.submissionStatus === 'extended') {
-    return (
-      <Pill data-testid="extended-pill" color="info">
-        {I18n.t('Extended')}
-      </Pill>
-    )
+    return <StatusPill label={I18n.t('Extended')} testId="extended-pill" color="info" />
   } else {
     return null
   }
@@ -52,4 +70,5 @@ export default function SubmissionStatusPill(props) {
 SubmissionStatusPill.propTypes = {
   excused: bool,
   submissionStatus: string,
+  customGradeStatus: string,
 }

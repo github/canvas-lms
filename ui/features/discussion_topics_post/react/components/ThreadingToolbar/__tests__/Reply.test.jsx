@@ -53,8 +53,8 @@ describe('Reply', () => {
     expect(getByText('Reply to post from Nikita')).toBeTruthy()
   })
 
-  it('renders quote when in isolated view', () => {
-    const {getByText} = setup({isIsolatedView: true})
+  it('renders quote when in split screen view', () => {
+    const {getByText} = setup({isSplitView: true})
     expect(getByText('Quote')).toBeTruthy()
   })
 
@@ -66,6 +66,12 @@ describe('Reply', () => {
     expect(onClickMock.mock.calls.length).toBe(1)
   })
 
+  it('shows icon on desktop view', () => {
+    const {container} = setup()
+    const icon = container.querySelector('svg')
+    expect(icon).toBeTruthy()
+  })
+
   describe('Mobile', () => {
     beforeEach(() => {
       responsiveQuerySizes.mockImplementation(() => ({
@@ -75,10 +81,16 @@ describe('Reply', () => {
 
     it('uses mobile prop values', () => {
       const container = setup()
-      const outerHTML = container.getByTestId('threading-toolbar-reply').outerHTML
 
-      const expectedMargin = `margin: 0px 1rem 0px 0px`
-      expect(outerHTML.includes(expectedMargin)).toBeTruthy()
+      expect(container.getByTestId('threading-toolbar-reply').parentNode).toHaveStyle(
+        'margin: 0px 0.75rem 0px 0px'
+      )
+    })
+
+    it('does not show icon on desktop view', () => {
+      const {container} = setup()
+      const icon = container.querySelector('svg')
+      expect(icon).toBeFalsy()
     })
   })
 })

@@ -20,7 +20,7 @@
 
 # @API CommMessages
 #
-# API for accessing the messages (emails, sms, twitter, etc) that have
+# API for accessing the messages (emails, sms, X.com, etc) that have
 # been sent to a user.
 #
 # @model CommMessage
@@ -138,8 +138,8 @@ class CommMessagesApiController < ApplicationController
       query = query.where(root_account_id: @domain_root_account)
     end
 
-    query = query.where("created_at >= ?", start_time) if start_time
-    query = query.where("created_at <= ?", end_time) if end_time
+    query = query.where(created_at: start_time..) if start_time
+    query = query.where(created_at: ..end_time) if end_time
     messages = Api.paginate(query, self, api_v1_comm_messages_url)
 
     messages_json = messages.map { |m| comm_message_json(m) }

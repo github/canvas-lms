@@ -635,6 +635,15 @@ describe ContextModulesController do
       expect(last_item_module.link_settings).to eq({ "selection_width" => "123", "selection_height" => "456" })
     end
 
+    it "allows a user with only manage_course_content_add permissions to add a module item" do
+      RoleOverride.create!(context: @course.account, permission: "manage_course_content_edit", role: teacher_role, enabled: false)
+      assignment = @course.assignments.create! title: "An Assignment"
+      post "add_item", params: { course_id: @course.id, context_module_id: @module.id, item: { type: "assignment", title: "Assignment", id: assignment.id } }
+      expect(response).to be_successful
+      assignment_item = ContentTag.last
+      expect(assignment_item.content_id).to eq(assignment.id)
+    end
+
     describe "update_module_link_default_tab" do
       it "updates the user preference value to true when external_url is added" do
         @teacher.set_preference(:module_links_default_new_tab, false)
@@ -702,6 +711,33 @@ describe ContextModulesController do
       new_url = "http://example.org/new_tool"
       put "update_item", params: { course_id: @course.id, id: @external_tool_item.id, content_tag: { url: new_url } }
       expect(@external_tool_item.reload.url).to eq new_url
+    end
+
+    it "does not change the content_id for an external tool item if the external url is changed to a tool that doesn't exist" do
+      expect(@external_tool_item.content_id).not_to be_nil
+      new_url = "http://example.org/new_tool"
+      put "update_item", params: { course_id: @course.id, id: @external_tool_item.id, content_tag: { url: new_url } }
+      @external_tool_item.reload
+      expect(@external_tool_item.url).to eq new_url
+      expect(@external_tool_item.content_id).not_to be_nil
+    end
+
+    it "sets the content_id for an external tool item if the url is changed to another tool" do
+      new_url = "http://example.org/new_tool"
+      tool = @course.context_external_tools.create!(name: "a", url: new_url, consumer_key: "12345", shared_secret: "secret")
+      put "update_item", params: { course_id: @course.id, id: @external_tool_item.id, content_tag: { url: new_url } }
+      @external_tool_item.reload
+      expect(@external_tool_item.url).to eq new_url
+      expect(@external_tool_item.content_id).to eq tool.id
+    end
+
+    it "does not change content_id for an external tool item if the url is not changed" do
+      expect(@external_tool_item.content_id).not_to be_nil
+      same_url = "http://example.com/tool"
+      put "update_item", params: { course_id: @course.id, id: @external_tool_item.id, content_tag: { url: same_url } }
+      @external_tool_item.reload
+      expect(@external_tool_item.url).to eq same_url
+      expect(@external_tool_item.content_id).not_to be_nil
     end
 
     it "ignores the url for a non-applicable type" do
@@ -943,7 +979,7 @@ describe ContextModulesController do
       @assign = @course.assignments.create! title: "WHAT", points_possible: 123
       @tag = @mod.add_item(type: "assignment", id: @assign.id)
 
-      Setting.set("assignment_all_dates_too_many_threshold", "1")
+      stub_const("Api::V1::Assignment::ALL_DATES_LIMIT", 1)
 
       2.times do
         student = student_in_course(course: @course, active_all: true).user
@@ -967,7 +1003,7 @@ describe ContextModulesController do
 
       @tag = @mod.add_item(type: "discussion_topic", id: @topic.id)
 
-      Setting.set("assignment_all_dates_too_many_threshold", "1")
+      stub_const("Api::V1::Assignment::ALL_DATES_LIMIT", 1)
 
       2.times do
         student = student_in_course(course: @course, active_all: true).user
@@ -1024,7 +1060,7 @@ describe ContextModulesController do
       @quiz = @course.quizzes.create!(title: "sad", due_at: 1.week.from_now, quiz_type: "survey")
       @tag = @mod.add_item(type: "quiz", id: @quiz.id)
 
-      Setting.set("assignment_all_dates_too_many_threshold", "1")
+      stub_const("Api::V1::Assignment::ALL_DATES_LIMIT", 1)
 
       2.times do
         student = student_in_course(course: @course, active_all: true).user

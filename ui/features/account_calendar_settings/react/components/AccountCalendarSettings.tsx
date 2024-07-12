@@ -32,7 +32,7 @@ import {AccountList} from './AccountList'
 import {AccountTree} from './AccountTree'
 import {FilterControls, FilterType} from './FilterControls'
 import {Footer} from './Footer'
-import {
+import type {
   VisibilityChange,
   SubscriptionChange,
   ExpandedAccounts,
@@ -220,7 +220,11 @@ export const AccountCalendarSettings = ({accountId}: ComponentProps) => {
       <View
         as="div"
         borderWidth={`0 ${BORDER_WIDTH} ${BORDER_WIDTH} ${BORDER_WIDTH}`}
-        elementRef={(e: HTMLDivElement) => (accountTreeRef.current = e)}
+        elementRef={e => {
+          if (e instanceof HTMLDivElement) {
+            accountTreeRef.current = e
+          }
+        }}
         height={`${accountTreeHeight}px`}
         overflowY="auto"
       >
@@ -258,7 +262,11 @@ export const AccountCalendarSettings = ({accountId}: ComponentProps) => {
       <View
         as="div"
         borderWidth={`0 ${BORDER_WIDTH} ${BORDER_WIDTH} ${BORDER_WIDTH}`}
-        elementRef={(e: HTMLDivElement) => (footerRef.current = e)}
+        elementRef={e => {
+          if (e instanceof HTMLDivElement) {
+            footerRef.current = e
+          }
+        }}
         background="secondary"
       >
         {!isSaving && (

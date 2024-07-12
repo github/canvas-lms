@@ -359,6 +359,9 @@
     "content_1440204b": {
         "message": "Contenu"
     },
+    "content_in_the_editor_will_be_changed_press_cancel_d5bf3357": {
+        "message": "Le contenu sera modifié dans l''éditeur. Cliquez sur Annuler pour conserver le contenu d’origine."
+    },
     "content_is_still_being_uploaded_if_you_continue_it_8f06d0cb": {
         "message": "Le contenu est toujours en cours de téléchargement, si vous continuez, il ne sera pas intégré correctement."
     },
@@ -686,6 +689,12 @@
     "enter_at_least_3_characters_to_search_4f037ee0": {
         "message": "Saisissez au moins 3 caractères pour lancer une recherche."
     },
+    "enter_replacement_text_17631bbc": {
+        "message": "Saisir le texte e remplacement"
+    },
+    "enter_search_text_26cb4459": {
+        "message": "Saisir le texte à rechercher"
+    },
     "epsilon_54bb8afa": {
         "message": "Epsilon"
     },
@@ -781,6 +790,12 @@
     },
     "filipino_33339264": {
         "message": "Philippin"
+    },
+    "find_8d605019": {
+        "message": "Trouver"
+    },
+    "find_and_replace_6e345933": {
+        "message": "Trouver et remplacer"
     },
     "finish_bc343002": {
         "message": "Terminer"
@@ -1057,6 +1072,9 @@
     },
     "indefinite_integral_6623307e": {
         "message": "Intégrale indéfinie"
+    },
+    "index_of_max_80dcf7a5": {
+        "message": "{ index } sur { max }"
     },
     "indigo_2035fc55": {
         "message": "Indigo"
@@ -1430,6 +1448,9 @@
     "next_40e12421": {
         "message": "Suivant"
     },
+    "next_findtext_9d69f0fe": {
+        "message": "Occurrence suivante de { findText }"
+    },
     "no_accessibility_issues_were_detected_f8d3c875": {
         "message": "Aucun problème d''accessibilité n’a été détecté."
     },
@@ -1486,6 +1507,9 @@
     },
     "no_results_940393cf": {
         "message": "Aucun résultat."
+    },
+    "no_results_found_58717065": {
+        "message": "Aucun résultat trouvé"
     },
     "no_results_found_for_filterterm_ad1b04c8": {
         "message": "Aucun résultat trouvé pour { filterTerm }"
@@ -1685,6 +1709,9 @@
     "preformatted_d0670862": {
         "message": "Préformaté"
     },
+    "prepend_findtext_append_8e0e769a": {
+        "message": "{ prepend }{ findText }{ append }"
+    },
     "prev_f82cbc48": {
         "message": "Précédent"
     },
@@ -1699,6 +1726,12 @@
     },
     "preview_inline_9787330": {
         "message": "Aperçu incorporé"
+    },
+    "previous_bd2ac015": {
+        "message": "Précédent"
+    },
+    "previous_findtext_8dfbfd30": {
+        "message": "Occurrence précédente de { findText }"
     },
     "prime_917ea60e": {
         "message": "Prime"
@@ -1772,8 +1805,26 @@
     "remove_link_d1f2f4d0": {
         "message": "Supprimer lien"
     },
+    "replace_all_d3d68b3": {
+        "message": "Tout remplacer"
+    },
+    "replace_all_findtext_with_replacetext_da574b32": {
+        "message": "Remplacer toutes les occurrences de { findText } par { replaceText }"
+    },
     "replace_e61834a7": {
         "message": "Remplacer"
+    },
+    "replace_findtext_with_replacetext_7b5c7fb3": {
+        "message": "Remplacer { findText } par { replaceText }"
+    },
+    "replace_with_eeff01ad": {
+        "message": "Remplacer par"
+    },
+    "replaced_alertfindtext_with_alertreplacetext_de5c1795": {
+        "message": "Remplacement de { alertFindText } par { alertReplaceText }"
+    },
+    "replaced_all_alertfindtext_with_alertreplacetext_83fdfe59": {
+        "message": "Remplacement de toutes les occurrences de { alertFindText } par { alertReplaceText }"
     },
     "reset_95a81614": {
         "message": "Réinitialiser"
@@ -1783,6 +1834,9 @@
     },
     "restore_auto_save_deccd84b": {
         "message": "Restaurer l’enregistrement auto ?"
+    },
+    "result_index_of_max_7db5ad8b": {
+        "message": "Résultats { index } sur { max }."
     },
     "reverse_turnstile_does_not_yield_7558be06": {
         "message": "Taquet gauche (ne fournit pas)"

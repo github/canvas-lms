@@ -17,10 +17,13 @@
  */
 
 import React from 'react'
-import tz from '@canvas/timezone'
+import * as tz from '@instructure/moment-utils'
 import _ from 'lodash'
-import $ from 'jquery'
-import '../../jquery/index'
+import {
+  fudgeDateForProfileTimezone,
+  datetimeString,
+  friendlyDatetime,
+} from '@canvas/datetime/date-functions'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
 
 type Props = {
@@ -36,19 +39,18 @@ type Props = {
 
 function timeFormatting(dateTime: string | Date, format: string | undefined, showTime: boolean) {
   if (!_.isDate(dateTime)) {
+    // @ts-expect-error
     dateTime = tz.parse(dateTime)
   }
 
-  // @ts-expect-error
-  const fudged = $.fudgeDateForProfileTimezone(dateTime)
+  const fudged = fudgeDateForProfileTimezone(dateTime)
   let friendly
   if (format) {
     friendly = tz.format(dateTime, format)
   } else if (showTime) {
-    friendly = $.datetimeString(dateTime)
+    friendly = datetimeString(dateTime)
   } else {
-    // @ts-expect-error
-    friendly = $.friendlyDatetime(fudged)
+    friendly = friendlyDatetime(fudged)
   }
   return {friendly, fudged}
 }
@@ -87,9 +89,9 @@ export default function ConnectedFriendlyDatetimes({
         </span>
         <span className="hidden-desktop">
           {fixedPrefixMobile +
-            firstTime.fudged.toLocaleDateString() +
+            firstTime.fudged?.toLocaleDateString() +
             fixedConnectorMobile +
-            secondTime.fudged.toLocaleDateString()}
+            secondTime.fudged?.toLocaleDateString()}
         </span>
       </span>
     </span>

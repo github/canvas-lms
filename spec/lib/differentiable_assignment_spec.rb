@@ -16,14 +16,8 @@
 #
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
-#
 
-shared_examples_for "a differentiable_object" do
-  specs_require_sharding
-  before do
-    teacher_in_course(active_all: true, course: differentiable.context)
-  end
-
+shared_examples_for "a non-module differentiable object" do
   describe "differentiated_assignments_applies?" do
     context "only_visible_to_overrides is true" do
       it "returns true" do
@@ -39,18 +33,25 @@ shared_examples_for "a differentiable_object" do
       end
     end
   end
+end
+
+shared_examples_for "a differentiable_object" do
+  specs_require_sharding
+  before do
+    teacher_in_course(active_all: true, course: differentiable.context)
+  end
 
   describe "visible_to_user?" do
     context "student" do
       before { student_in_course(course: @course) }
 
       it "with a visibility it should be true" do
-        allow(differentiable_view).to receive(:where).and_return([:a_record])
+        allow(differentiable_service).to receive(service_method).and_return([:a_record])
         expect(differentiable.visible_to_user?(@user)).to be_truthy
       end
 
       it "without a visibility should be false" do
-        allow(differentiable_view).to receive(:where).and_return([])
+        allow(differentiable_service).to receive(service_method).and_return([])
         expect(differentiable.visible_to_user?(@user)).to be_falsey
       end
     end
@@ -59,7 +60,7 @@ shared_examples_for "a differentiable_object" do
       before { student_in_course(course: @course) }
 
       it "with visibility should be true no matter the active shard" do
-        allow(differentiable_view).to receive(:where).and_return([:a_record])
+        allow(differentiable_service).to receive(service_method).and_return([:a_record])
         @shard2.activate do
           expect(differentiable.visible_to_user?(@user)).to be_truthy
         end
@@ -144,7 +145,7 @@ shared_examples_for "a differentiable_object" do
 
   describe "filter" do
     def call_filter
-      block = ->(_collection, _users) { return :filtered }
+      block = ->(_collection, _users) { :filtered }
       DifferentiableAssignment.filter(:not_filtered, @user, @course, {}, &block)
     end
     it "filters for students" do
@@ -193,15 +194,32 @@ shared_examples_for "a differentiable_object" do
 end
 
 describe Assignment do
-  let(:differentiable_view) { AssignmentStudentVisibility }
+  let(:differentiable_service) { AssignmentVisibility::AssignmentVisibilityService }
+  let(:service_method) { :assignment_visible_to_students }
   let(:differentiable) { assignment_model(due_at: 5.days.ago, only_visible_to_overrides: true) }
 
+  include_examples "a non-module differentiable object"
   include_examples "a differentiable_object"
 end
 
 describe Quizzes::Quiz do
-  let(:differentiable_view) { Quizzes::QuizStudentVisibility }
+  let(:differentiable_service) { QuizVisibility::QuizVisibilityService }
+  let(:service_method) { :quiz_visible_to_students }
   let(:differentiable) { quiz_model(due_at: 5.days.ago, only_visible_to_overrides: true) }
+
+  include_examples "a non-module differentiable object"
+  include_examples "a differentiable_object"
+end
+
+describe ContextModule do
+  let(:differentiable_service) { ModuleVisibility::ModuleVisibilityService }
+  let(:service_method) { :module_visible_to_students }
+  let(:differentiable) do
+    course = course_factory(active_all: true)
+    cm = course.context_modules.create!(name: "test module")
+    cm.assignment_overrides.create!
+    cm
+  end
 
   include_examples "a differentiable_object"
 end

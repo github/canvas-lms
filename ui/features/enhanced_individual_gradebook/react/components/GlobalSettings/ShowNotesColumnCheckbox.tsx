@@ -18,12 +18,9 @@
 
 import React from 'react'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import {CustomColumn, HandleCheckboxChange, TeacherNotes} from '../../../types'
-import {executeApiRequest} from '@canvas/util/apiRequest'
-import {View} from '@instructure/ui-view'
-import {ApplyTheme} from '@instructure/ui-themeable'
-// @ts-expect-error TODO: fix in instui 8
-import {Checkbox, CheckboxFacade} from '@instructure/ui-checkbox'
+import type {CustomColumn, HandleCheckboxChange, TeacherNotes} from '../../../types'
+import {executeApiRequest} from '@canvas/do-fetch-api-effect/apiRequest'
+import CheckboxTemplate from './CheckboxTemplate'
 
 const I18n = useI18nScope('enhanced_individual_gradebook')
 type Props = {
@@ -36,6 +33,7 @@ type Props = {
   showNotesColumn: boolean
   onTeacherNotesCreation: (teacherNotes: TeacherNotes) => void
 }
+
 export default function ShowNotesColumnCheckbox({
   teacherNotes,
   customColumns,
@@ -86,35 +84,11 @@ export default function ShowNotesColumnCheckbox({
   }
 
   return (
-    <ApplyTheme
-      theme={{
-        [CheckboxFacade.theme]: {
-          checkedBackground: '#0375ff',
-          borderColor: '#777777',
-          labelFontSizeSmall: '1rem',
-        },
-        [View.theme]: {
-          paddingMedium: '16px',
-        },
-      }}
-    >
-      <View
-        as="div"
-        className="checkbox"
-        margin="x-small 0"
-        borderRadius="medium"
-        background="primary"
-        padding="medium"
-        theme={{backgroundPrimary: '#eee'}}
-      >
-        <Checkbox
-          data-testid="show-notes-column-checkbox"
-          size="small"
-          label={I18n.t('Show Notes in Student Info')}
-          checked={showNotesColumn}
-          onChange={handleShowNotesColumnChange}
-        />
-      </View>
-    </ApplyTheme>
+    <CheckboxTemplate
+      dataTestId="show-notes-column-checkbox"
+      label={I18n.t('Show Notes in Student Info')}
+      checked={showNotesColumn}
+      onChange={handleShowNotesColumnChange}
+    />
   )
 }

@@ -30,6 +30,7 @@ import {
   listDroppedAssignments,
   filteredAssignments,
 } from './utils'
+import useStore, {updateState} from '../stores'
 import {calculateCourseGrade} from './gradeCalculatorConversions'
 
 import {totalRow} from './AssignmentTableRows/TotalRow'
@@ -37,13 +38,14 @@ import {assignmentGroupRow} from './AssignmentTableRows/AssignmentGroupRow'
 import {gradingPeriodRow} from './AssignmentTableRows/GradingPeriodRow'
 import {assignmentRow} from './AssignmentTableRows/AssignmentRow'
 import {scoreDistributionRow} from './AssignmentTableRows/ScoreDistributionRow'
+import {rubricRow} from './AssignmentTableRows/RubricRow'
 
 const I18n = useI18nScope('grade_summary')
 
 const headers = [
   {key: 'name', value: I18n.t('Name'), id: nanoid(), alignment: 'start', width: '30%'},
   {key: 'dueAt', value: I18n.t('Due Date'), id: nanoid(), alignment: 'start', width: '20%'},
-  {key: 'status', value: I18n.t('Status'), id: nanoid(), alignment: 'center', width: '10%'},
+  {key: 'status', value: I18n.t('Status'), id: nanoid(), alignment: 'center', width: '15%'},
   {key: 'score', value: I18n.t('Score'), id: nanoid(), alignment: 'center', width: '10%'},
 ]
 
@@ -63,22 +65,41 @@ const getCurrentOrFinalGrade = (
 const AssignmentTable = ({
   queryData,
   layout,
-  setShowTray,
-  setSelectedSubmission,
   handleReadStateChange,
+  handleRubricReadStateChange,
+  setSubmissionAssignmentId,
+  submissionAssignmentId,
+  hideTotalRow = false,
 }) => {
   const {assignmentSortBy} = React.useContext(GradeSummaryContext)
   const [calculateOnlyGradedAssignments, setCalculateOnlyGradedAssignments] = useState(true)
-
-  const courseGrades = calculateCourseGrade(
-    queryData?.relevantGradingPeriodGroup,
-    queryData?.assignmentGroupsConnection?.nodes,
-    filteredAssignments(queryData, calculateOnlyGradedAssignments),
-    calculateOnlyGradedAssignments,
-    queryData?.applyGroupWeights
-  )
-
   const [openAssignmentDetailIds, setOpenAssignmentDetailIds] = useState([])
+  const [openRubricDetailIds, setOpenRubricDetailIds] = useState([])
+  const [activeWhatIfScores, setActiveWhatIfScores] = useState([])
+  const [courseGrades, setCourseGrades] = useState(
+    calculateCourseGrade(
+      queryData?.relevantGradingPeriodGroup,
+      queryData?.assignmentGroupsConnection?.nodes,
+      filteredAssignments(queryData, calculateOnlyGradedAssignments, activeWhatIfScores),
+      calculateOnlyGradedAssignments,
+      queryData?.applyGroupWeights,
+      activeWhatIfScores
+    )
+  )
+  const overrideGrade =
+    queryData?.usersConnection?.nodes[0]?.enrollments[0]?.grades.overrideGrade || null
+
+  useEffect(() => {
+    const grades = calculateCourseGrade(
+      queryData?.relevantGradingPeriodGroup,
+      queryData?.assignmentGroupsConnection?.nodes,
+      filteredAssignments(queryData, calculateOnlyGradedAssignments, activeWhatIfScores),
+      calculateOnlyGradedAssignments,
+      queryData?.applyGroupWeights,
+      activeWhatIfScores
+    )
+    setCourseGrades(grades)
+  }, [activeWhatIfScores, calculateOnlyGradedAssignments, queryData])
 
   const [droppedAssignments, setDroppedAssignments] = useState(
     listDroppedAssignments(queryData, getGradingPeriodID() === '0', true)
@@ -102,6 +123,16 @@ const AssignmentTable = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const open = useStore(state => state.submissionTrayOpen)
+
+  const setShowTray = () => {
+    const newState = !open
+    if (!newState) {
+      setSubmissionAssignmentId('')
+    }
+    updateState({submissionTrayOpen: newState})
+  }
 
   return (
     <Table caption={I18n.t('Student Grade Summary')} layout={layout} hover={true}>
@@ -132,10 +163,16 @@ const AssignmentTable = ({
                 modifiedAssignment,
                 queryData,
                 setShowTray,
-                setSelectedSubmission,
                 handleReadStateChange,
+                handleRubricReadStateChange,
                 setOpenAssignmentDetailIds,
-                openAssignmentDetailIds
+                openAssignmentDetailIds,
+                setSubmissionAssignmentId,
+                submissionAssignmentId,
+                setOpenRubricDetailIds,
+                openRubricDetailIds,
+                setActiveWhatIfScores,
+                activeWhatIfScores
               ),
               openAssignmentDetailIds.includes(modifiedAssignment._id) &&
               modifiedAssignment?.scoreStatistic
@@ -144,6 +181,9 @@ const AssignmentTable = ({
                     setOpenAssignmentDetailIds,
                     openAssignmentDetailIds
                   )
+                : null,
+              openRubricDetailIds.includes(modifiedAssignment._id) && modifiedAssignment.rubric
+                ? rubricRow(assignment, setOpenRubricDetailIds, openRubricDetailIds)
                 : null,
             ]
           })
@@ -171,16 +211,19 @@ const AssignmentTable = ({
                   )
                 : null
             })}
-        {totalRow(
-          queryData,
-          calculateOnlyGradedAssignments,
-          getCurrentOrFinalGrade(
-            getGradingPeriodID() === '0',
+        {!hideTotalRow &&
+          totalRow(
+            queryData,
             calculateOnlyGradedAssignments,
-            courseGrades?.current,
-            courseGrades?.final
-          )
-        )}
+            getCurrentOrFinalGrade(
+              getGradingPeriodID() === '0',
+              calculateOnlyGradedAssignments,
+              courseGrades?.current,
+              courseGrades?.final,
+              activeWhatIfScores
+            ),
+            overrideGrade
+          )}
       </Table.Body>
     </Table>
   )
@@ -189,9 +232,11 @@ const AssignmentTable = ({
 AssignmentTable.propTypes = {
   queryData: PropTypes.object,
   layout: PropTypes.string,
-  setShowTray: PropTypes.func,
-  setSelectedSubmission: PropTypes.func,
   handleReadStateChange: PropTypes.func,
+  handleRubricReadStateChange: PropTypes.func,
+  setSubmissionAssignmentId: PropTypes.func,
+  submissionAssignmentId: PropTypes.string,
+  hideTotalRow: PropTypes.bool,
 }
 
 export default AssignmentTable

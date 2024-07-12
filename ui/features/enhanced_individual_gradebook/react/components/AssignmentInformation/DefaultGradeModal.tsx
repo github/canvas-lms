@@ -18,10 +18,8 @@
 import React, {useCallback, useEffect, useState} from 'react'
 import {showFlashError, showFlashSuccess} from '@canvas/alerts/react/FlashAlert'
 import {useScope as useI18nScope} from '@canvas/i18n'
-// @ts-expect-error
 import {Modal} from '@instructure/ui-modal'
 import {Button, CloseButton} from '@instructure/ui-buttons'
-// @ts-expect-error
 import {Checkbox} from '@instructure/ui-checkbox'
 import {Heading} from '@instructure/ui-heading'
 import {Text} from '@instructure/ui-text'
@@ -29,13 +27,13 @@ import {View} from '@instructure/ui-view'
 import DefaultGradeInput from './DefaultGradeInput'
 import {
   ApiCallStatus,
-  AssignmentConnection,
-  GradebookOptions,
-  SubmissionConnection,
-  SubmissionGradeChange,
+  type AssignmentConnection,
+  type GradebookOptions,
+  type SubmissionConnection,
+  type SubmissionGradeChange,
 } from '../../../types'
 import {isExcused} from '@canvas/grading/GradeInputHelper'
-import {useDefaultGrade, DefaultGradeSubmissionParams} from '../../hooks/useDefaultGrade'
+import {useDefaultGrade, type DefaultGradeSubmissionParams} from '../../hooks/useDefaultGrade'
 
 const {Header: ModalHeader, Body: ModalBody} = Modal as any
 const I18n = useI18nScope('enhanced_individual_gradebook')
@@ -61,7 +59,8 @@ export default function DefaultGradeModal({
 
   const [gradeInput, setGradeInput] = useState<string>('')
   const [gradeOverwrite, setGradeOverwrite] = useState<boolean>(false)
-  const {defaultGradeStatus, savedGrade, setGrades, updatedSubmissions} = useDefaultGrade()
+  const {defaultGradeStatus, savedGrade, setGrades, updatedSubmissions, resetDefaultGradeStatus} =
+    useDefaultGrade()
 
   const gradeIsMissing = (grade: string) => {
     return grade !== null && grade.toUpperCase() === 'MI'
@@ -96,13 +95,21 @@ export default function DefaultGradeModal({
     switch (defaultGradeStatus) {
       case ApiCallStatus.FAILED:
         showFlashError(I18n.t('Failed to set default grade'))(new Error())
+        resetDefaultGradeStatus()
         break
       case ApiCallStatus.COMPLETED:
         showFlashSuccess(setGradeSuccessText(updatedSubmissions.length))()
         handleSetGrades(updatedSubmissions)
+        resetDefaultGradeStatus()
         break
     }
-  }, [defaultGradeStatus, handleSetGrades, setGradeSuccessText, updatedSubmissions])
+  }, [
+    defaultGradeStatus,
+    handleSetGrades,
+    resetDefaultGradeStatus,
+    setGradeSuccessText,
+    updatedSubmissions,
+  ])
 
   const setDefaultGrade = async () => {
     if (!contextUrl) {
@@ -144,7 +151,7 @@ export default function DefaultGradeModal({
       size="small"
       label="Set Default Grade Modal"
       shouldCloseOnDocumentClick={false}
-      theme={{mediumMaxWidth: '40em'}}
+      themeOverride={{mediumMaxWidth: '40em'}}
     >
       <ModalHeader>
         <CloseButton

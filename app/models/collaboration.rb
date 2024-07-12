@@ -35,6 +35,7 @@ class Collaboration < ActiveRecord::Base
 
   before_save :assign_uuid
   before_save :set_context_code
+  before_save :set_root_account_id
 
   after_save :include_author_as_collaborator
   after_save :touch_context
@@ -65,7 +66,7 @@ class Collaboration < ActiveRecord::Base
         (user_id == user.id ||
          users.include?(user) ||
          Collaborator
-             .joins("INNER JOIN #{GroupMembership.quoted_table_name} ON collaborators.group_id = group_memberships.group_id")
+             .joins("INNER JOIN #{GroupMembership.quoted_table_name} ON collaborators.group_id = group_memberships.group_id AND group_memberships.workflow_state <> 'deleted'")
              .where('collaborators.group_id IS NOT NULL AND
                             group_memberships.user_id = ? AND
                             collaborators.collaboration_id = ?',
@@ -327,6 +328,10 @@ class Collaboration < ActiveRecord::Base
     nil
   end
   protected :set_context_code
+
+  def set_root_account_id
+    self.root_account_id = context.root_account_id
+  end
 
   # Internal: Delete existing collaborating users and add new ones.
   #

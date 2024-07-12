@@ -22,19 +22,17 @@ import type {GradeStatus} from '@canvas/grading/accountGradingStatus'
 import {showConfirmationDialog} from '@canvas/feature-flags/react/ConfirmationDialog'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import {IconButton} from '@instructure/ui-buttons'
-// @ts-expect-error
 import {IconTrashSolid} from '@instructure/ui-icons'
 import {Text} from '@instructure/ui-text'
-// @ts-expect-error
 import {TruncateText} from '@instructure/ui-truncate-text'
 import {View} from '@instructure/ui-view'
 import {EditStatusPopover} from './EditStatusPopover'
 import {Flex} from '@instructure/ui-flex'
 
 const I18n = useI18nScope('account_grading_status')
-const {Item: FlexItem} = Flex as any
 
 type CustomStatusItemProps = {
+  editable: boolean
   gradeStatus: GradeStatus
   isEditOpen: boolean
   handleEditSave: (color: string, name: string) => void
@@ -42,6 +40,7 @@ type CustomStatusItemProps = {
   handleStatusDelete: (statusId: string) => void
 }
 export const CustomStatusItem = ({
+  editable,
   gradeStatus,
   isEditOpen,
   handleEditSave,
@@ -66,39 +65,51 @@ export const CustomStatusItem = ({
     }
   }
   return (
-    <View as="div" margin="small 0 0 0" data-testid={`custom-status-${gradeStatus.id}`}>
+    <View
+      as="div"
+      margin="small 0 0 0"
+      data-testid={`custom-status-${gradeStatus.id}`}
+      id="saved-custom-status"
+    >
       <GradingStatusListItem
         backgroundColor={color}
-        setElementRef={ref => (customStatusItemRef.current = ref)}
+        setElementRef={ref => {
+          if (ref instanceof HTMLDivElement) {
+            customStatusItemRef.current = ref
+          }
+        }}
       >
         <Flex>
-          <FlexItem shouldGrow={true} shouldShrink={true} size="11rem">
+          <Flex.Item shouldGrow={true} shouldShrink={true} size="11rem">
             <Text weight="bold">
               <TruncateText position="middle">{name}</TruncateText>
             </Text>
-          </FlexItem>
-          <FlexItem>
-            <EditStatusPopover
-              currentColor={color}
-              customStatusName={name}
-              editButtonLabel={`${I18n.t('Custom Status')} ${name}`}
-              handleEditSave={handleEditSave}
-              isCustomStatus={true}
-              isOpen={isEditOpen}
-              handleEditStatusToggle={handleEditStatusToggle}
-              positionTarget={customStatusItemRef.current}
-            />
+          </Flex.Item>
+          {editable && (
+            <Flex.Item>
+              <EditStatusPopover
+                currentColor={color}
+                customStatusName={name}
+                editButtonLabel={`${I18n.t('Custom Status')} ${name}`}
+                handleEditSave={handleEditSave}
+                isCustomStatus={true}
+                isOpen={isEditOpen}
+                handleEditStatusToggle={handleEditStatusToggle}
+                positionTarget={customStatusItemRef.current}
+              />
 
-            <IconButton
-              size="small"
-              withBackground={false}
-              withBorder={false}
-              screenReaderLabel={I18n.t('Delete Status %{name}', {name})}
-              onClick={confirmStatusDelete}
-            >
-              <IconTrashSolid />
-            </IconButton>
-          </FlexItem>
+              <IconButton
+                size="small"
+                withBackground={false}
+                withBorder={false}
+                screenReaderLabel={I18n.t('Delete Status %{name}', {name})}
+                onClick={confirmStatusDelete}
+                data-testid="delete-custom-status-button"
+              >
+                <IconTrashSolid />
+              </IconButton>
+            </Flex.Item>
+          )}
         </Flex>
       </GradingStatusListItem>
     </View>

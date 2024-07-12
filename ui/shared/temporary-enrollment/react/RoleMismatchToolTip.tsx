@@ -16,39 +16,49 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {useScope as useI18nScope} from '@canvas/i18n'
 import React from 'react'
-// @ts-ignore
+import {useScope as useI18nScope} from '@canvas/i18n'
 import {Tooltip} from '@instructure/ui-tooltip'
 import {IconButton} from '@instructure/ui-buttons'
-// @ts-ignore
-import {IconWarningLine} from '@instructure/ui-icons'
+import {IconInfoLine} from '@instructure/ui-icons'
 import {Text} from '@instructure/ui-text'
+import {createAnalyticPropsGenerator} from './util/analytics'
+import {MODULE_NAME, TOOLTIP_MAX_WIDTH} from './types'
+import {View} from '@instructure/ui-view'
 
 const I18n = useI18nScope('temporary_enrollment')
 
-export default function RoleMismatchToolTip() {
+// initialize analytics props
+const analyticProps = createAnalyticPropsGenerator(MODULE_NAME)
+
+interface Props {
+  testId?: string
+}
+
+export default function RoleMismatchToolTip(props: Props) {
   const tipText = (
-    <>
-      <Text>{I18n.t('Enrolling the recipient in these courses')}</Text>
-      <br />
-      <Text>{I18n.t('will grant them different permissions')}</Text>
-      <br />
-      <Text>{I18n.t('from the provider of the enrollments')}</Text>
-    </>
+    <View as="div" textAlign="center" maxWidth={TOOLTIP_MAX_WIDTH}>
+      <Text size="small">
+        {I18n.t(
+          'Enrolling the recipient in these courses will grant them different permissions from the provider of the enrollments'
+        )}
+      </Text>
+    </View>
   )
 
-  const tipTriggers = ['click', 'hover', 'focus']
+  const tipTriggers: Array<'click' | 'hover' | 'focus'> = ['click', 'hover', 'focus']
   const renderToolTip = () => {
     return (
       <Tooltip renderTip={tipText} on={tipTriggers} placement="top">
         <IconButton
-          renderIcon={IconWarningLine}
-          size="medium"
+          renderIcon={IconInfoLine}
+          size="small"
           margin="none"
           withBackground={false}
           withBorder={false}
           screenReaderLabel={I18n.t('Toggle tooltip')}
+          data-testid={props.testId}
+          {...analyticProps('Tooltip')}
         />
       </Tooltip>
     )

@@ -406,7 +406,7 @@ class SisImportsApiController < ApplicationController
         scope = scope.where("created_at > ?", created_since)
       end
       if (created_before = CanvasTime.try_parse(params[:created_before]))
-        scope = scope.where("created_at < ?", created_before)
+        scope = scope.where(created_at: ...created_before)
       end
 
       state = Array(params[:workflow_state]) & %w[initializing
@@ -604,7 +604,7 @@ class SisImportsApiController < ApplicationController
       file_obj = nil
       if params.key?(:attachment)
         file_obj = params[:attachment]
-      elsif request.content_type == "multipart/form-data"
+      elsif request.media_type == "multipart/form-data"
         # don't interpret the form itself as a SIS batch
         return render json: { error: true, error_message: "Missing attachment" }, status: :bad_request
       else
@@ -702,9 +702,7 @@ class SisImportsApiController < ApplicationController
         end
       end
 
-      unless Setting.get("skip_sis_jobs_account_ids", "").split(",").include?(@account.global_id.to_s)
-        batch.process
-      end
+      batch.process
 
       unless api_request?
         @account.current_sis_batch_id = batch.id

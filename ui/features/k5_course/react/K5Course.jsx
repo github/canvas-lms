@@ -34,7 +34,7 @@ import {
   IconStudentViewLine,
   IconXLine,
 } from '@instructure/ui-icons'
-import {ApplyTheme} from '@instructure/ui-themeable'
+import {InstUISettingsProvider} from '@instructure/emotion'
 import {Button, IconButton} from '@instructure/ui-buttons'
 import {Heading} from '@instructure/ui-heading'
 import {View} from '@instructure/ui-view'
@@ -57,7 +57,7 @@ import {
   TAB_IDS,
   MOBILE_NAV_BREAKPOINT_PX,
 } from '@canvas/k5/react/utils'
-import {theme} from '@canvas/k5/react/k5-theme'
+import {getK5ThemeOverrides} from '@canvas/k5/react/k5-theme'
 import EmptyCourse from './EmptyCourse'
 import OverviewPage from './OverviewPage'
 import {GradesPage} from './GradesPage'
@@ -341,20 +341,6 @@ export const CourseHeaderOptions = forwardRef(
       }
     }
 
-    const ObserverOptionsContainer = () => (
-      <View as="div" display="inline-block" width={showingMobileNav ? '100%' : '16em'}>
-        <ScreenReaderContent>
-          <Heading as="h1">{courseContext}</Heading>
-        </ScreenReaderContent>
-        <ObserverOptions
-          observedUsersList={observedUsersList}
-          currentUser={currentUser}
-          handleChangeObservedUser={handleChangeObservedUser}
-          canAddObservee={false}
-        />
-      </View>
-    )
-
     const StudentViewButton = () => (
       <Button
         id="student-view-btn"
@@ -362,8 +348,9 @@ export const CourseHeaderOptions = forwardRef(
         data-method="post"
         renderIcon={<IconStudentViewLine />}
         margin="0 0 0 x-small"
+        data-testid="student-view-btn"
       >
-        {I18n.t('Student View')}
+        {I18n.t('View as Student')}
       </Button>
     )
 
@@ -391,7 +378,19 @@ export const CourseHeaderOptions = forwardRef(
           <Flex alignItems="center" justifyItems="space-between">
             <Flex.Item>{showManageButton && <ManageButton />}</Flex.Item>
             <Flex.Item textAlign="end" shouldGrow={true} margin={`0 ${rightOptionsMargin} 0 0`}>
-              {showObserverOptions && <ObserverOptionsContainer />}
+              {showObserverOptions && (
+                <View as="div" display="inline-block" width={showingMobileNav ? '100%' : '16em'}>
+                  <ScreenReaderContent>
+                    <Heading as="h1">{courseContext}</Heading>
+                  </ScreenReaderContent>
+                  <ObserverOptions
+                    observedUsersList={observedUsersList}
+                    currentUser={currentUser}
+                    handleChangeObservedUser={handleChangeObservedUser}
+                    canAddObservee={false}
+                  />
+                </View>
+              )}
               {showStudentViewButton && <StudentViewButton />}
             </Flex.Item>
           </Flex>
@@ -453,6 +452,7 @@ export function K5Course({
   isMasterCourse,
   showImmersiveReader,
   gradingScheme,
+  pointsBasedGradingScheme,
   restrictQuantitativeData,
 }) {
   const initialObservedId = observedUsersList.find(o => o.id === savedObservedId(currentUser.id))
@@ -669,6 +669,7 @@ export function K5Course({
             outcomeProficiency={outcomeProficiency}
             observedUserId={showObserverOptions ? observedUserId : null}
             gradingScheme={gradingScheme}
+            pointsBasedGradingScheme={pointsBasedGradingScheme}
             restrictQuantitativeData={restrictQuantitativeData}
           />
         )}
@@ -734,15 +735,18 @@ K5Course.propTypes = {
   isMasterCourse: PropTypes.bool.isRequired,
   showImmersiveReader: PropTypes.bool.isRequired,
   gradingScheme: PropTypes.array,
+  pointsBasedGradingScheme: PropTypes.bool,
   restrictQuantitativeData: PropTypes.bool,
 }
 
 const WrappedK5Course = connect(mapStateToProps)(K5Course)
 
+const k5Theme = getK5ThemeOverrides()
+
 export default props => (
-  <ApplyTheme theme={theme}>
+  <InstUISettingsProvider theme={{componentOverrides: k5Theme}}>
     <Provider store={store}>
       <WrappedK5Course {...props} />
     </Provider>
-  </ApplyTheme>
+  </InstUISettingsProvider>
 )

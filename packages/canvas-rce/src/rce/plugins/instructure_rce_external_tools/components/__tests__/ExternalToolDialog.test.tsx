@@ -19,9 +19,9 @@
 
 import React from 'react'
 import ExternalToolDialog, {ExternalToolDialogProps} from '../ExternalToolDialog/ExternalToolDialog'
+import {waitFor} from '@testing-library/react'
 import ReactDOM, {Container} from 'react-dom'
-import {Transition} from '@instructure/ui-motion'
-import {ApplyTheme} from '@instructure/ui-themeable'
+import {InstUISettingsProvider} from '@instructure/emotion'
 import {createDeepMockProxy} from '../../../../../util/__tests__/deepMockProxy'
 import {RceToolWrapper} from '../../RceToolWrapper'
 import RCEWrapper from '../../../../RCEWrapper'
@@ -84,6 +84,7 @@ const rceMock = createDeepMockProxy<RCEWrapper>(
         contextType: 'course',
       },
     }, // satisfies Partial<RCEWrapperProps> as any,
+    getResourceIdentifiers: () => ({resourceType: 'assignment.body', resourceId: '132'}),
   }
 )
 
@@ -99,9 +100,9 @@ function getInstance(
       ...overrides,
     }
     ReactDOM.render(
-      <ApplyTheme theme={{[(Transition as any).theme]: {duration: '0ms'}}}>
+      <InstUISettingsProvider theme={{componentOverrides: {Transition: {duration: '0ms'}}}}>
         <ExternalToolDialog ref={it => resolve(it!)} {...props} />
-      </ApplyTheme>,
+      </InstUISettingsProvider>,
       _container ?? null
     )
   })
@@ -181,7 +182,7 @@ describe('ExternalToolDialog', () => {
       const instance = await getInstance(container)
       instance.open(toolHelper(1))
       expect(container?.querySelector('form')?.action).toBe('http://url/with/1')
-      expect(submit).toHaveBeenCalled()
+      await waitFor(() => expect(submit).toHaveBeenCalled())
     })
 
     it('submits current selection to tool', async () => {
@@ -193,7 +194,7 @@ describe('ExternalToolDialog', () => {
       expect((container?.querySelector('input[name="selection"]') as HTMLInputElement)?.value).toBe(
         selection
       )
-      expect(submit).toHaveBeenCalled()
+      await waitFor(() => expect(submit).toHaveBeenCalled())
     })
 
     it('submits current editor contents to tool', async () => {
@@ -204,7 +205,27 @@ describe('ExternalToolDialog', () => {
       expect(
         (container?.querySelector('input[name="editor_contents"]') as HTMLInputElement)?.value
       ).toBe(contents)
-      expect(submit).toHaveBeenCalled()
+      await waitFor(() => expect(submit).toHaveBeenCalled())
+    })
+
+    it('includes resource type and id in form', async () => {
+      const instance = await getInstance(container)
+      instance.open(toolHelper(1))
+      expect(
+        (
+          container?.querySelector(
+            'input[name="com_instructure_course_canvas_resource_type"]'
+          ) as HTMLInputElement
+        )?.value
+      ).toBe('assignment.body')
+      expect(
+        (
+          container?.querySelector(
+            'input[name="com_instructure_course_canvas_resource_id"]'
+          ) as HTMLInputElement
+        )?.value
+      ).toBe('132')
+      await waitFor(() => expect(submit).toHaveBeenCalled())
     })
 
     it('uses default resource selection url', async () => {
@@ -335,7 +356,7 @@ describe('ExternalToolDialog', () => {
       const instance = await getInstance(container)
       instance.open(toolHelper(2))
       instance.handleClose()
-      expect(window.dispatchEvent).toHaveBeenCalledWith(new Event('resize'))
+      await waitFor(() => expect(window.dispatchEvent).toHaveBeenCalledWith(new Event('resize')))
     })
   })
 

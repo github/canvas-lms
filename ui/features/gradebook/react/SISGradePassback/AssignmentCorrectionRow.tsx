@@ -18,18 +18,18 @@
  */
 
 import $ from 'jquery'
-import _ from 'underscore'
+import {where, isEmpty} from 'lodash'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import React from 'react'
+import {datetimeString} from '@canvas/datetime/date-functions'
 import assignmentUtils from './assignmentUtils'
 import classnames from 'classnames'
-import type PostGradesStore from './PostGradesStore'
+import {renderDatetimeField} from '@canvas/datetime/jquery/DatetimeField'
 import type {AssignmentWithOverride} from '../default_gradebook/gradebook.d'
 
 const I18n = useI18nScope('modules')
 
 type Props = {
-  store: ReturnType<typeof PostGradesStore>
   onDateChanged: (date: string) => void
   assignmentList: any[]
   assignment: AssignmentWithOverride
@@ -63,7 +63,7 @@ class AssignmentCorrectionRow extends React.Component<Props> {
   initDueAtDateTimeField = () => {
     if (this.dueAtRef.current) {
       const $picker = $(this.dueAtRef.current)
-      $picker.datetime_field().change(this.handleDateChanged)
+      renderDatetimeField($picker).change(this.handleDateChanged)
     }
   }
 
@@ -103,7 +103,7 @@ class AssignmentCorrectionRow extends React.Component<Props> {
 
   currentSectionforOverride = a => {
     if (
-      _.isEmpty(_.where(a.overrides, {course_section_id: a.currentlySelected.id.toString()})) ||
+      isEmpty(where(a.overrides, {course_section_id: a.currentlySelected.id.toString()})) ||
       a.currentlySelected.type === 'course'
     ) {
       return true
@@ -151,10 +151,10 @@ class AssignmentCorrectionRow extends React.Component<Props> {
 
     // handles data being filled in the inputs if there are name issues on an assignment with an assignment override
     if (assignment.overrideForThisSection) {
-      default_value = $.datetimeString(assignment.overrideForThisSection.due_at, {format: 'medium'})
+      default_value = datetimeString(assignment.overrideForThisSection.due_at, {format: 'medium'})
       place_holder = assignment.overrideForThisSection.due_at ? null : I18n.t('No Due Date')
     } else {
-      default_value = $.datetimeString(assignment.due_at, {format: 'medium'})
+      default_value = datetimeString(assignment.due_at, {format: 'medium'})
       place_holder = assignment.due_at ? null : I18n.t('No Due Date')
     }
 
@@ -163,7 +163,7 @@ class AssignmentCorrectionRow extends React.Component<Props> {
       assignmentUtils.noDueDateForEveryoneElseOverride(assignment) &&
       this.currentSectionforOverride(assignment)
     ) {
-      default_value = $.datetimeString(assignment.due_at, {format: 'medium'})
+      default_value = datetimeString(assignment.due_at, {format: 'medium'})
       dueAtError = true
     }
 
@@ -191,7 +191,7 @@ class AssignmentCorrectionRow extends React.Component<Props> {
             aria-label={I18n.t('Assignment Name')}
             className="input-mlarge assignment-name"
             placeholder={assignment.name ? null : I18n.t('No Assignment Name')}
-            defaultValue={_.unescape(assignment.name)}
+            defaultValue={unescape(assignment.name)}
             onChange={this.updateAssignmentName}
           />
           {nameError ? <div className="hint-text">The assignment name must be unique</div> : ''}

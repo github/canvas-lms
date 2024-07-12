@@ -42,21 +42,6 @@ describe MediaObject do
   end
 
   describe ".build_media_objects" do
-    it "deletes attachments created temporarily for import" do
-      folder = Folder.assert_path(CC::CCHelper::MEDIA_OBJECTS_FOLDER, @course)
-      @a1 = attachment_model(folder:, uploaded_data: stub_file_data("video1.mp4", nil, "video/mp4"))
-      @a2 = attachment_model(context: @course, uploaded_data: stub_file_data("video1.mp4", nil, "video/mp4"))
-      data = {
-        entries: [
-          { originalId: @a1.id, },
-          { originalId: @a2.id, },
-        ],
-      }
-      MediaObject.build_media_objects(data, Account.default.id)
-      expect(@a1.reload.file_state).to eq "deleted"
-      expect(@a2.reload.file_state).to eq "available"
-    end
-
     it "builds media objects from attachment_id" do
       @a1 = attachment_model(context: @course, uploaded_data: stub_file_data("video1.mp4", nil, "video/mp4"))
       @a3 = attachment_model(context: @course, uploaded_data: stub_file_data("video1.mp4", nil, "video/mp4"))
@@ -101,6 +86,34 @@ describe MediaObject do
       run_jobs
       obj = MediaObject.by_media_id("test").first
       expect(obj.context).to eq @user
+    end
+  end
+
+  describe ".ensure_attachment_media_info" do
+    it "fixes associated attachments in a weird state" do
+      file_data = fixture_file_upload("292.mp3", "audio/mpeg", true)
+      a1 = attachment_model(context: @course, uploaded_data: file_data, media_entry_id: "m-unicorns")
+      client = double("kaltura_client")
+      expect(CanvasKaltura::ClientV3).to receive_messages(new: client)
+      url = "http://example.com/video1.mp3"
+      media_sources = [{
+        size: "283",
+        isOriginal: "0",
+        fileExt: "mp3",
+        url:,
+        content_type: "audio/mpeg"
+      }]
+      expect(client).to receive_messages(media_sources:)
+      mo = @course.media_objects.create!(attachment_id: a1, media_id: "m-unicorns", title: "video1.mp3", media_type: "video/*")
+      course_model
+      attachment_model(context: @course, uploaded_data: file_data)
+      a1.update!(root_attachment_id: @attachment.id, content_type: "unknown/unknown", workflow_state: "pending_upload", display_name: "video1", media_entry_id: nil)
+      a1.update_columns(filename: nil)
+
+      expect(CanvasHttp).to receive_messages(validate_url: [nil, URI.parse(url)])
+      expect(CanvasHttp).to receive(:get).with(url).and_yield(FakeHttpResponse.new("200", File.read(file_data)))
+      mo.ensure_attachment_media_info
+      expect(a1.reload.attributes).to include({ "filename" => match("292.mp3"), "content_type" => "audio/mpeg", "workflow_state" => "processed", "media_entry_id" => mo.media_id, "display_name" => "video1.mp3" })
     end
   end
 
@@ -487,6 +500,43 @@ describe MediaObject do
         end
       end
     end
+
+    context "when context_root_account is nil" do
+      before do
+        @mo = media_object
+        @mo.update!(
+          user: nil,
+          context: nil
+        )
+        @not_logged_in_user = nil
+      end
+
+      context "with granular_permissions_manage_course_content feature flag enabled" do
+        before do
+          @course.root_account.enable_feature!(:granular_permissions_manage_course_content)
+        end
+
+        it "does not error when context_root_account is nil" do
+          expect { @mo.grants_right?(@not_logged_in_user, :add_captions) }.not_to raise_error
+          expect { @mo.grants_right?(@not_logged_in_user, :delete_captions) }.not_to raise_error
+          expect(@mo.grants_right?(@not_logged_in_user, :add_captions)).to be false
+          expect(@mo.grants_right?(@not_logged_in_user, :delete_captions)).to be false
+        end
+      end
+
+      context "with granular_permissions_manage_course_content feature flag disabled" do
+        before do
+          @course.root_account.disable_feature!(:granular_permissions_manage_course_content)
+        end
+
+        it "does not error when context_root_account is nil" do
+          expect { @mo.grants_right?(@not_logged_in_user, :add_captions) }.not_to raise_error
+          expect { @mo.grants_right?(@not_logged_in_user, :delete_captions) }.not_to raise_error
+          expect(@mo.grants_right?(@not_logged_in_user, :add_captions)).to be false
+          expect(@mo.grants_right?(@not_logged_in_user, :delete_captions)).to be false
+        end
+      end
+    end
   end
 
   describe ".add_media_files" do
@@ -600,7 +650,7 @@ describe MediaObject do
       expect { @media_object.process_retrieved_details(@mock_entry, @media_type, @assets) }.not_to change { Attachment.count }
     end
 
-    it "does create an attachment if there isn't one and there should be" do
+    it "creates an attachment if there isn't one and there should be" do
       @media_object.attachment.update(media_entry_id: "maybe")
       @media_object.update(attachment_id: nil)
       @media_object.process_retrieved_details(@mock_entry, @media_type, @assets)
@@ -617,7 +667,7 @@ describe MediaObject do
 
     it "marks the attachment as processed when media_sources exist" do
       @media_object.process_retrieved_details(@mock_entry, @media_type, @assets)
-      expect(@media_object.attachment.workflow_state).to eq("processed")
+      expect(@media_object.attachment.reload.workflow_state).to eq("processed")
     end
 
     it "marks the correct attachment as processed if one is specified" do
@@ -625,7 +675,7 @@ describe MediaObject do
       @media_object.current_attachment = att
       @media_object.process_retrieved_details(@mock_entry, @media_type, @assets)
       att.reload
-      expect(@media_object.attachment.workflow_state).to eq("pending_upload")
+      expect(@media_object.attachment.reload.workflow_state).to eq("pending_upload")
       expect(att.workflow_state).to eq("processed")
     end
 
@@ -638,7 +688,7 @@ describe MediaObject do
 
   describe ".guaranteed_title" do
     before :once do
-      @mo = media_object
+      @mo = media_object_model
       @mo.title = nil
       @mo.user_entered_title = nil
     end

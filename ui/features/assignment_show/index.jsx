@@ -18,6 +18,7 @@
 
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
+import '@canvas/jquery/jquery.ajaxJSON'
 import React from 'react'
 import ReactDOM from 'react-dom'
 import axios from '@canvas/axios'
@@ -28,7 +29,7 @@ import SpeedgraderLinkView from './backbone/views/SpeedgraderLinkView'
 import vddTooltip from '@canvas/due-dates/jquery/vddTooltip'
 import MarkAsDone from '@canvas/util/jquery/markAsDone'
 import CyoeStats from '@canvas/conditional-release-stats/react/index'
-import '@canvas/forms/jquery/jquery.instructure_forms'
+import '@canvas/jquery/jquery.instructure_forms'
 import LockManager from '@canvas/blueprint-courses/react/components/LockManager/index'
 import AssignmentExternalTools from '@canvas/assignments/react/AssignmentExternalTools'
 import StudentGroupFilter from '@canvas/student-group-filter'
@@ -37,7 +38,8 @@ import DirectShareUserModal from '@canvas/direct-sharing/react/components/Direct
 import DirectShareCourseTray from '@canvas/direct-sharing/react/components/DirectShareCourseTray'
 import {setupSubmitHandler} from '@canvas/assignments/jquery/reuploadSubmissionsHelper'
 import ready from '@instructure/ready'
-import {monitorLtiMessages} from '@canvas/lti/jquery/messages'
+import ItemAssignToTray from '@canvas/context-modules/differentiated-modules/react/Item/ItemAssignToTray'
+import {captureException} from '@sentry/browser'
 
 if (!('INST' in window)) window.INST = {}
 
@@ -47,7 +49,6 @@ ready(() => {
   const lockManager = new LockManager()
   lockManager.init({itemType: 'assignment', page: 'show'})
   renderCoursePacingNotice()
-  monitorLtiMessages()
 })
 
 let studentGroupSelectionRequestTrackers = []
@@ -127,6 +128,7 @@ function renderCoursePacingNotice() {
       .catch(ex => {
         // eslint-disable-next-line no-console
         console.error('Falied loading CoursePacingNotice', ex)
+        captureException(ex)
       })
   }
 }
@@ -139,16 +141,16 @@ ready(() => {
   )
   if (immersive_reader_mount_point || immersive_reader_mobile_mount_point) {
     import('@canvas/immersive-reader/ImmersiveReader')
-      .then(ImmersiveReader => {
+      .then(({initializeReaderButton}) => {
         const content = () => document.querySelector('.description')?.innerHTML
         const title = document.querySelector('.title')?.textContent
 
         if (immersive_reader_mount_point) {
-          ImmersiveReader.initializeReaderButton(immersive_reader_mount_point, {content, title})
+          initializeReaderButton(immersive_reader_mount_point, {content, title})
         }
 
         if (immersive_reader_mobile_mount_point) {
-          ImmersiveReader.initializeReaderButton(immersive_reader_mobile_mount_point, {
+          initializeReaderButton(immersive_reader_mobile_mount_point, {
             content,
             title,
           })
@@ -197,6 +199,44 @@ $(() => {
   })
 
   return vddTooltip()
+})
+
+function renderItemAssignToTray(open, returnFocusTo, itemProps) {
+  ReactDOM.render(
+    <ItemAssignToTray
+      open={open}
+      onClose={() => {
+        ReactDOM.unmountComponentAtNode(document.getElementById('assign-to-mount-point'))
+      }}
+      onDismiss={() => {
+        renderItemAssignToTray(false, returnFocusTo, itemProps)
+        returnFocusTo.focus()
+      }}
+      itemType="assignment"
+      iconType="assignment"
+      locale={ENV.LOCALE || 'en'}
+      timezone={ENV.TIMEZONE || 'UTC'}
+      {...itemProps}
+    />,
+    document.getElementById('assign-to-mount-point')
+  )
+}
+
+$('.assign-to-link').on('click keyclick', function (event) {
+  event.preventDefault()
+  const returnFocusTo = $(event.target).closest('ul').prev('.al-trigger')
+
+  const courseId = event.target.getAttribute('data-assignment-context-id')
+  const itemName = event.target.getAttribute('data-assignment-name')
+  const itemContentId = event.target.getAttribute('data-assignment-id')
+  const pointsString = event.target.getAttribute('data-assignment-points-possible')
+  const pointsPossible = pointsString ? parseFloat(pointsString) : undefined
+  renderItemAssignToTray(true, returnFocusTo, {
+    courseId,
+    itemName,
+    itemContentId,
+    pointsPossible,
+  })
 })
 
 $(() =>

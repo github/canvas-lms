@@ -22,7 +22,7 @@
 # API for creating and viewing user logins under an account
 class PseudonymsController < ApplicationController
   before_action :get_context, only: [:index, :create]
-  before_action :require_user, only: %i[create show edit update]
+  before_action :require_user, only: %i[create show edit update migrate_login_attribute]
   before_action :reject_student_view_student, only: %i[create show edit update]
   protect_from_forgery except: %i[registration_confirmation change_password forgot_password], with: :exception
 
@@ -151,9 +151,11 @@ class PseudonymsController < ApplicationController
       # Whether the email was actually found or not, we display the same
       # message. Otherwise this form could be used to fish for valid
       # email addresses.
-      flash[:notice] = t("notices.email_sent", "Confirmation email sent to %{email}, make sure to check your spam box", email:)
       @ccs.each(&:forgot_password!)
-      format.html { redirect_to(canvas_login_url) }
+      format.html do
+        flash[:notice] = t("notices.email_sent", "Confirmation email sent to %{email}, make sure to check your spam box", email:)
+        redirect_to(canvas_login_url)
+      end
       format.json { render json: { requested: true } }
       format.js { render json: { requested: true } }
     end
@@ -486,6 +488,15 @@ class PseudonymsController < ApplicationController
     else
       render json: @pseudonym.errors, status: :bad_request
     end
+  end
+
+  def migrate_login_attribute
+    return unless get_user
+
+    @pseudonym = @user.pseudonyms.find(params[:id])
+    return render_unauthorized_action unless @pseudonym.migrate_login_attribute(admin_user: @current_user)
+
+    render json: pseudonym_json(@pseudonym, @current_user, session)
   end
 
   protected

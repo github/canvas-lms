@@ -117,7 +117,16 @@ describe('fileTypeUtils', () => {
         embedded_iframe_url: '/media_objects_iframe/m-media_object_id',
         type: 'video/mov',
       }
-      const url = mediaPlayerURLFromFile(file)
+      const url = mediaPlayerURLFromFile(file, 'https://mycanvas.com')
+      expect(url).toBe('/media_objects_iframe/m-media_object_id?type=video')
+    })
+
+    it('does not repeat type if already included in embedded_iframe_url', () => {
+      const file = {
+        embedded_iframe_url: '/media_objects_iframe/m-media_object_id?type=video',
+        type: 'video/mov',
+      }
+      const url = mediaPlayerURLFromFile(file, 'https://mycanvas.com')
       expect(url).toBe('/media_objects_iframe/m-media_object_id?type=video')
     })
 
@@ -168,8 +177,50 @@ describe('fileTypeUtils', () => {
         const file = {
           id: '123',
           type: 'video/mov',
+          uuid: 'abc',
         }
         const url = mediaPlayerURLFromFile(file)
+        expect(url).toBe('/media_attachments_iframe/123?type=video&embedded=true')
+      })
+
+      it('uses adds the uuid if the context is User', () => {
+        const file = {
+          id: '123',
+          type: 'video/mov',
+          contextType: 'User',
+          uuid: 'abc',
+        }
+        const url = mediaPlayerURLFromFile(file)
+        expect(url).toBe('/media_attachments_iframe/123?type=video&embedded=true&verifier=abc')
+      })
+
+      it("uses adds the uuid if the window location doesn't match the RCE location origin and the feature flag is on", () => {
+        RCEGlobals.getFeatures = jest.fn().mockReturnValue({
+          file_verifiers_for_quiz_links: true,
+          media_links_use_attachment_id: true,
+        })
+        const file = {
+          id: '123',
+          type: 'video/mov',
+          contextType: 'Course',
+          uuid: 'abc',
+        }
+        const url = mediaPlayerURLFromFile(file, 'http://quizzes')
+        expect(url).toBe('/media_attachments_iframe/123?type=video&embedded=true&verifier=abc')
+      })
+
+      it("doesn't adds the uuid if the window location doesn't match the RCE location origin and the feature flag is off", () => {
+        RCEGlobals.getFeatures = jest.fn().mockReturnValue({
+          file_verifiers_for_quiz_links: false,
+          media_links_use_attachment_id: true,
+        })
+        const file = {
+          id: '123',
+          type: 'video/mov',
+          contextType: 'Course',
+          uuid: 'abc',
+        }
+        const url = mediaPlayerURLFromFile(file, 'http://quizzes')
         expect(url).toBe('/media_attachments_iframe/123?type=video&embedded=true')
       })
 
@@ -181,8 +232,22 @@ describe('fileTypeUtils', () => {
         }
         const url = mediaPlayerURLFromFile(file)
         expect(url).toBe(
-          '/media_attachments_iframe/123?type=video&verifier=something&embedded=true'
+          '/media_attachments_iframe/123?type=video&embedded=true&verifier=something'
         )
+      })
+
+      it("includes the file verifier if it's part of the file's url", () => {
+        RCEGlobals.getFeatures = jest.fn().mockReturnValue({
+          file_verifiers_for_quiz_links: true,
+          media_links_use_attachment_id: true,
+        })
+        const file = {
+          id: '123',
+          'content-type': 'video/mov',
+          url: 'http://origin/path/to/file?verifier=xyzzy',
+        }
+        const url = mediaPlayerURLFromFile(file, 'https://mycanvas.com')
+        expect(url).toBe('/media_attachments_iframe/123?type=video&embedded=true&verifier=xyzzy')
       })
 
       it('uses media_object route if no attachmentId exists', () => {

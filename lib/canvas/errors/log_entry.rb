@@ -44,7 +44,7 @@ module Canvas
 
       def message
         msg = +""
-        ActiveSupport::Deprecation.silence do
+        Rails.application.deprecators.silence do
           msg << "\n\n[CANVAS_ERRORS] EXCEPTION LOG"
           if @ex.is_a?(String) || @ex.is_a?(Symbol)
             msg << "\n#{@ex}\n"

@@ -77,6 +77,13 @@ describe AssignmentOverride do
     expect(@override.set).to be_nil
   end
 
+  it "doesn't crash when calling polymorphic getters on an adhoc override" do
+    @override = assignment_override_model
+    expect(@override.course).to be_nil
+    expect(@override.course_section).to be_nil
+    expect(@override.group).to be_nil
+  end
+
   it "removes adhoc associations when an adhoc override is deleted" do
     @override = assignment_override_model(course: @course)
     @override_student = @override.assignment_override_students.build
@@ -331,6 +338,30 @@ describe AssignmentOverride do
       expect(@override).to be_valid
     end
 
+    it "accepts course sets" do
+      @override.set = @course
+      expect(@override).to be_valid
+      expect(@override.set_id).to eq @course.id
+    end
+
+    it "rejects course sets with an incorrect set_id" do
+      @override.set = @course
+      @override.set_id = 123
+      expect(@override).not_to be_valid
+    end
+
+    it "rejects course set if unassign_item is true" do
+      @override.set = @course
+      @override.unassign_item = true
+      expect(@override).not_to be_valid
+    end
+
+    it "accepts unassign_item is true if not everyone set_type" do
+      @override.set = @course.course_sections.create!
+      @override.unassign_item = true
+      expect(@override).to be_valid
+    end
+
     it "accepts noop with arbitrary set_id" do
       @override.set_type = "Noop"
       @override.set_id = 9000
@@ -384,11 +415,6 @@ describe AssignmentOverride do
       expect(@override).to be_valid
     end
 
-    it "rejects unrecognized sets" do
-      @override.set = @override.assignment.context
-      expect(@override).not_to be_valid
-    end
-
     it "rejects duplicate sets" do
       @override.set = @course.default_section
       @override.save!
@@ -420,6 +446,33 @@ describe AssignmentOverride do
       @override.assignment = nil
       @override.quiz = quiz_model
       expect(@override).to be_valid
+    end
+
+    it "does not allow setting due dates with pages, discussions, or files" do
+      @override.due_at = 5.days.from_now
+      @override.assignment = assignment_model
+      expect(@override).to be_valid
+      @override.assignment = nil
+      @override.wiki_page = wiki_page_model
+      expect(@override).not_to be_valid
+      @override.wiki_page = nil
+      @override.discussion_topic = discussion_topic_model
+      expect(@override).not_to be_valid
+      @override.discussion_topic = nil
+      @override.attachment = attachment_model
+      expect(@override).not_to be_valid
+    end
+
+    it "allows setting both an assignment and a quiz" do
+      @override.assignment = assignment_model
+      @override.quiz = quiz_model
+      expect(@override).to be_valid
+    end
+
+    it "does not allow setting both an assignment and a wiki page" do
+      @override.assignment = assignment_model
+      @override.wiki_page = wiki_page_model
+      expect(@override).not_to be_valid
     end
   end
 
@@ -522,15 +575,15 @@ describe AssignmentOverride do
       end
 
       it "sets the override when a override_#{field} is called" do
-        @override.send("override_#{field}", value2)
-        expect(@override.send("#{field}_overridden")).to be true
+        @override.send(:"override_#{field}", value2)
+        expect(@override.send(:"#{field}_overridden")).to be true
         expect(@override.send(field)).to eq value2
       end
 
       it "clears the override when clear_#{field}_override is called" do
-        @override.send("override_#{field}", value2)
-        @override.send("clear_#{field}_override")
-        expect(@override.send("#{field}_overridden")).to be false
+        @override.send(:"override_#{field}", value2)
+        @override.send(:"clear_#{field}_override")
+        expect(@override.send(:"#{field}_overridden")).to be false
         expect(@override.send(field)).to be_nil
       end
     end
@@ -612,34 +665,34 @@ describe AssignmentOverride do
     end
 
     it "determines date from due_at's timezone" do
-      @override.due_at = Date.today.in_time_zone("Baghdad") + 1.hour # 01:00:00 AST +03:00 today
-      expect(@override.all_day_date).to eq Date.today
+      @override.due_at = Time.zone.today.in_time_zone("Baghdad") + 1.hour # 01:00:00 AST +03:00 today
+      expect(@override.all_day_date).to eq Time.zone.today
 
       @override.due_at = @override.due_at.in_time_zone("Alaska") - 2.hours # 12:00:00 AKDT -08:00 previous day
-      expect(@override.all_day_date).to eq Date.today - 1.day
+      expect(@override.all_day_date).to eq Time.zone.today - 1.day
     end
 
     it "preserves all-day date when only changing time zone" do
-      @override.due_at = Date.today.in_time_zone("Baghdad") # 00:00:00 AST +03:00 today
+      @override.due_at = Time.zone.today.in_time_zone("Baghdad") # 00:00:00 AST +03:00 today
       @override.due_at = @override.due_at.in_time_zone("Alaska") # 13:00:00 AKDT -08:00 previous day
-      expect(@override.all_day_date).to eq Date.today
+      expect(@override.all_day_date).to eq Time.zone.today
     end
 
     it "preserves non-all-day date when only changing time zone" do
       Timecop.freeze(Time.utc(2013, 3, 10, 0, 0)) do
-        @override.due_at = Date.today.in_time_zone("Alaska") - 11.hours # 13:00:00 AKDT -08:00 previous day
+        @override.due_at = Time.zone.today.in_time_zone("Alaska") - 11.hours # 13:00:00 AKDT -08:00 previous day
         @override.due_at = @override.due_at.in_time_zone("Baghdad") # 00:00:00 AST +03:00 today
-        expect(@override.all_day_date).to eq Date.today - 1.day
+        expect(@override.all_day_date).to eq Time.zone.today - 1.day
       end
     end
 
     it "sets the date to 11:59 PM of the same day when the date is 12:00 am" do
-      @override.due_at = Date.today.in_time_zone("Alaska").midnight
-      expect(@override.due_at).to eq Date.today.in_time_zone("Alaska").end_of_day
+      @override.due_at = Time.zone.today.in_time_zone("Alaska").midnight
+      expect(@override.due_at).to eq Time.zone.today.in_time_zone("Alaska").end_of_day
     end
 
     it "sets the date to the date given when date is not 12:00 AM" do
-      expected_time = Date.today.in_time_zone("Alaska") - 11.hours
+      expected_time = Time.zone.today.in_time_zone("Alaska") - 11.hours
       @override.unlock_at = expected_time
       expect(@override.unlock_at).to eq expected_time
     end
@@ -651,12 +704,12 @@ describe AssignmentOverride do
     end
 
     it "sets the date to 11:59 PM of the same day when the date is 12:00 AM" do
-      @override.lock_at = Date.today.in_time_zone("Alaska").midnight
-      expect(@override.lock_at).to eq Date.today.in_time_zone("Alaska").end_of_day
+      @override.lock_at = Time.zone.today.in_time_zone("Alaska").midnight
+      expect(@override.lock_at).to eq Time.zone.today.in_time_zone("Alaska").end_of_day
     end
 
     it "sets the date to the date given when date is not 12:00 AM" do
-      expected_time = Date.today.in_time_zone("Alaska") - 11.hours
+      expected_time = Time.zone.today.in_time_zone("Alaska") - 11.hours
       @override.lock_at = expected_time
       expect(@override.lock_at).to eq expected_time
       @override.lock_at = nil
@@ -1016,6 +1069,15 @@ describe AssignmentOverride do
 
       expect(@override.applies_to_students).to include(@active_student, @student)
     end
+
+    it "returns the right students for course sets" do
+      @override = assignment_override_model(course: @course)
+      @override.set = @course
+      @override.save!
+
+      expect(@override.applies_to_students).to include(@active_student)
+      expect(@override.applies_to_students).to eq @course.participating_students
+    end
   end
 
   describe "assignment_edits" do
@@ -1169,6 +1231,20 @@ describe AssignmentOverride do
     it "sets the root_account_id using assignment" do
       override = assignment_override_model(course: @course)
       expect(override.root_account_id).to eq @assignment.root_account_id
+    end
+  end
+
+  describe "discussion checkpoints" do
+    it "allows creating a group override for a checkpoint" do
+      @course.root_account.enable_feature!(:discussion_checkpoints)
+      category = group_category
+      group = category.groups.create!(context: @course)
+      topic = DiscussionTopic.create_graded_topic!(course: @course, title: "graded_topic")
+      topic.update!(group_category: category)
+      topic.create_checkpoints(reply_to_topic_points: 4, reply_to_entry_points: 2)
+      checkpoint = topic.reply_to_topic_checkpoint
+      override = assignment_override_model(assignment: checkpoint, course: @course, set: group)
+      expect(checkpoint.assignment_overrides).to include override
     end
   end
 end

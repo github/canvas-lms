@@ -18,16 +18,16 @@
 
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import htmlEscape from 'html-escape'
+import htmlEscape from '@instructure/html-escape'
 import editToDoItemTemplate from '../../jst/editToDoItem.handlebars'
-import datePickerFormat from '@canvas/datetime/datePickerFormat'
-import '@canvas/datetime'
-import '@canvas/forms/jquery/jquery.instructure_forms'
+import datePickerFormat from '@instructure/moment-utils/datePickerFormat'
+import '@canvas/jquery/jquery.instructure_forms'
 import '@canvas/jquery/jquery.instructure_misc_helpers'
-import 'date-js'
+import '@instructure/date-js'
 import fcUtil from '@canvas/calendar/jquery/fcUtil'
 import ValidatedFormView from '@canvas/forms/backbone/views/ValidatedFormView'
 import '../../fcMomentHandlebarsHelpers'
+import {renderDatetimeField} from '@canvas/datetime/jquery/DatetimeField'
 
 const I18n = useI18nScope('calendar')
 
@@ -81,13 +81,15 @@ export default class EditToDoItemDetails extends ValidatedFormView {
     const $time = this.$el.find('.time_field.note_time')
 
     // set them up as appropriate variants of datetime_field
-    $date.datetime_field({
+    renderDatetimeField($date, {
       datepicker: {
         dateFormat: datePickerFormat(I18n.t('#date.formats.default')),
       },
       dateOnly: true,
     })
-    $time.time_field()
+    renderDatetimeField($time, {
+      timeOnly: true,
+    })
 
     // fill initial values of each field according to @event
     const due = fcUtil.unwrap(this.event.startDate())

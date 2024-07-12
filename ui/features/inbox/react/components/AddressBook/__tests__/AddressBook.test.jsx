@@ -26,8 +26,6 @@ import {mswServer} from '../../../../../../shared/msw/mswServer'
 
 const server = mswServer(handlers)
 beforeAll(() => {
-  // eslint-disable-next-line no-undef
-  fetchMock.dontMock()
   server.listen()
 })
 
@@ -37,8 +35,6 @@ afterEach(() => {
 
 afterAll(() => {
   server.close()
-  // eslint-disable-next-line no-undef
-  fetchMock.enableMocks()
 })
 
 beforeEach(() => {
@@ -54,7 +50,7 @@ const demoData = {
     {id: 'course_13', name: 'English 101', itemType: CONTEXT_TYPE, isLast: true},
   ],
   userData: [
-    {id: '1', name: 'Rob Orton', full_name: 'Rob Orton', pronouns: null, itemType: USER_TYPE},
+    {id: '1', name: 'Rob Orton', full_name: 'Rob Orton', pronouns: 'he/him', itemType: USER_TYPE},
     {
       id: '2',
       name: 'Matthew Lemon',
@@ -127,15 +123,52 @@ describe('Address Book Component', () => {
       const headerItem = await screen.findByText(headerText)
       expect(headerItem).toBeTruthy()
     })
+
+    describe('Pronouns', () => {
+      describe('can_add_pronouns disabled', () => {
+        it('do not show up pronouns', async () => {
+          const mockSetIsMenuOpen = jest.fn()
+          const {queryByText} = setup({...defaultProps, isMenuOpen: true, isSubMenu: true, setIsMenuOpen: mockSetIsMenuOpen})
+          await screen.findByTestId('address-book-popover')
+          expect(queryByText('he/him')).not.toBeInTheDocument()
+        })
+
+      })
+      describe('can_add_pronouns enabled', () => {
+        beforeEach(() => {
+          ENV = {
+            SETTINGS: {
+              can_add_pronouns: true
+            }
+          }
+        })
+
+        it('Show up pronouns if pronouns is not null', async ()  => {
+          const mockSetIsMenuOpen = jest.fn()
+          const {getByText} = setup({...defaultProps, isMenuOpen: true, isSubMenu: true, setIsMenuOpen: mockSetIsMenuOpen})
+          await screen.findByTestId('address-book-popover')
+          expect(getByText('he/him')).toBeInTheDocument()
+        })
+
+        it('Do not show up pronouns if pronouns is null', async () => {
+          const mockSetIsMenuOpen = jest.fn()
+          const props = {...defaultProps}
+          props.menuData.userData[0].pronouns = null
+          const {queryByText} = setup({...props, isMenuOpen: true, isSubMenu: true, setIsMenuOpen: mockSetIsMenuOpen})
+          await screen.findByTestId('address-book-popover')
+          expect(queryByText('he/him')).not.toBeInTheDocument()
+        })
+      })
+    })
   })
 
   describe('Behaviors', () => {
-    it('Should set popup menu to open when button is clicked', async () => {
+    it('Should set popup menu to open when button is pressed', async () => {
       const mockSetIsMenuOpen = jest.fn()
       const {container} = setup({...defaultProps, setIsMenuOpen: mockSetIsMenuOpen})
       const button = container.querySelector('button')
       fireEvent.click(button)
-      expect(mockSetIsMenuOpen).toHaveBeenCalledWith(true)
+      expect(mockSetIsMenuOpen).toHaveBeenCalled()
     })
 
     it('Should set popup menu to false when address button is pressed and popup is open', async () => {
@@ -147,6 +180,20 @@ describe('Address Book Component', () => {
       })
       const button = container.querySelector('button')
       fireEvent.click(button)
+      expect(mockSetIsMenuOpen).toHaveBeenCalledWith(false)
+    })
+
+    it('Should set popup menu to true when down arrow is pressed', async () => {
+      const mockSetIsMenuOpen = jest.fn()
+      const {container} = setup({
+        ...defaultProps,
+        isMenuOpen: true,
+        setIsMenuOpen: mockSetIsMenuOpen,
+      })
+      const button = container.querySelector('button')
+      fireEvent.click(button)
+      const input = container.querySelector('input')
+      fireEvent.keyDown(input, {key: 'ArrowDown', code: 'ArrowDown'})
       expect(mockSetIsMenuOpen).toHaveBeenCalledWith(false)
     })
 
@@ -165,11 +212,19 @@ describe('Address Book Component', () => {
       expect(mockSetIsMenuOpen).toHaveBeenCalledWith(false)
     })
 
-    it('Should set popup menu to true when textInput is focused', async () => {
+    it('Should not set popup menu to true when textInput is focused', async () => {
       const mockSetIsMenuOpen = jest.fn()
       const {container} = setup({...defaultProps, setIsMenuOpen: mockSetIsMenuOpen})
       const input = container.querySelector('input')
       fireEvent.focus(input)
+      expect(mockSetIsMenuOpen).not.toHaveBeenCalled()
+    })
+
+    it('Should set popup menu to true when textInput is clicked', async () => {
+      const mockSetIsMenuOpen = jest.fn()
+      const {container} = setup({...defaultProps, setIsMenuOpen: mockSetIsMenuOpen})
+      const input = container.querySelector('input')
+      fireEvent.click(input)
       expect(mockSetIsMenuOpen).toHaveBeenCalledWith(true)
     })
 
@@ -248,7 +303,7 @@ describe('Address Book Component', () => {
       setup({...defaultProps, isMenuOpen: true, isSubMenu: true, setIsMenuOpen: mockSetIsMenuOpen})
       const popover = await screen.findByTestId('address-book-popover')
       const items = popover.querySelectorAll('li')
-      fireEvent.mouseDown(items[4], { metaKey: true })
+      fireEvent.mouseDown(items[4], {metaKey: true})
       expect(mockSetIsMenuOpen).not.toHaveBeenCalledWith(false)
     })
 

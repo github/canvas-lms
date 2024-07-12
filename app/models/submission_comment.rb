@@ -55,7 +55,7 @@ class SubmissionComment < ActiveRecord::Base
   validates_each :attempt do |record, attr, value|
     next if value.nil?
 
-    submission_attempt = (record.submission.attempt || 0)
+    submission_attempt = record.submission.attempt || 0
     submission_attempt = 1 if submission_attempt == 0
     if value > submission_attempt
       record.errors.add(attr, "attempt must not be larger than number of submission attempts")
@@ -91,6 +91,7 @@ class SubmissionComment < ActiveRecord::Base
   scope :for_assignment_id, ->(assignment_id) { where(submissions: { assignment_id: }).joins(:submission) }
   scope :for_groups, -> { where.not(group_comment_id: nil) }
   scope :not_for_groups, -> { where(group_comment_id: nil) }
+  scope :authored_by, ->(user_id) { where(draft: false).or(where(author_id: user_id)) }
 
   workflow do
     state :active
@@ -161,6 +162,8 @@ class SubmissionComment < ActiveRecord::Base
 
   def self.serialize_media_comment(media_comment_id)
     media_object = MediaObject.by_media_id(media_comment_id).first
+    return nil unless media_object.present?
+
     media_tracks = media_object&.media_tracks&.map { |media_track| media_track.as_json(only: %i[id locale content kind], include_root: false) }
     media_sources = media_object.media_sources
     {
@@ -197,10 +200,10 @@ class SubmissionComment < ActiveRecord::Base
     given { |user| author_id == user.id && draft? }
     can :delete and can :update
 
-    given { |user, session| author_id == user.id && submission.grants_right?(user, session, :grade) }
+    given { |user, session| author_id == user.id && can_grader_modify_comment?(user, session) }
     can :update
 
-    given { |user, session| submission.grants_right?(user, session, :grade) }
+    given { |user, session| can_grader_modify_comment?(user, session) }
     can :delete
 
     given do |user, session|
@@ -243,6 +246,12 @@ class SubmissionComment < ActiveRecord::Base
         record.submission.user_id == record.author_id
     end
     p.data { course_broadcast_data }
+  end
+
+  def can_grader_modify_comment?(user, session)
+    return false unless submission.assignment.context.grants_right?(user, session, :manage_grades)
+
+    true
   end
 
   def can_view_comment?(user, session)
@@ -358,7 +367,7 @@ class SubmissionComment < ActiveRecord::Base
   def infer_details
     self.anonymous = submission.assignment.anonymous_peer_reviews
     self.author_name ||= author.short_name rescue t(:unknown_author, "Someone")
-    self.cached_attachments = attachments.map { |a| OpenObject.build("attachment", a.attributes) }
+    self.cached_attachments = attachments.map(&:attributes)
     self.context = read_attribute(:context) || submission.assignment.context rescue nil
 
     self.workflow_state ||= "active"
@@ -368,8 +377,35 @@ class SubmissionComment < ActiveRecord::Base
     self.root_account_id ||= context.root_account_id
   end
 
+  def cached_attachments
+    result = super
+    return result if result.blank?
+
+    result.map do |attachment|
+      if attachment.is_a?(Hash)
+        attributes = attachment
+      else
+        # back-compat for when this was OpenObject. can be removed when we datafix all existing data
+        # to just be a hash, not an OpenObject
+        attributes = attachment.table
+        attributes = attributes[:table] if attributes.keys == [:table, :object_type]
+        attributes = attributes.stringify_keys
+      end
+
+      Attachment.new(attributes.slice(*Attachment.columns.map(&:name)))
+    end
+  end
+
+  # when serializing, we just need to return the raw attribute for cached_attachments; we don't
+  # need to round-trip through an Attachment object
+  def read_attribute_for_serialization(attr)
+    return super unless attr == "cached_attachments"
+
+    self["cached_attachments"]
+  end
+
   def force_reload_cached_attachments
-    self.cached_attachments = attachments.map { |a| OpenObject.build("attachment", a.attributes) }
+    self.cached_attachments = attachments.map(&:attributes)
     save
   end
 
@@ -423,6 +459,10 @@ class SubmissionComment < ActiveRecord::Base
     methods
   end
 
+  def non_draft_or_authored_by(user)
+    !draft? || user.id == author_id
+  end
+
   def publishable_for?(user)
     draft? && author_id == user.id
   end
@@ -430,36 +470,12 @@ class SubmissionComment < ActiveRecord::Base
   def update_participation
     # id_changed? because new_record? is false in after_save callbacks
     if saved_change_to_id? || (saved_change_to_hidden? && !hidden?)
-      return if draft?
-
-      if Account.site_admin.feature_enabled?(:visibility_feedback_student_grades_page)
-        return update_participation_with_ff_on
-      end
-
-      return if submission.user_id == author_id
-      return if submission.assignment.deleted? || !submission.posted?
-      return if provisional_grade_id.present?
+      return if draft? || submission.user_id == author_id || submission.assignment.deleted? || provisional_grade_id.present?
 
       self.class.connection.after_transaction_commit do
-        submission.user.clear_cache_key(:submissions)
-
-        ContentParticipation.create_or_update({
-                                                content: submission,
-                                                user: submission.user,
-                                                workflow_state: "unread",
-                                              })
+        submission.user.clear_cache_key(:potential_unread_submission_ids)
+        submission.mark_item_unread("comment")
       end
-    end
-  end
-
-  def update_participation_with_ff_on
-    return if submission.user_id == author_id
-    return if submission.assignment.deleted?
-    return if provisional_grade_id.present?
-
-    self.class.connection.after_transaction_commit do
-      submission.user.clear_cache_key(:potential_unread_submission_ids)
-      submission.mark_item_unread("comment")
     end
   end
 

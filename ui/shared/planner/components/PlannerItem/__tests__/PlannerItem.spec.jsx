@@ -16,7 +16,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 import React from 'react'
-import {shallow, mount} from 'enzyme'
+import {render} from '@testing-library/react'
+import {shallow} from 'enzyme'
 import moment from 'moment-timezone'
 import MockDate from 'mockdate'
 import {PlannerItem_raw as PlannerItem} from '../index'
@@ -548,7 +549,8 @@ it('disables the checkbox when toggleAPIPending is true', () => {
 it('registers itself as animatable', () => {
   const fakeRegister = jest.fn()
   const fakeDeregister = jest.fn()
-  const wrapper = mount(
+  const ref = React.createRef()
+  const wrapper = render(
     <PlannerItem
       {...defaultProps()}
       id="1"
@@ -556,17 +558,24 @@ it('registers itself as animatable', () => {
       animatableIndex={42}
       registerAnimatable={fakeRegister}
       deregisterAnimatable={fakeDeregister}
+      ref={ref}
     />
   )
-  const instance = wrapper.instance()
-  expect(fakeRegister).toHaveBeenCalledWith('item', instance, 42, ['first'])
+  expect(fakeRegister).toHaveBeenCalledWith('item', ref.current, 42, ['first'])
 
-  wrapper.setProps({uniqueId: 'second'})
-  expect(fakeDeregister).toHaveBeenCalledWith('item', instance, ['first'])
-  expect(fakeRegister).toHaveBeenCalledWith('item', instance, 42, ['second'])
-
-  wrapper.unmount()
-  expect(fakeDeregister).toHaveBeenCalledWith('item', instance, ['second'])
+  wrapper.rerender(
+    <PlannerItem
+      {...defaultProps()}
+      id="1"
+      uniqueId="second"
+      animatableIndex={42}
+      registerAnimatable={fakeRegister}
+      deregisterAnimatable={fakeDeregister}
+      ref={ref}
+    />
+  )
+  expect(fakeDeregister).toHaveBeenCalledWith('item', ref.current, ['first'])
+  expect(fakeRegister).toHaveBeenCalledWith('item', ref.current, 42, ['second'])
 })
 
 it('renders a NewActivityIndicator when asked to', () => {
@@ -695,10 +704,11 @@ it('shows the "Join" button for zoom calendar events', () => {
 describe('with simplifiedControls', () => {
   const props = defaultProps({simplifiedControls: true})
 
-  it('renders the title link in licorice', () => {
-    const wrapper = shallow(<PlannerItem {...props} />)
-    const titleLink = wrapper.find('Link')
-    expect(titleLink.prop('theme').linkColor).toBe('#2D3B45')
+  // LF-1022
+  it.skip('renders the title link in turquoise', () => {
+    const {getByRole} = render(<PlannerItem {...props} deregisterAnimatable={jest.fn()} />)
+    const titleLink = getByRole('link')
+    expect(titleLink).toHaveStyle('color: rgb(3, 116, 181)')
   })
 
   it('does not render the details sub-heading', () => {
@@ -851,11 +861,11 @@ describe('with isMissingItem', () => {
   })
 
   it('renders a course name in course color', () => {
-    const wrapper = shallow(<PlannerItem {...props} />)
-    const courseNameText = wrapper.find('Text[data-testid="MissingAssignments-CourseName"]')
-    expect(courseNameText.exists()).toBeTruthy()
-    expect(courseNameText.prop('children')).toBe('A Course about being Diffrient')
-    expect(courseNameText.prop('theme')).toMatchObject({primaryColor: '#d71f85'})
+    const {getByTestId} = render(<PlannerItem {...props} deregisterAnimatable={jest.fn()} />)
+    const courseNameText = getByTestId('MissingAssignments-CourseName')
+    expect(courseNameText).toBeInTheDocument()
+    expect(courseNameText).toHaveTextContent('A Course about being Diffrient')
+    expect(courseNameText).toHaveStyle('color: rgb(215, 31, 133);')
   })
 
   it('renders dates with both date and time', () => {

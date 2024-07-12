@@ -47,17 +47,18 @@ end
 
 module IgnoreMonkeyPatchesInDeprecations
   def extract_callstack(callstack)
+    return [] if callstack.empty?
     return _extract_callstack(callstack) if callstack.first.is_a?(String)
 
     offending_line = callstack.find do |frame|
       # pass the whole frame to the filter function, so we can ignore specific methods
-      !ignored_callstack(frame)
+      !ignored_callstack?(frame)
     end || callstack.first
 
     [offending_line.path, offending_line.lineno, offending_line.label]
   end
 
-  def ignored_callstack(frame)
+  def ignored_callstack?(frame)
     if frame.is_a?(String)
       if (md = frame.match(/^(.+?):(\d+)(?::in `(.*?)')?/))
         path, _, label = md.captures
@@ -65,7 +66,8 @@ module IgnoreMonkeyPatchesInDeprecations
         return false
       end
     else
-      path, _, label = frame.absolute_path, frame.lineno, frame.label
+      path, _, label = frame.absolute_path || frame.path, frame.lineno, frame.label
+      return false unless path
     end
     return true if path&.start_with?(File.dirname(__FILE__) + "/active_record.rb")
     return true if path&.start_with?(File.expand_path(File.dirname(__FILE__) + "/../../gems/activesupport-suspend_callbacks"))

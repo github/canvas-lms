@@ -31,7 +31,7 @@ describe Quizzes::Quiz do
     end
 
     let(:default_false_values) do
-      Quizzes::Quiz.where(id: @quiz).pluck(
+      Quizzes::Quiz.where(id: @quiz).pick(
         :shuffle_answers,
         :disable_timer_autosubmission,
         :could_be_locked,
@@ -44,7 +44,7 @@ describe Quizzes::Quiz do
         :only_visible_to_overrides,
         :one_time_results,
         :show_correct_answers_last_attempt
-      ).first
+      )
     end
 
     it "saves boolean attributes as false if they are set to nil" do
@@ -666,8 +666,7 @@ describe Quizzes::Quiz do
     expect(data.length).to be(1)
     expect(data[0][:answers]).not_to be_empty
     same = true
-    found = []
-    data[0][:answers].each { |a| found << a[:text] }
+    found = data[0][:answers].pluck(:text)
     expect(found.uniq.length).to be(10)
     same = false if data[0][:answers][0][:text] != "1"
     same = false if data[0][:answers][1][:text] != "2"
@@ -2411,7 +2410,7 @@ describe Quizzes::Quiz do
 
         it "grants submit rights" do
           allow(@course).to receive(:grants_right?).with(@student1, nil, :participate_as_student).and_return(true)
-          allow(@course).to receive(:grants_right?).with(@student1, nil, :manage_assignments).and_return(false)
+          allow(@course).to receive(:grants_right?).with(@student1, nil, :manage_assignments_edit).and_return(false)
           allow(@course).to receive(:grants_right?).with(@student1, nil, :read_as_admin).and_return(false)
           allow(@course).to receive(:grants_right?).with(@student1, nil, :manage_grades).and_return(false)
           expect(@quiz.grants_right?(@student1, :submit)).to be true
@@ -2431,7 +2430,7 @@ describe Quizzes::Quiz do
 
         it "does not grant submit rights" do
           allow(@course).to receive(:grants_right?).with(@student2, nil, :participate_as_student).and_return(true)
-          allow(@course).to receive(:grants_right?).with(@student2, nil, :manage_assignments).and_return(false)
+          allow(@course).to receive(:grants_right?).with(@student2, nil, :manage_assignments_edit).and_return(false)
           allow(@course).to receive(:grants_right?).with(@student2, nil, :read_as_admin).and_return(false)
           allow(@course).to receive(:grants_right?).with(@student2, nil, :manage_grades).and_return(false)
           expect(@quiz.grants_right?(@student2, :submit)).to be false

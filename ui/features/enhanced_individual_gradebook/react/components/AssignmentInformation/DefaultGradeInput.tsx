@@ -21,7 +21,7 @@ import React, {useCallback, useEffect, useState} from 'react'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
 import {TextInput} from '@instructure/ui-text-input'
-import {GradingType} from '../../../../../api'
+import type {GradingType} from '../../../../../api'
 import {SimpleSelect} from '@instructure/ui-simple-select'
 
 const I18n = useI18nScope('enhanced_individual_gradebook')
@@ -71,7 +71,11 @@ export default function DefaultGradeInput({disabled, gradingType, onGradeInputCh
           value={selectInput}
           defaultValue={selectInput}
           renderLabel="Uncontrolled Select"
-          onChange={(e, {value}) => setSelectInput(value)}
+          onChange={(e, {value}) => {
+            if (typeof value === 'string') {
+              setSelectInput(value)
+            }
+          }}
         >
           <SimpleSelectOption id="emptyOption" value="">
             ---

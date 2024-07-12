@@ -27,6 +27,7 @@ const props = {
   showSISIds: false,
   sis_course_id: 'SIS 1',
   subaccount_name: 'dummy_value',
+  subaccount_id: '1',
   total_students: 6,
   teachers: [
     {
@@ -38,7 +39,7 @@ const props = {
   term: {
     name: 'A Term',
   },
-  workflow_state: 'alive',
+  workflow_state: 'available',
   concluded: false,
 }
 
@@ -55,6 +56,31 @@ it('indicates if a course is a blueprint course', () => {
       .find(tooltip)
       .exists()
   ).toBe(true)
+})
+
+it('filters addable roles by blueprint and permissions', () => {
+  const add_users_button = 'Tooltip[renderTip="Add Users to A"] IconButton'
+  const wrapper = shallow(
+    <CoursesListRow
+      {...props}
+      blueprint={true}
+      can_create_enrollments={true}
+      concluded={false}
+      roles={[
+        {id: '1', base_role_name: 'TeacherEnrollment', manageable_by_user: true},
+        {id: '2', base_role_name: 'TaEnrollment', manageable_by_user: true},
+        {id: '3', base_role_name: 'StudentEnrollment', manageable_by_user: true},
+        {id: '4', base_role_name: 'ObserverEnrollment', manageable_by_user: true},
+        {id: '5', base_role_name: 'DesignerEnrollment', manageable_by_user: false},
+      ]}
+    />
+  )
+  const role_ids = wrapper
+    .instance()
+    .getAvailableRoles()
+    .map(role => role.id)
+    .sort()
+  expect(role_ids).toEqual(['1', '2'])
 })
 
 it('indicates if a course is a course template', () => {
@@ -119,4 +145,31 @@ it('does not show add-enrollment when not allowed', () => {
 it('shows the teacher count when needed', () => {
   const wrapper = mount(renderRow(<CoursesListRow {...props} teacher_count={3} teachers={null} />))
   expect(wrapper.text()).toContain('3 teachers')
+})
+
+it('shows published icon and tooltip for published course', () => {
+  const tooltip = 'Tooltip[renderTip="Published"] IconPublishSolid'
+  expect(
+    shallow(<CoursesListRow {...props} />)
+      .find(tooltip)
+      .exists()
+  ).toBe(true)
+})
+
+it('shows unpublished icon and tooltip for unpublished course', () => {
+  const tooltip = 'Tooltip[renderTip="Unpublished"] IconUnpublishedLine'
+  expect(
+    shallow(<CoursesListRow {...props} workflow_state={"unpublished"} />)
+      .find(tooltip)
+      .exists()
+  ).toBe(true)
+})
+
+it('shows completed icon and tooltip for concluded course', () => {
+  const tooltip = 'Tooltip[renderTip="Concluded"] IconCheckSolid'
+  expect(
+    shallow(<CoursesListRow {...props} workflow_state={"completed"} />)
+      .find(tooltip)
+      .exists()
+  ).toBe(true)
 })

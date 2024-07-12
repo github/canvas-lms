@@ -39,6 +39,7 @@ import {
 import formatMessage from '../format-message'
 import ResizeHandle from './ResizeHandle'
 import {FS_ENABLED} from '../util/fullscreenHelpers'
+import {AIWandSVG} from './plugins/shared/ai_tools'
 
 export const WYSIWYG_VIEW = 'WYSIWYG'
 export const PRETTY_HTML_EDITOR_VIEW = 'PRETTY'
@@ -63,6 +64,8 @@ StatusBar.propTypes = {
   a11yErrorsCount: number,
   onWordcountModalOpen: func.isRequired,
   disabledPlugins: arrayOf(string),
+  ai_text_tools: bool,
+  onAI: func,
 }
 
 StatusBar.defaultProps = {
@@ -175,22 +178,27 @@ export default function StatusBar(props) {
   }
 
   function renderPath() {
-    return <View data-testid="whole-status-bar-path">{renderPathString(props)}</View>
+    return (
+      <View data-testid="whole-status-bar-path" style={{display: 'flex'}}>
+        {renderPathString(props)}
+      </View>
+    )
   }
 
   function renderA11yButton() {
     const a11y = formatMessage('Accessibility Checker')
+    const a11yButtonId = 'rce-a11y-btn'
     const button = (
       <IconButton
-        data-btn-id="rce-a11y-btn"
+        data-btn-id={a11yButtonId}
         color="primary"
         title={a11y}
-        tabIndex={tabIndexForBtn('rce-a11y-btn')}
+        tabIndex={tabIndexForBtn(a11yButtonId)}
         onClick={event => {
           event.target.focus()
-          props.onA11yChecker()
+          props.onA11yChecker(a11yButtonId)
         }}
-        onFocus={() => setFocusedBtnId('rce-a11y-btn')}
+        onFocus={() => setFocusedBtnId(a11yButtonId)}
         screenReaderLabel={a11y}
         withBackground={false}
         withBorder={false}
@@ -228,7 +236,7 @@ export default function StatusBar(props) {
         ? formatMessage('Switch to raw HTML Editor')
         : formatMessage('Switch to pretty HTML Editor')
     return (
-      <View data-testid="html-editor-message">
+      <View data-testid="html-editor-message" style={{display: 'flex'}}>
         <Button
           data-btn-id="rce-editormessage-btn"
           margin="0 small"
@@ -257,6 +265,27 @@ export default function StatusBar(props) {
     const kbshortcut = formatMessage('View keyboard shortcuts')
     return (
       <View display="inline-block" padding="0 x-small">
+        {props.ai_text_tools && props.onAI && (
+          <IconButton
+            data-btn-id="rce-ai-btn"
+            color="primary"
+            aria-haspopup="dialog"
+            title={formatMessage('AI Tools')}
+            tabIndex={tabIndexForBtn('rce-ai-btn')}
+            onClick={event => {
+              event.target.focus() // FF doesn't focus buttons on click
+              props.onAI()
+            }}
+            onFocus={() => setFocusedBtnId('rce-ai-btn')}
+            screenReaderLabel={formatMessage('AI Tools')}
+            withBackground={false}
+            withBorder={false}
+          >
+            <span style={{color: 'dodgerBlue'}}>
+              <SVGIcon src={AIWandSVG} size="x-small" />
+            </span>
+          </IconButton>
+        )}
         <IconButton
           data-btn-id="rce-kbshortcut-btn"
           color="primary"

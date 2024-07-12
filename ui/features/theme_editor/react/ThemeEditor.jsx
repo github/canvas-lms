@@ -20,11 +20,11 @@ import {useScope as useI18nScope} from '@canvas/i18n'
 import React from 'react'
 import PropTypes from 'prop-types'
 import $ from 'jquery'
-import _ from 'lodash'
+import _, {map} from 'lodash'
 import preventDefault from '@canvas/util/preventDefault'
 import Progress from '@canvas/progress/backbone/models/Progress'
 import customTypes from '@canvas/theme-editor/react/PropTypes'
-import submitHtmlForm from '@canvas/theme-editor/submitHtmlForm'
+import {submitHtmlForm} from '@canvas/theme-editor/submitHtmlForm'
 import SaveThemeButton from './SaveThemeButton'
 import ThemeEditorModal from './ThemeEditorModal'
 import ThemeEditorSidebar from './ThemeEditorSidebar'
@@ -80,8 +80,8 @@ const notComplete = progress => progress.completion !== 100
 export default class ThemeEditor extends React.Component {
   static propTypes = {
     brandConfig: customTypes.brandConfig,
-    isDefaultConfig: PropTypes.bool.isRequired,
-    hasUnsavedChanges: PropTypes.bool.isRequired,
+    isDefaultConfig: PropTypes.bool,
+    hasUnsavedChanges: PropTypes.bool,
     variableSchema: customTypes.variableSchema,
     allowGlobalIncludes: PropTypes.bool,
     accountID: PropTypes.string,
@@ -125,7 +125,7 @@ export default class ThemeEditor extends React.Component {
   }
 
   onSubAccountProgress = data => {
-    const newSubAccountProgs = _.map(this.state.activeSubAccountProgresses, progress =>
+    const newSubAccountProgs = map(this.state.activeSubAccountProgresses, progress =>
       progress.tag == data.tag ? data : progress
     )
 

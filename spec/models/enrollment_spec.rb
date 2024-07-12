@@ -187,6 +187,39 @@ describe Enrollment do
     end
   end
 
+  describe "#enrollment_state" do
+    let_once(:enrollment) { enrollment_model }
+
+    context "when called on a new record" do
+      it "raises an error" do
+        expect { described_class.new.enrollment_state }
+          .to raise_error(RuntimeError, "cannot call enrollment_state on a new record")
+      end
+    end
+
+    context "when enrollment_state exists" do
+      let(:enrollment_state) { EnrollmentState.find_by(enrollment_id: enrollment) }
+
+      it "returns the existing enrollment_state" do
+        expect(enrollment.enrollment_state).to eq(enrollment_state)
+      end
+    end
+
+    context "when enrollment enrollment_state association is nil" do
+      let(:non_stale_enrollment_state) { EnrollmentState.find_by(enrollment_id: enrollment) }
+
+      before do
+        allow_any_instance_of(ActiveRecord::Associations::HasOneAssociation).to receive(:reload)
+      end
+
+      it "returns the non-stale enrollment_state" do
+        enrollment.association(:enrollment_state).target = nil
+
+        expect(enrollment.enrollment_state).to eq(non_stale_enrollment_state)
+      end
+    end
+  end
+
   describe "#destroy" do
     context "with overrides" do
       before(:once) do
@@ -994,19 +1027,15 @@ describe Enrollment do
           expect(@enrollment.graded_at).to eq score.updated_at
         end
 
-        it "uses the graded_at attribute if no associated score object exists" do
-          expect(@enrollment.graded_at).to eq @enrollment.read_attribute(:graded_at)
-        end
-
         it "ignores grading period scores" do
           @enrollment.scores.create!(current_score: 80.3, grading_period: period)
-          expect(@enrollment.graded_at).to eq @enrollment.read_attribute(:graded_at)
+          expect(@enrollment.graded_at).to be_nil
         end
 
         it "ignores soft-deleted scores" do
           score = @enrollment.scores.create!(current_score: 80.3)
           score.destroy
-          expect(@enrollment.graded_at).to eq @enrollment.read_attribute(:graded_at)
+          expect(@enrollment.graded_at).to be_nil
         end
       end
 
@@ -1442,7 +1471,7 @@ describe Enrollment do
       course_with_teacher(active_all: true)
       user_with_pseudonym
       e = @course.enroll_student(@user)
-      expect(e.messages_sent).to be_include("Enrollment Registration")
+      expect(e.messages_sent).to include("Enrollment Registration")
     end
 
     it "does not send out invitations immediately if the course restricts future viewing" do
@@ -1503,7 +1532,7 @@ describe Enrollment do
       course_with_teacher
       user_with_pseudonym
       e = @course.enroll_student(@user)
-      expect(e.messages_sent).not_to be_include("Enrollment Registration")
+      expect(e.messages_sent).not_to include("Enrollment Registration")
     end
 
     it "sends out invitations for previously-created enrollments when the course is published" do
@@ -1511,7 +1540,7 @@ describe Enrollment do
       course_with_teacher
       user_with_pseudonym
       e = @course.enroll_student(@user)
-      expect(e.messages_sent).not_to be_include("Enrollment Registration")
+      expect(e.messages_sent).not_to include("Enrollment Registration")
       expect(@user.pseudonym).not_to be_nil
       @course.offer
       e.reload
@@ -1563,11 +1592,11 @@ describe Enrollment do
 
   context "atom" do
     it "uses the course and user name to derive a title" do
-      expect(@enrollment.to_atom.title).to eql("#{@enrollment.user.name} in #{@enrollment.course.name}")
+      expect(@enrollment.to_atom[:title]).to eql("#{@enrollment.user.name} in #{@enrollment.course.name}")
     end
 
     it "links to the enrollment" do
-      link_path = @enrollment.to_atom.links.first.to_s
+      link_path = @enrollment.to_atom[:link]
       expect(link_path).to eql("/courses/#{@enrollment.course.id}/enrollments/#{@enrollment.id}")
     end
   end
@@ -2386,7 +2415,7 @@ describe Enrollment do
 
       # he should be removed from the group
       expect(group.users.size).to eq 1
-      expect(group.users).not_to be_include(user2)
+      expect(group.users).not_to include(user2)
       expect(group).to have_common_section
     end
 
@@ -2430,7 +2459,7 @@ describe Enrollment do
       # he should be removed from the group, keeping the group and the category
       # happily satisfying the self sign-up restriction.
       expect(group.users.size).to eq 1
-      expect(group.users).not_to be_include(user2)
+      expect(group.users).not_to include(user2)
       expect(group).to have_common_section
       expect(category).not_to have_heterogenous_group
     end
@@ -2462,7 +2491,7 @@ describe Enrollment do
 
       # he should still be in the group
       expect(group.users.size).to eq 2
-      expect(group.users).to be_include(user2)
+      expect(group.users).to include(user2)
     end
 
     it "ungroups the user from all groups, restricted and unrestricted when completely unenrolling from the course" do
@@ -2500,8 +2529,8 @@ describe Enrollment do
 
       expect(group1.users.size).to eq 1
       expect(group2.users.size).to eq 1
-      expect(group1.users).not_to be_include(user2)
-      expect(group2.users).not_to be_include(user2)
+      expect(group1.users).not_to include(user2)
+      expect(group2.users).not_to include(user2)
       expect(group1).to have_common_section
     end
 
@@ -2535,7 +2564,7 @@ describe Enrollment do
 
       # user2 should be removed from the group
       expect(group.users.size).to eq 1
-      expect(group.users).not_to be_include(user2)
+      expect(group.users).not_to include(user2)
       expect(group).to have_common_section
     end
 
@@ -2568,7 +2597,7 @@ describe Enrollment do
 
       # user2 should not be removed from group 2
       expect(group.users.size).to eq 2
-      expect(group.users).to be_include(user2)
+      expect(group.users).to include(user2)
       expect(group).not_to have_common_section
     end
 
@@ -2597,7 +2626,7 @@ describe Enrollment do
 
       # he should not be removed from the group
       expect(group.users.size).to eq 1
-      expect(group.users).to be_include(user1)
+      expect(group.users).to include(user1)
       expect(group).to have_common_section
     end
 
@@ -2648,7 +2677,7 @@ describe Enrollment do
 
       # he should still be in the group
       expect(group.users.size).to eq 1
-      expect(group.users).to be_include(user1)
+      expect(group.users).to include(user1)
     end
 
     it "ignores previously deleted memberships" do
@@ -2671,7 +2700,7 @@ describe Enrollment do
 
       # she should still be removed from the group
       expect(group.users.size).to eq 0
-      expect(group.users).not_to be_include(user)
+      expect(group.users).not_to include(user)
     end
   end
 
@@ -3029,6 +3058,45 @@ describe Enrollment do
       expect(pe.reload).to be_deleted
     end
 
+    it "does not allow an observer to be observed by a user they are observing" do
+      @observed = User.create!
+      @observer = User.create!
+      @course = Course.create!
+
+      @enrollment = StudentEnrollment.create!(user: @observed, course: @course)
+      @enrollment2 = StudentEnrollment.create!(user: @observer, course: @course)
+
+      add_linked_observer(@observed, @observer)
+      add_linked_observer(@observer, @observed)
+
+      @enrollment.type = "ObserverEnrollment"
+      @enrollment.associated_user_id = @enrollment2.user_id
+      @enrollment.save!
+
+      @enrollment2.type = "ObserverEnrollment"
+      @enrollment2.associated_user_id = @enrollment.user_id
+
+      expect(@enrollment).to be_valid
+      expect { @enrollment2.save! }.to raise_error("Validation failed: Associated user Cannot observe observer observing self")
+    end
+
+    it "allows existing observer enrollment cycles to be deleted" do
+      u1 = User.create!
+      u2 = User.create!
+      course = Course.create!
+
+      e1 = ObserverEnrollment.create!(course:, user: u1, associated_user_id: u2.id)
+      e2 = ObserverEnrollment.create!(course:, user: u2)
+      ObserverEnrollment.where(id: e2).update_all(associated_user_id: u1.id) # bypass the validation
+
+      expect(e1).not_to be_valid
+
+      e1.destroy
+
+      expect(e1).to be_valid
+      expect(e1).to be_deleted
+    end
+
     context "sharding" do
       specs_require_sharding
 
@@ -3057,16 +3125,25 @@ describe Enrollment do
       @temporary_enrollment_recipient = user_factory(active_all: true)
       temporary_enrollment_recipient2 = user_factory(active_all: true)
       @course1 = course_with_teacher(active_all: true, user: @source_user).course
+      temporary_enrollment_pairing = TemporaryEnrollmentPairing.create!(root_account: Account.default, created_by: account_admin_user)
       @recipient_temp_enrollment = @course1.enroll_user(
         @temporary_enrollment_recipient,
         "TeacherEnrollment",
-        { role: teacher_role, temporary_enrollment_source_user_id: @source_user.id }
+        {
+          role: teacher_role,
+          temporary_enrollment_source_user_id: @source_user.id,
+          temporary_enrollment_pairing_id: temporary_enrollment_pairing.id
+        }
       )
       course2 = course_with_teacher(active_all: true, user: @source_user).course
       @recipient2_temp_enrollment = course2.enroll_user(
         temporary_enrollment_recipient2,
         "TeacherEnrollment",
-        { role: teacher_role, temporary_enrollment_source_user_id: @source_user.id }
+        {
+          role: teacher_role,
+          temporary_enrollment_source_user_id: @source_user.id,
+          temporary_enrollment_pairing_id: temporary_enrollment_pairing.id
+        }
       )
     end
 
@@ -3088,49 +3165,6 @@ describe Enrollment do
   end
 
   describe "#can_be_deleted_by" do
-    describe "on a student enrollment without granular_permissions_manage_users" do
-      let(:user) { double(id: 42) }
-      let(:session) { double }
-
-      before do
-        course_with_student
-        @course.root_account.disable_feature!(:granular_permissions_manage_users)
-      end
-
-      it "is true for a user who has been granted :manage_students" do
-        allow(@course).to receive(:grants_right?).with(user, session, :manage_students).and_return(true)
-        allow(@course).to receive(:grants_right?).with(user, session, :manage_admin_users).and_return(false)
-        expect(@enrollment.can_be_deleted_by(user, @course, session)).to be_truthy
-      end
-
-      it "is false for a user without :manage_students" do
-        allow(@course).to receive(:grants_right?).with(user, session, :manage_admin_users).and_return(false)
-        allow(@course).to receive(:grants_right?).with(user, session, :manage_students).and_return(false)
-        expect(@enrollment.can_be_deleted_by(user, @course, session)).to be_falsey
-      end
-
-      it "is false for someone with :manage_admin_users but without :manage_students" do
-        allow(@course).to receive(:grants_right?).with(user, session, :manage_students).and_return(false)
-        allow(@course).to receive(:grants_right?).with(user, session, :manage_admin_users).and_return(true)
-        expect(@enrollment.can_be_deleted_by(user, @course, session)).to be_falsey
-      end
-
-      it "is false for someone with :manage_admin_users in other context" do
-        context = CourseSection.new(id: 10)
-        allow(context).to receive(:grants_right?).with(user, session, :manage_students).and_return(true)
-        allow(context).to receive(:grants_right?).with(user, session, :manage_admin_users).and_return(true)
-        expect(enrollment.can_be_deleted_by(user, context, session)).to be_falsey
-      end
-
-      it "is false if a user is trying to remove their own enrollment" do
-        allow(@course).to receive(:grants_right?).with(user, session, :manage_students).and_return(true)
-        allow(@course).to receive(:grants_right?).with(user, session, :manage_admin_users).and_return(false)
-        allow(@course).to receive_messages(account: @course)
-        @enrollment.user_id = user.id
-        expect(@enrollment.can_be_deleted_by(user, @course, session)).to be_falsey
-      end
-    end
-
     describe "on a student enrollment with granular_permissions_manage_users" do
       let(:user) { double(id: 42) }
       let(:session) { double }
@@ -3164,34 +3198,6 @@ describe Enrollment do
         allow(@course).to receive(:grants_right?).with(user, session, :allow_course_admin_actions).and_return(false)
         allow(@course).to receive_messages(account: @course)
         @enrollment.user_id = user.id
-        expect(@enrollment.can_be_deleted_by(user, @course, session)).to be_falsey
-      end
-    end
-
-    describe "on an observer enrollment without granular_permissions_manage_users" do
-      let(:user) { double(id: 42) }
-      let(:session) { double }
-
-      before do
-        course_with_observer
-        @course.root_account.disable_feature!(:granular_permissions_manage_users)
-      end
-
-      it "is true with :manage_students" do
-        allow(@course).to receive(:grants_right?).with(user, session, :manage_students).and_return(true)
-        allow(@course).to receive(:grants_right?).with(user, session, :manage_admin_users).and_return(false)
-        expect(@enrollment.can_be_deleted_by(user, @course, session)).to be_truthy
-      end
-
-      it "is true with :manage_admin_users" do
-        allow(@course).to receive(:grants_right?).with(user, session, :manage_students).and_return(false)
-        allow(@course).to receive(:grants_right?).with(user, session, :manage_admin_users).and_return(true)
-        expect(@enrollment.can_be_deleted_by(user, @course, session)).to be_truthy
-      end
-
-      it "is false otherwise" do
-        allow(@course).to receive(:grants_right?).with(user, session, :manage_students).and_return(false)
-        allow(@course).to receive(:grants_right?).with(user, session, :manage_admin_users).and_return(false)
         expect(@enrollment.can_be_deleted_by(user, @course, session)).to be_falsey
       end
     end

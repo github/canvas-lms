@@ -20,7 +20,7 @@
 
 module Factories
   def quiz_model(opts = {})
-    @context ||= opts.delete(:course) || course_model(reusable: true)
+    @context = opts.delete(:course) || @context || course_model(reusable: true)
     @quiz = @context.quizzes.build(valid_quiz_attributes.merge(opts))
     @quiz.published_at = Time.zone.now
     @quiz.workflow_state = "available"
@@ -81,7 +81,7 @@ module Factories
           { weight: 0, text: "C", comments: "", id: 7051 }
         ],
         question_type: "multiple_choice_question"
-      }
+      }.with_indifferent_access
     ]
   end
 
@@ -446,6 +446,7 @@ module Factories
     course = opts[:course] || course_factory(active_course: true)
     user = opts[:user] || user_factory(active_user: true)
     course.enroll_student(user, enrollment_state: "active") unless user.enrollments.any? { |e| e.course_id == course.id }
+    late_policy_factory(course:, deduct: 10, every: :day) if opts[:late]
     @assignment = course.assignments.create(title: opts.fetch(:title, "Test Assignment"))
     @assignment.workflow_state = "published"
     @assignment.submission_types = "online_quiz"

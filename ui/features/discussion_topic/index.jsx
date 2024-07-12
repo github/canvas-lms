@@ -35,8 +35,15 @@ import EntriesView from './backbone/views/EntriesView'
 import SectionsTooltip from '@canvas/sections-tooltip'
 import DiscussionTopicKeyboardShortcutModal from './react/DiscussionTopicKeyboardShortcutModal'
 import ready from '@instructure/ready'
+import {captureException} from '@sentry/react'
 
 const I18n = useI18nScope('discussions')
+
+// Backbone routes
+$('body').on('click', '[data-pushstate]', function (event) {
+  if (event) event.preventDefault()
+  Backbone.history.navigate($(this).attr('href'), true)
+})
 
 import('@canvas/rubrics/jquery/rubricEditBinding')
 if (ENV.STUDENT_CONTEXT_CARDS_ENABLED)
@@ -79,6 +86,7 @@ function renderCoursePacingNotice() {
       .catch(ex => {
         // eslint-disable-next-line no-console
         console.error('Falied loading CoursePacingNotice', ex)
+        captureException(new Error('Failed loading CoursePacingNotice: ' + ex.message))
       })
   }
 }
@@ -119,8 +127,12 @@ ready(() => {
     filterModel,
   })
 
+  // for cases where users have html id's this page listens for,
+  // use this so they do not trigger related code
+  const excludeUserContentCss = 'div:not(.user_content)'
+
   const entriesView = new EntriesView({
-    el: '#discussion_subentries',
+    el: `${excludeUserContentCss} #discussion_subentries`,
     collection: entries,
     descendants,
     children,
@@ -129,12 +141,12 @@ ready(() => {
   })
 
   const toolbarView = new DiscussionToolbarView({
-    el: '#discussion-toolbar',
+    el: `${excludeUserContentCss} #discussion-toolbar`,
     model: filterModel,
   })
 
   const filterView = new DiscussionFilterResultsView({
-    el: '#filterResults',
+    el: `${excludeUserContentCss} #filterResults`,
     allData: data,
     model: filterModel,
   })

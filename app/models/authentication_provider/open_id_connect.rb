@@ -68,6 +68,7 @@ class AuthenticationProvider::OpenIDConnect < AuthenticationProvider::OAuth2
       get_token_response: -> { t("Error fetching access token") },
       claims_response: -> { t("Error fetching user details") },
       id_token: -> { t("ID Token") },
+      claims: -> { t("Claims") },
       userinfo: -> { t("Userinfo") },
     }]
   end
@@ -112,11 +113,15 @@ class AuthenticationProvider::OpenIDConnect < AuthenticationProvider::OAuth2
     { scope: scope_for_options }
   end
 
+  def client_options
+    super.merge(auth_scheme: :request_body)
+  end
+
   private
 
   def claims(token)
     token.options[:claims] ||= begin
-      jwt_string = token.params["id_token"]
+      jwt_string = token.params["id_token"] || token.token
       debug_set(:id_token, jwt_string) if instance_debugging
       id_token = {} if jwt_string.blank?
 
@@ -126,6 +131,11 @@ class AuthenticationProvider::OpenIDConnect < AuthenticationProvider::OAuth2
         Rails.logger.warn("Failed to decode OpenID Connect id_token: #{jwt_string.inspect}")
         raise
       end
+      debug_set(:claims, id_token.to_json) if instance_debugging
+      unless instance_of?(OpenIDConnect) || id_token["aud"] == client_id
+        raise OAuthValidationError, t("Invalid JWT audience: %{audience}", audience: id_token["aud"].inspect)
+      end
+
       # we have a userinfo endpoint, and we don't have everything we want,
       # then request more
       if userinfo_endpoint.present? && !(id_token.keys - requested_claims).empty?

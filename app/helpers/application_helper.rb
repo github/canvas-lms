@@ -26,6 +26,9 @@ module ApplicationHelper
   include Canvas::LockExplanation
   include DatadogRumHelper
   include NewQuizzesFeaturesHelper
+  include HeapHelper
+
+  BYTE_UNITS = %w[B KB MB GB TB PB EB ZB YB].freeze
 
   def context_user_name_display(user)
     name = user.try(:short_name) || user.try(:name)
@@ -36,11 +39,12 @@ module ApplicationHelper
     return nil unless user
     return context_user_name_display(user) if user.respond_to?(:short_name)
 
-    user_id = user.is_a?(OpenObject) ? user.id : user
+    user_id = user.is_a?(User) ? user.id : user
     Rails
       .cache
       .fetch(["context_user_name", context, user_id].cache_key, { expires_in: 15.minutes }) do
-        context_user_name_display(User.find(user_id))
+        user = User.find_by(id: user_id)
+        user && context_user_name_display(user)
       end
   end
 
@@ -136,7 +140,7 @@ module ApplicationHelper
   end
 
   def url_helper_context_from_object(context)
-    (context ? context.class.base_class : context.class).name.underscore
+    (context ? context.class.url_context_class : context.class).name.underscore
   end
 
   def message_user_path(user, context = nil)
@@ -176,17 +180,12 @@ module ApplicationHelper
   end
 
   def load_scripts_async_in_order(script_urls, cors_anonymous: false)
-    # this is how you execute scripts in order, in a way that doesn’t block rendering,
-    # and without having to use 'defer' to wait until the whole DOM is loaded.
-    # see: https://www.html5rocks.com/en/tutorials/speed/script-loading/
-    javascript_tag "
-      ;#{script_urls.map { |url| javascript_path(url) }}.forEach(function(src) {
-        var s = document.createElement('script'); s.src = src; s.async = false;#{" s.crossOrigin = 'anonymous';" if cors_anonymous}
-        document.head.appendChild(s)
-      });"
+    script_urls.map { |url| javascript_path(url) }.map do |url|
+      javascript_include_tag(url, defer: true, crossorigin: cors_anonymous ? "anonymous" : nil)
+    end.join("\n  ").rstrip.html_safe
   end
 
-  # puts the "main" webpack entry and the moment & timezone files in the <head> of the document
+  # puts webpack entries and the moment & timezone files in the <head> of the document
   def include_head_js
     paths = []
     paths << active_brand_config_url("js")
@@ -205,19 +204,16 @@ module ApplicationHelper
       )
     end
 
-    @script_chunks = ::Canvas::Cdn.registry.scripts_for("main")
+    @script_chunks = ::Canvas::Cdn.registry.entries
     @script_chunks.uniq!
 
     chunk_urls = @script_chunks
 
     capture do
-      # if we don't also put preload tags for these, the browser will prioritize and
-      # download the bundle chunks we preload below before these scripts
-      paths.each { |url| concat preload_link_tag(javascript_path(url)) }
-      chunk_urls.each { |url| concat preload_link_tag(url, crossorigin: "anonymous") }
-
       concat load_scripts_async_in_order(paths)
+      concat "\n  "
       concat load_scripts_async_in_order(chunk_urls, cors_anonymous: true)
+      concat "\n"
       concat include_js_bundles
     end
   end
@@ -232,6 +228,7 @@ module ApplicationHelper
     @rendered_js_bundles += new_js_bundles
 
     @rendered_preload_chunks ||= []
+    @script_chunks ||= []
     preload_chunks =
       new_js_bundles.map do |(bundle, plugin, *)|
         ::Canvas::Cdn.registry.scripts_for("#{plugin ? "#{plugin}-" : ""}#{bundle}")
@@ -274,7 +271,8 @@ module ApplicationHelper
       bundles = new_css_bundles.map { |(bundle, plugin)| css_url_for(bundle, plugin) }
       bundles << css_url_for("disable_transitions") if disable_css_transitions?
       bundles << { media: "all" }
-      stylesheet_link_tag(*bundles)
+      tags = bundles.map { |bundle| stylesheet_link_tag(bundle) }
+      tags.reject(&:empty?).join("\n  ").html_safe
     end
   end
 
@@ -412,6 +410,7 @@ module ApplicationHelper
     link_to(
       icon,
       "#",
+      role: "button",
       class: "license_help_link no-hover",
       title: I18n.t("Help with content licensing")
     )
@@ -423,6 +422,7 @@ module ApplicationHelper
     link_to(
       icon,
       "#",
+      role: "button",
       class: "visibility_help_link no-hover",
       title: I18n.t("Help with course visibilities")
     )
@@ -519,6 +519,13 @@ module ApplicationHelper
     global_inst_object
   end
 
+  def remote_env(hash = nil)
+    @remote_env ||= {}
+    @remote_env.merge!(hash) if hash
+
+    @remote_env
+  end
+
   def editor_buttons
     # called outside of Lti::ContextToolFinder to make sure that
     # @context is non-nil and also a type of Context that would have
@@ -535,9 +542,14 @@ module ApplicationHelper
         # force the YAML to be deserialized before caching, since it's expensive
         tools.each(&:settings)
       end
+
+    # Default tool icons need to have a hostname (cannot just be a path)
+    # because they are used externally via ServicesApiController endpoints
+    default_icon_base_url = "#{request.protocol}#{request.host_with_port}"
+
     ContextExternalTool
       .shard(@context.shard)
-      .editor_button_json(cached_tools.dup, @context, @current_user, session)
+      .editor_button_json(cached_tools.dup, @context, @current_user, session, default_icon_base_url)
   end
 
   def nbsp
@@ -659,7 +671,7 @@ module ApplicationHelper
 
   def support_url
     (@domain_root_account && @domain_root_account.settings[:support_url]) ||
-      (Account.default && Account.default.settings[:support_url])
+      Setting.get("default_support_url", nil)
   end
 
   def help_link_url
@@ -926,22 +938,22 @@ module ApplicationHelper
   end
 
   def dashboard_url(opts = {})
-    return super(opts) if opts[:login_success] || opts[:become_user_id] || @domain_root_account.nil?
+    return super if opts[:login_success] || opts[:become_user_id] || @domain_root_account.nil?
 
-    custom_dashboard_url || super(opts)
+    custom_dashboard_url || super
   end
 
   def dashboard_path(opts = {})
-    return super(opts) if opts[:login_success] || opts[:become_user_id] || @domain_root_account.nil?
+    return super if opts[:login_success] || opts[:become_user_id] || @domain_root_account.nil?
 
-    custom_dashboard_url || super(opts)
+    custom_dashboard_url || super
   end
 
   def custom_dashboard_url
     if ApplicationController.test_cluster_name
       url =
         @domain_root_account.settings[
-          "#{ApplicationController.test_cluster_name}_dashboard_url".to_sym
+          :"#{ApplicationController.test_cluster_name}_dashboard_url"
         ]
     end
     url ||= @domain_root_account.settings[:dashboard_url]
@@ -1218,7 +1230,7 @@ module ApplicationHelper
     else
       # map wiki page url to id
       if asset_type == "WikiPage"
-        page = @context.wiki_pages.not_deleted.where(url: asset_id).first
+        page = @context.wiki.find_page(asset_id)
         asset_id = page.id if page
       else
         asset_id = asset_id.to_i
@@ -1406,11 +1418,33 @@ module ApplicationHelper
     hash[:DEFAULT_DUE_TIME] = context.default_due_time if context&.default_due_time.present? && context.root_account.feature_enabled?(:default_due_time)
   end
 
-  def find_heap_application_id
-    DynamicSettings.find(tree: :private)[:heap_app_id, failsafe: nil]
+  def load_hotjar?
+    # Only load hotjar UX survey tool for the Learner Passport prototype
+    # Skip it in production and development environments, include it for Beta & CD
+    controller.controller_name == "learner_passport" &&
+      Canvas.environment !~ /(production|development)/ &&
+      @domain_root_account&.feature_enabled?(:learner_passport)
   end
 
-  def load_heap?
-    find_heap_application_id && @domain_root_account&.feature_enabled?(:send_usage_metrics)
+  def number_to_human_size_mb(number, options = {})
+    return "0 #{BYTE_UNITS[0]}" unless number.present?
+
+    base = (options[:base] || 1000).to_f
+
+    if number.to_i < base
+      exponent = 0
+    else
+      max_exp = BYTE_UNITS.size - 1
+      exponent = (Math.log(number) / Math.log(base)).to_i
+      exponent = max_exp if exponent > max_exp
+    end
+
+    number /= base**exponent
+
+    formatted_number = number.round(options[:precision] || 2) if options[:round]
+
+    formatted_number ||= number.truncate(options[:precision] || 2)
+
+    "#{formatted_number} #{BYTE_UNITS[exponent]}"
   end
 end

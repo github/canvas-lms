@@ -18,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "atom"
-
 # @API Conversations
 #
 # API for creating, accessing and updating user conversations.
@@ -302,6 +300,14 @@ class ConversationsController < ApplicationController
           MAX_GROUP_CONVERSATION_SIZE: Conversation.max_group_conversation_size
         }
 
+        is_student = inbox_settings_student?(user: @current_user, account: @domain_root_account)
+        hash[:INBOX_SIGNATURE_BLOCK_ENABLED] = Account.site_admin.feature_enabled?(:inbox_settings) &&
+                                               @domain_root_account.enable_inbox_signature_block? &&
+                                               (!is_student || (is_student && !@domain_root_account.disable_inbox_signature_block_for_students?))
+        hash[:INBOX_AUTO_RESPONSE_ENABLED] = Account.site_admin.feature_enabled?(:inbox_settings) &&
+                                             @domain_root_account.enable_inbox_auto_response? &&
+                                             (!is_student || (is_student && !@domain_root_account.disable_inbox_auto_response_for_students?))
+
         notes_enabled_accounts = @current_user.associated_accounts.having_user_notes_enabled
 
         hash[:NOTES_ENABLED] = notes_enabled_accounts.any?
@@ -318,29 +324,20 @@ class ConversationsController < ApplicationController
                  CONVERSATIONS: hash,
                  apollo_caching: Account.site_admin.feature_enabled?(:apollo_caching),
                  conversation_cache_key: Base64.encode64("#{@current_user.uuid}jamDN74lLSmfnmo74Hb6snyBnmc6q"),
-                 react_inbox_labels: Account.site_admin.feature_enabled?(:react_inbox_labels)
+                 react_inbox_labels: Account.site_admin.feature_enabled?(:react_inbox_labels),
+                 inbox_translation_languages: @domain_root_account.feature_enabled?(:translate_inbox_messages) ? Translation.languages : [],
+                 inbox_translation_enabled: @domain_root_account.feature_enabled?(:translate_inbox_messages)
                })
-        if @domain_root_account.feature_enabled?(:react_inbox)
-          @page_title = t("Inbox")
-          InstStatsd::Statsd.increment("inbox.visit.react")
-          InstStatsd::Statsd.count("inbox.visit.scope.inbox.count.react", @current_user.conversations.default.size)
-          InstStatsd::Statsd.count("inbox.visit.scope.sent.count.react", @current_user.all_conversations.sent.size)
-          InstStatsd::Statsd.count("inbox.visit.scope.unread.count.react", @current_user.conversations.unread.size)
-          InstStatsd::Statsd.count("inbox.visit.scope.starred.count.react", @current_user.starred_conversations.size)
-          InstStatsd::Statsd.count("inbox.visit.scope.archived.count.react", @current_user.conversations.archived.size)
-          css_bundle :canvas_inbox
-          js_bundle :inbox
-          render html: "", layout: true
-          return
-        end
-
-        InstStatsd::Statsd.count("inbox.visit.scope.inbox.count.legacy", @current_user.conversations.default.size)
-        InstStatsd::Statsd.count("inbox.visit.scope.sent.count.legacy", @current_user.all_conversations.sent.size)
-        InstStatsd::Statsd.count("inbox.visit.scope.unread.count.legacy", @current_user.conversations.unread.size)
-        InstStatsd::Statsd.count("inbox.visit.scope.starred.count.legacy", @current_user.starred_conversations.size)
-        InstStatsd::Statsd.count("inbox.visit.scope.archived.count.legacy", @current_user.conversations.archived.size)
-        InstStatsd::Statsd.increment("inbox.visit.legacy")
-        render :index_new
+        @page_title = t("Inbox")
+        InstStatsd::Statsd.increment("inbox.visit.react")
+        InstStatsd::Statsd.count("inbox.visit.scope.inbox.count.react", @current_user.conversations.default.size)
+        InstStatsd::Statsd.count("inbox.visit.scope.sent.count.react", @current_user.all_conversations.sent.size)
+        InstStatsd::Statsd.count("inbox.visit.scope.unread.count.react", @current_user.conversations.unread.size)
+        InstStatsd::Statsd.count("inbox.visit.scope.starred.count.react", @current_user.starred_conversations.size)
+        InstStatsd::Statsd.count("inbox.visit.scope.archived.count.react", @current_user.conversations.archived.size)
+        css_bundle :canvas_inbox
+        js_bundle :inbox
+        render html: "", layout: true
       end
     end
   end
@@ -1094,13 +1091,11 @@ class ConversationsController < ApplicationController
 
     @current_user = @context
     load_all_contexts
-    feed = Atom::Feed.new do |f|
-      f.title = t("titles.rss_feed", "Conversations Feed")
-      f.links << Atom::Link.new(href: conversations_url, rel: "self")
-      f.updated = Time.now
-      f.id = conversations_url
-    end
-    GuardRail.activate(:secondary) do
+
+    title = t("titles.rss_feed", "Conversations Feed")
+    link = conversations_url
+
+    feed_xml = GuardRail.activate(:secondary) do
       @entries = []
       @conversation_contexts = {}
       @current_user.conversations.each do |conversation|
@@ -1110,12 +1105,13 @@ class ConversationsController < ApplicationController
         end
       end
       @entries = @entries.sort_by { |e| [e.created_at, e.id] }.reverse
-      @entries.each do |entry|
-        feed.entries << entry.to_atom(additional_content: @conversation_contexts[entry.conversation.id])
+
+      AtomFeedHelper.render_xml(title:, link:, entries: @entries) do |entry|
+        { additional_content: @conversation_contexts[entry.conversation.id] }
       end
     end
     respond_to do |format|
-      format.atom { render plain: feed.to_xml }
+      format.atom { render plain: feed_xml }
     end
   end
 

@@ -224,11 +224,13 @@ class ProfileController < ApplicationController
         @user.reload
         show_tutorial_ff_to_user = @domain_root_account&.feature_enabled?(:new_user_tutorial) &&
                                    @user.participating_instructor_course_ids.any?
-        add_crumb(t(:crumb, "%{user}'s settings", user: @user.short_name), settings_profile_path)
+        add_crumb(@user.short_name, profile_path)
+        add_crumb(t("Settings"))
         js_env(
           NEW_USER_TUTORIALS_ENABLED_AT_ACCOUNT: show_tutorial_ff_to_user,
           CONTEXT_BASE_URL: "/users/#{@user.id}"
         )
+        page_has_instui_topnav
         render :profile
       end
       format.json do
@@ -262,6 +264,7 @@ class ProfileController < ApplicationController
     js_bundle :account_notification_settings
     respond_to do |format|
       format.html do
+        page_has_instui_topnav
         render html: "", layout: true
       end
     end
@@ -341,6 +344,14 @@ class ProfileController < ApplicationController
     render json: {}
   end
 
+  def admin?
+    @domain_root_account.grants_right?(@current_user, :manage_courses_admin)
+  end
+
+  def allowed_to_change_pronouns?
+    @domain_root_account.can_change_pronouns? || (@domain_root_account.can_add_pronouns? && admin?)
+  end
+
   def update
     @user = @current_user
 
@@ -365,7 +376,8 @@ class ProfileController < ApplicationController
                                 :locale,
                                 :bio,
                                 :birthdate,
-                                :pronouns)
+                                :pronouns,
+                                :pronunciation)
                     else
                       {}
                     end
@@ -374,9 +386,13 @@ class ProfileController < ApplicationController
         user_params.delete(:short_name)
         user_params.delete(:sortable_name)
       end
-      if !@domain_root_account.can_change_pronouns? || (user_params[:pronouns].present? && @domain_root_account.pronouns.exclude?(user_params[:pronouns].strip))
+
+      is_invalid_pronoun = user_params[:pronouns].present? && @domain_root_account.pronouns.exclude?(user_params[:pronouns].strip)
+
+      if !allowed_to_change_pronouns? || is_invalid_pronoun
         user_params.delete(:pronouns)
       end
+
       if @user.update(user_params)
         pseudonymed = false
         if params[:default_email_id].present?
@@ -397,8 +413,10 @@ class ProfileController < ApplicationController
           if change_password == "1" && pseudonym_to_update && !pseudonym_to_update.valid_arbitrary_credentials?(old_password)
             error_msg = t("errors.invalid_old_passowrd", "Invalid old password for the login %{pseudonym}", pseudonym: pseudonym_to_update.unique_id)
             pseudonymed = true
-            flash[:error] = error_msg
-            format.html { redirect_to user_profile_url(@current_user) }
+            format.html do
+              flash[:error] = error_msg
+              redirect_to user_profile_url(@current_user)
+            end
             format.json { render json: { errors: { old_password: error_msg } }, status: :bad_request }
           end
           if change_password != "1" || !pseudonym_to_update || !pseudonym_to_update.valid_arbitrary_credentials?(old_password)
@@ -435,7 +453,7 @@ class ProfileController < ApplicationController
     @profile = @user.profile
     @context = @profile
 
-    if @domain_root_account.can_change_pronouns?
+    if allowed_to_change_pronouns?
       valid_pronoun = @domain_root_account.pronouns.include?(params[:pronouns]&.strip) || params[:pronouns] == ""
       @user.pronouns = params[:pronouns] if valid_pronoun
     end
@@ -443,7 +461,7 @@ class ProfileController < ApplicationController
     short_name = params[:user] && params[:user][:short_name]
     @user.short_name = short_name if short_name && @user.user_can_edit_name?
     if params[:user_profile] && @user.user_can_edit_profile?
-      user_profile_params = params[:user_profile].permit(:title, :bio)
+      user_profile_params = params[:user_profile].permit(:title, :pronunciation, :bio)
       user_profile_params.delete(:title) unless @user.user_can_edit_name?
       @profile.attributes = user_profile_params
     end
@@ -466,6 +484,7 @@ class ProfileController < ApplicationController
     if @user.valid? && @profile.valid?
       @user.save!
       @profile.save!
+      flash[:success] = true
 
       if params[:user_services]
         visible, invisible = params[:user_services].to_unsafe_h.partition do |_service, bool|
@@ -474,15 +493,15 @@ class ProfileController < ApplicationController
         @user.user_services.where(service: visible.map(&:first)).update_all(visible: true)
         @user.user_services.where(service: invisible.map(&:first)).update_all(visible: false)
       end
-
       respond_to do |format|
         format.html { redirect_to user_profile_path(@user) }
         format.json { render json: user_profile_json(@user.profile, @current_user, session, params[:includes]) }
       end
     else
+      flash[:success] = false
       respond_to do |format|
         format.html { redirect_to user_profile_path(@user) } # FIXME: need to go to edit path
-        format.json { render json: @profile.errors, status: :bad_request }  # NOTE: won't send back @user validation errors (i.e. short_name)
+        format.json { render json: @profile.errors, status: :bad_request } # NOTE: won't send back @user validation errors (i.e. short_name)
       end
     end
   end
@@ -539,6 +558,7 @@ class ProfileController < ApplicationController
 
     js_bundle :qr_mobile_login
 
+    page_has_instui_topnav
     render html: "", layout: true
   end
 end

@@ -131,7 +131,8 @@ class Quizzes::QuizzesController < ApplicationController
         PERMISSIONS: {
           create: can_do(@context.quizzes.temp_record, @current_user, :create),
           manage: can_manage,
-          read_question_banks: can_manage || can_do(@context, @current_user, :read_question_banks)
+          read_question_banks: can_manage || can_do(@context, @current_user, :read_question_banks),
+          manage_assign_to: can_do(@context.quizzes.temp_record, @current_user, :manage_assign_to),
         },
         FLAGS: {
           question_banks: feature_enabled?(:question_banks),
@@ -329,7 +330,7 @@ class Quizzes::QuizzesController < ApplicationController
       @banks_hash = get_banks(@quiz)
 
       if (@has_student_submissions = @quiz.has_student_submissions?)
-        flash[:notice] = t("notices.has_submissions_already", "Keep in mind, some students have already taken or started taking this quiz")
+        flash.now[:notice] = t("notices.has_submissions_already", "Keep in mind, some students have already taken or started taking this quiz")
       end
 
       regrade_options = @quiz.current_quiz_question_regrades.to_h do |qqr|
@@ -344,7 +345,8 @@ class Quizzes::QuizzesController < ApplicationController
         ASSIGNMENT_ID: @assignment.present? ? @assignment.id : nil,
         ASSIGNMENT_OVERRIDES: assignment_overrides_json(@quiz.overrides_for(@current_user,
                                                                             ensure_set_not_empty: true),
-                                                        @current_user),
+                                                        @current_user,
+                                                        include_names: true),
         DUE_DATE_REQUIRED_FOR_ACCOUNT: AssignmentUtil.due_date_required_for_account?(@context),
         QUIZ: quiz_json(@quiz, @context, @current_user, session),
         SECTION_LIST: sections.map do |section|
@@ -558,8 +560,10 @@ class Quizzes::QuizzesController < ApplicationController
           SubmissionLifecycleManager.recompute(@quiz.assignment, update_grades: true, executing_user: @current_user)
         end
 
-        flash[:notice] = t("Quiz successfully updated")
-        format.html { redirect_to named_context_url(@context, :context_quiz_url, @quiz) }
+        format.html do
+          flash[:notice] = t("Quiz successfully updated")
+          redirect_to named_context_url(@context, :context_quiz_url, @quiz)
+        end
         format.json { render json: @quiz.as_json(include: { assignment: { include: :assignment_group } }) }
       end
     end
@@ -730,7 +734,7 @@ class Quizzes::QuizzesController < ApplicationController
       js_env GRADE_BY_QUESTION: @current_user&.preferences&.dig(:enable_speedgrader_grade_by_question)
       if authorized_action(@submission, @current_user, :read)
         if @current_user && !@quiz.visible_to_user?(@current_user)
-          flash[:notice] = t "notices.submission_doesnt_count", "This quiz will no longer count towards your grade."
+          flash.now[:notice] = t "notices.submission_doesnt_count", "This quiz will no longer count towards your grade."
         end
         dont_show_user_name = @submission.quiz.anonymous_submissions || (!@submission.user || @submission.user == @current_user)
         add_crumb((dont_show_user_name ? t(:default_history_crumb, "History") : @submission.user.name))
@@ -961,7 +965,7 @@ class Quizzes::QuizzesController < ApplicationController
     return unless quiz_submission_active?
 
     @show_embedded_chat = false
-    flash[:notice] = t("notices.less_than_allotted_time", "You started this quiz near when it was due, so you won't have the full amount of time to take the quiz.") if @submission.less_than_allotted_time?
+    flash.now[:notice] = t("notices.less_than_allotted_time", "You started this quiz near when it was due, so you won't have the full amount of time to take the quiz.") if @submission.less_than_allotted_time?
     if params[:question_id] && !valid_question?(@submission, params[:question_id])
       redirect_to course_quiz_url(@context, @quiz) and return
     end
@@ -1111,8 +1115,8 @@ class Quizzes::QuizzesController < ApplicationController
                quiz_version: quiz.version_number,
                assignment_id: quiz.assignment_id,
                assignment_version: quiz.assignment&.version_number }
-    prepared_batch[:overrides_to_create].each { |override| override.assign_attributes(params) }
-    prepared_batch[:overrides_to_update].each { |override| override.assign_attributes(params) }
+    prepared_batch[:overrides_to_create].each { |override| override.assign_attributes(params) unless override.context_module_id }
+    prepared_batch[:overrides_to_update].each { |override| override.assign_attributes(params) unless override.context_module_id }
   end
 
   def hide_quiz?

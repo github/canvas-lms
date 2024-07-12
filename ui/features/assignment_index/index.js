@@ -25,10 +25,8 @@ import AssignmentSettingsView from './backbone/views/AssignmentSettingsView'
 import AssignmentSyncSettingsView from './backbone/views/AssignmentSyncSettingsView'
 import AssignmentGroupWeightsView from './backbone/views/AssignmentGroupWeightsView'
 import ToggleShowByView from './backbone/views/ToggleShowByView'
-import _ from 'underscore'
 import splitAssetString from '@canvas/util/splitAssetString'
 import {getPrefetchedXHR} from '@canvas/util/xhr'
-import {monitorLtiMessages} from '@canvas/lti/jquery/messages'
 import ready from '@instructure/ready'
 import {addDeepLinkingListener} from '@canvas/deep-linking/DeepLinking'
 import {
@@ -42,7 +40,7 @@ const course = new Course({
 })
 course.url = ENV.URLS.course_url
 
-const userIsAdmin = _.includes(ENV.current_user_roles, 'admin')
+const userIsAdmin = ENV.current_user_is_admin
 
 const assignmentGroups = new AssignmentGroupCollection([], {
   course,
@@ -135,7 +133,6 @@ ready(() => {
       }
     })
 
-  monitorLtiMessages()
   alertIfDeepLinkingCreatedModule()
 
   if (ENV.FEATURES?.lti_multiple_assignment_deep_linking) {

@@ -40,22 +40,25 @@ describe Mutations::CreateSubmissionComment do
     stringify ? "\"#{value}\"" : value
   end
 
-  def mutation_str(submission_id: nil, attempt: nil, comment: "hello", file_ids: [], media_object_id: nil, media_object_type: nil, reviewer_submission_id: nil)
+  def mutation_str(submission_id: nil, attempt: nil, comment: "hello", file_ids: [], media_object_id: nil, media_object_type: nil, reviewer_submission_id: nil, group_comment: false, draft_comment: false)
     <<~GQL
       mutation {
         createSubmissionComment(input: {
           attempt: #{value_or_null(attempt, false)}
           comment: #{value_or_null(comment)}
           fileIds: #{file_ids}
+          groupComment: #{group_comment}
           mediaObjectId: #{value_or_null(media_object_id)}
           mediaObjectType: #{value_or_null(media_object_type)}
           submissionId: #{value_or_null(submission_id || @submission.id)}
           reviewerSubmissionId: #{value_or_null(reviewer_submission_id)}
+          draftComment: #{draft_comment}
         }) {
           submissionComment {
             _id
             attempt
             comment
+            draft
             attachments {
               _id
             }
@@ -115,6 +118,22 @@ describe Mutations::CreateSubmissionComment do
       expect(
         result.dig(:data, :createSubmissionComment, :submissionComment, :comment)
       ).to eq "dogs and cats"
+    end
+
+    context "draft comment" do
+      it "is saved as a draft comment" do
+        result = run_mutation(draft_comment: true)
+        expect(
+          result.dig(:data, :createSubmissionComment, :submissionComment, :draft)
+        ).to be true
+      end
+
+      it "is not saved as a draft comment" do
+        result = run_mutation(draft_comment: false)
+        expect(
+          result.dig(:data, :createSubmissionComment, :submissionComment, :draft)
+        ).to be false
+      end
     end
   end
 
@@ -233,6 +252,63 @@ describe Mutations::CreateSubmissionComment do
       result = run_mutation(reviewer_submission_id: @reviewer_submission.id)
       expect(result[:errors].length).to eq 1
       expect(result[:errors][0][:message]).to eq "not found"
+    end
+  end
+
+  context "group assignments" do
+    before(:once) do
+      @first_student = @student
+      @second_student = @course.enroll_student(User.create!, enrollment_state: "active").user
+      group_category = @course.group_categories.create!(name: "My Category")
+      @group = @course.groups.create!(name: "Group A", group_category:)
+      @group.add_user(@student)
+      @group.add_user(@second_student)
+      @assignment = @course.assignments.create!(
+        title: "Group Assignment",
+        submission_types: "online_text_entry",
+        grade_group_students_individually: false,
+        group_category:
+      )
+    end
+
+    let(:first_student_submission) { @assignment.submissions.find_by(user: @first_student) }
+    let(:second_student_submission) { @assignment.submissions.find_by(user: @second_student) }
+
+    describe "group_comment argument" do
+      it "is ignored for group assignments grading students as a group (all comments to go to the whole group)" do
+        run_mutation(submission_id: first_student_submission.id, comment: "ohai", group_comment: false)
+        aggregate_failures do
+          expect(first_student_submission.submission_comments.where(comment: "ohai").count).to eq 1
+          expect(second_student_submission.submission_comments.where(comment: "ohai").count).to eq 1
+        end
+      end
+
+      it "is ignored for non-group assignments (all comments go to the individual only)" do
+        @assignment.update!(group_category: nil)
+        run_mutation(submission_id: first_student_submission.id, comment: "ohai", group_comment: true)
+        aggregate_failures do
+          expect(first_student_submission.submission_comments.where(comment: "ohai").count).to eq 1
+          expect(second_student_submission.submission_comments.where(comment: "ohai")).to be_empty
+        end
+      end
+
+      it "sends the comment to the group if group_comment is true, for group assignments grading students individually" do
+        @assignment.update!(grade_group_students_individually: true)
+        run_mutation(submission_id: first_student_submission.id, comment: "ohai", group_comment: true)
+        aggregate_failures do
+          expect(first_student_submission.submission_comments.where(comment: "ohai").count).to eq 1
+          expect(second_student_submission.submission_comments.where(comment: "ohai").count).to eq 1
+        end
+      end
+
+      it "sends the comment to the individual only if group_comment is false, for group assignments grading students individually" do
+        @assignment.update!(grade_group_students_individually: true)
+        run_mutation(submission_id: first_student_submission.id, comment: "ohai", group_comment: false)
+        aggregate_failures do
+          expect(first_student_submission.submission_comments.where(comment: "ohai").count).to eq 1
+          expect(second_student_submission.submission_comments.where(comment: "ohai")).to be_empty
+        end
+      end
     end
   end
 end

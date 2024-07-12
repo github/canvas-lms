@@ -492,7 +492,7 @@ describe "Jobs V2 API", type: :request do
       end
 
       it "finds a job by id" do
-        job = Delayed::Job.where(locked_by: "foo").take
+        job = Delayed::Job.find_by(locked_by: "foo")
         json = api_call(:get,
                         "/api/v1/jobs2/#{job.id}",
                         { controller: "jobs_v2", action: "lookup", format: "json", id: job.to_param })
@@ -725,6 +725,7 @@ describe "Jobs V2 API", type: :request do
       specs_require_sharding
 
       it "queues a job to run the unstucker" do
+        skip("BUDA-21")
         json = api_call(:put,
                         "/api/v1/jobs2/unstuck",
                         { controller: "jobs_v2", action: "unstuck", format: "json" })

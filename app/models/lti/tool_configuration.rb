@@ -31,15 +31,17 @@ module Lti
 
     validates :developer_key_id, :settings, presence: true
     validates :developer_key_id, uniqueness: true
-    validate :valid_configuration?, unless: proc { |c| c.developer_key_id.blank? || c.settings.blank? }
-    validate :valid_placements
+    validate :validate_configuration, unless: proc { |c| c.developer_key_id.blank? || c.settings.blank? }
+    validate :validate_placements
+    validate :validate_oidc_initiation_urls
 
-    attr_accessor :configuration_url, :settings_url
+    attr_accessor :settings_url
 
     # settings* was an unfortunate naming choice as there is a settings hash per placement that
     # made it confusing, as well as this being a configuration, not a settings, hash
     alias_attribute :configuration, :settings
-    alias_attribute :configuration_url, :settings_url
+    alias_method :configuration_url, :settings_url
+    alias_method :configuration_url=, :settings_url=
 
     def new_external_tool(context, existing_tool: nil)
       # disabled tools should stay disabled while getting updated
@@ -111,6 +113,32 @@ module Lti
       configuration["extensions"]&.find { |e| e["platform"] == CANVAS_EXTENSION_LABEL }&.dig("settings", "placements")&.deep_dup || []
     end
 
+    def domain
+      return [] if configuration.blank?
+
+      configuration["extensions"]&.find { |e| e["platform"] == CANVAS_EXTENSION_LABEL }&.dig("domain") || ""
+    end
+
+    # @return [String | nil] A warning message about any disallowed placements
+    def verify_placements
+      placements_to_verify = placements.filter_map { |p| p["placement"] if Lti::ResourcePlacement::RESTRICTED_PLACEMENTS.include? p["placement"].to_sym }
+      return unless placements_to_verify.present? && Account.site_admin.feature_enabled?(:lti_placement_restrictions)
+
+      # This is a candidate for a deduplication with the same logic in app/models/context_external_tool.rb#placement_allowed?
+      placements_to_verify.each do |placement|
+        allowed_domains = Setting.get("#{placement}_allowed_launch_domains", "").split(",").map(&:strip).reject(&:empty?)
+        allowed_dev_keys = Setting.get("#{placement}_allowed_dev_keys", "").split(",").map(&:strip).reject(&:empty?)
+        next if allowed_domains.include?(domain) || allowed_dev_keys.include?(Shard.global_id_for(developer_key_id).to_s)
+
+        return t(
+          "Warning: the %{placement} placement is only allowed for Instructure approved LTI tools. If you believe you have received this message in error, please contact your support team.",
+          placement:
+        )
+      end
+
+      nil
+    end
+
     private
 
     def self.retrieve_and_extract_configuration(url)
@@ -140,7 +168,7 @@ module Lti
       developer_key.update_external_tools!
     end
 
-    def valid_configuration?
+    def validate_configuration
       if configuration["public_jwk"].blank? && configuration["public_jwk_url"].blank?
         errors.add(:lti_key, "tool configuration must have public jwk or public jwk url")
       end
@@ -158,11 +186,32 @@ module Lti
       end
     end
 
-    def valid_placements
+    def validate_placements
+      placements.each do |p|
+        unless Lti::ResourcePlacement.supported_message_type?(p["placement"], p["message_type"])
+          errors.add(:placements, "Placement #{p["placement"]} does not support message type #{p["message_type"]}")
+        end
+      end
+
       return if disabled_placements.blank?
 
       invalid = disabled_placements.reject { |p| Lti::ResourcePlacement::PLACEMENTS.include?(p.to_sym) }
       errors.add(:disabled_placements, "Invalid placements: #{invalid.join(", ")}") if invalid.present?
+    end
+
+    def validate_oidc_initiation_urls
+      urls_hash = configuration&.dig("oidc_initiation_urls")
+      return unless urls_hash.is_a?(Hash)
+
+      urls_hash.each_value do |url|
+        if url.is_a?(String)
+          CanvasHttp.validate_url(url, allowed_schemes: nil)
+        else
+          errors.add(:configuration, "oidc_initiation_urls must be strings")
+        end
+      end
+    rescue CanvasHttp::Error, URI::Error, ArgumentError
+      errors.add(:configuration, "oidc_initiation_urls must be valid urls")
     end
 
     def importable_configuration

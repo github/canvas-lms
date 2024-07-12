@@ -136,6 +136,8 @@
       delay_for: <%= 5*60 %>
     - name: Assignment Created
       delay_for: 0
+    - name: Checkpoints Created
+      delay_for: 0
     - name: Assignment Due Date Override Changed
       delay_for: <%= 2*60 %>
     - name: Upcoming Assignment Alert
@@ -263,6 +265,8 @@
     - name: Enrollment Notification
       delay_for: 0
     - name: Manually Created Access Token Created
+      delay_for: 0
+    - name: Account Verification
       delay_for: 0
 
 - category: Student Appointment Signups

@@ -30,12 +30,12 @@ class AccessToken < ActiveRecord::Base
   attr_reader :full_token
   attr_reader :plaintext_refresh_token
 
-  belongs_to :developer_key, counter_cache: :access_token_count
+  belongs_to :developer_key
   belongs_to :user, inverse_of: :access_tokens
   belongs_to :real_user, inverse_of: :masquerade_tokens, class_name: "User"
   has_one :account, through: :developer_key
 
-  serialize :scopes, Array
+  serialize :scopes, type: Array
 
   validates :purpose, length: { maximum: maximum_string_length }
   validate :must_only_include_valid_scopes, unless: :deleted?
@@ -56,6 +56,21 @@ class AccessToken < ActiveRecord::Base
     end
   end
 
+  set_policy do
+    given do |user|
+      !user.account.feature_enabled?(:admin_manage_access_tokens) ||
+        !user.account.limit_personal_access_tokens? ||
+        self.user.check_accounts_right?(user, :manage_access_tokens)
+    end
+    can :create and can :update
+
+    given { |user| user.id == user_id }
+    can :delete
+
+    given { |user| self.user.check_accounts_right?(user, :manage_access_tokens) }
+    can :delete
+  end
+
   # For user-generated tokens, purpose can be manually set.
   # For app-generated tokens, this should be generated based
   # on the scope defined in the auth process (scope has not
@@ -65,15 +80,12 @@ class AccessToken < ActiveRecord::Base
   scope :not_deleted, -> { where(workflow_state: "active") }
 
   TOKEN_SIZE = 64
-  TOKEN_TYPES = OpenStruct.new(
-    {
-      crypted_token: :crypted_token,
-      crypted_refresh_token: :crypted_refresh_token
-    }
-  )
+  TOKEN_TYPES = [:crypted_token, :crypted_refresh_token].freeze
+  HINT_LENGTH = 5
 
   before_create :generate_token
   before_create :generate_refresh_token
+  after_create :queue_developer_key_token_count_increment
 
   alias_method :destroy_permanently!, :destroy
   def destroy
@@ -90,7 +102,7 @@ class AccessToken < ActiveRecord::Base
     token = access_token || not_deleted.where(token_key => hashed_tokens).first
     if token && token.send(token_key) != hashed_tokens.first
       # we found the token but, its hashed using an old key. save the updated hash
-      token.send("#{token_key}=", hashed_tokens.first)
+      token.send(:"#{token_key}=", hashed_tokens.first)
       token.save!
     end
     token = nil unless token&.usable?(token_key)
@@ -107,6 +119,13 @@ class AccessToken < ActiveRecord::Base
     # However, what we're essentially looking for is a hash of the token
     # "signed" or concatenated with the secret encryption key, so this is perfect.
     Canvas::Security.hmac_sha1(token, key)
+  end
+
+  # @return [String, false]
+  #   the de-mangled token hint that should match the database if the id is a
+  #   valid token hint, false otherwise
+  def self.token_hint?(id)
+    id.is_a?(String) && id.length == HINT_LENGTH && id
   end
 
   def self.all_hashed_tokens(token)
@@ -147,14 +166,39 @@ class AccessToken < ActiveRecord::Base
     Shard.shard_for(global_developer_key_id).default?
   end
 
-  def record_last_used_threshold
-    Setting.get("access_token_last_used_threshold", 10.minutes).to_i
-  end
+  def used!(at: nil)
+    return if last_used_at && last_used_at >= 10.minutes.ago
 
-  def used!
-    if !last_used_at || last_used_at < record_last_used_threshold.seconds.ago
-      self.last_used_at = Time.now.utc
-      save
+    at ||= Time.now.utc
+
+    if Rails.env.production? && !shard.in_current_region? && !Delayed::Job.in_delayed_job?
+      # just choose a random shard in the current region to ensure the job
+      # is queued in the current region
+      Shard.in_current_region.first&.activate do
+        delay(singleton: "update_access_token_last_user/#{global_id}",
+              on_conflict: :loose).used!(at:)
+        return
+      end
+    end
+
+    if changed?
+      self.last_used_at = at
+      save!
+      return
+    end
+
+    # only update if nobody else has touched last_used_at, to avoid multiple
+    # writes for the same interval
+    prior_last_used_at = last_used_at
+    self.last_used_at = at
+
+    shard.activate do
+      # not only use optimistic locking, but also don't update if someone else
+      # is already in the process of updating it
+      updated = AccessToken.where(id: AccessToken.where(id: self, last_used_at: prior_last_used_at)
+                                                 .lock("FOR UPDATE SKIP LOCKED"))
+                           .update_all(last_used_at: at, updated_at: at)
+      changes_applied if updated == 1
     end
   end
 
@@ -173,7 +217,7 @@ class AccessToken < ActiveRecord::Base
   def token=(new_token)
     self.crypted_token = AccessToken.hashed_token(new_token)
     @full_token = new_token
-    self.token_hint = new_token[0, 5]
+    self.token_hint = new_token[0, HINT_LENGTH]
   end
 
   def clear_full_token!
@@ -273,5 +317,30 @@ class AccessToken < ActiveRecord::Base
 
   def manually_created?
     developer_key_id == DeveloperKey.default.id
+  end
+
+  # if user is not provided, all user tokens in the account will be invalidated
+  def self.invalidate_mobile_tokens!(account, user: nil)
+    return unless account.root_account?
+
+    developer_key_ids = DeveloperKey.mobile_app_keys.map do |app_key|
+      app_key.respond_to?(:global_id) ? app_key.global_id : app_key.id
+    end
+    user_ids = if user
+                 [user.id]
+               else
+                 User.active.joins(:pseudonyms).where(pseudonyms: { account_id: account }).ids
+               end
+    tokens = active.where(developer_key_id: developer_key_ids, user_id: user_ids)
+
+    now = Time.zone.now
+    tokens.in_batches(of: 10_000).update_all(updated_at: now, permanent_expires_at: now)
+  end
+
+  def queue_developer_key_token_count_increment
+    developer_key&.shard&.activate do
+      strand = "developer_key_token_count_increment_#{developer_key.global_id}"
+      DeveloperKey.delay_if_production(strand:).increment_counter(:access_token_count, developer_key.id)
+    end
   end
 end

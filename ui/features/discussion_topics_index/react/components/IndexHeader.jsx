@@ -31,26 +31,30 @@ import DiscussionSettings from './DiscussionSettings'
 import {FormField} from '@instructure/ui-form-field'
 import {View} from '@instructure/ui-view'
 import {Flex} from '@instructure/ui-flex'
-import {IconPlusLine, IconSearchLine} from '@instructure/ui-icons'
+import {IconPlusLine} from '@instructure/ui-icons'
 import {PresentationContent, ScreenReaderContent} from '@instructure/ui-a11y-content'
-import {TextInput} from '@instructure/ui-text-input'
 import ReactDOM from 'react-dom'
 import ContentTypeExternalToolTray from '@canvas/trays/react/ContentTypeExternalToolTray'
 import {ltiState} from '@canvas/lti/jquery/messages'
+import {SimpleSelect} from '@instructure/ui-simple-select'
+import WithBreakpoints, {breakpointsShape} from '@canvas/with-breakpoints'
+import {HeadingMenu} from '@canvas/discussions/react/components/HeadingMenu'
+import {SearchField} from '@canvas/discussions/react/components/SearchField'
 
 const I18n = useI18nScope('discussions_v2')
 
-const filters = {
-  all: I18n.t('All'),
-  unread: I18n.t('Unread'),
-}
-
-const SEARCH_DELAY = 350
+const instUINavEnabled = () => window.ENV?.FEATURES?.instui_nav
+const SEARCH_DELAY = 750
+const getFilters = () => ({
+  all: instUINavEnabled() ? I18n.t('All Discussions') : I18n.t('All'),
+  unread: instUINavEnabled() ? I18n.t('Unread Discussions') : I18n.t('Unread'),
+})
 
 export default class IndexHeader extends Component {
   static propTypes = {
-    contextId: string.isRequired,
-    contextType: string.isRequired,
+    breakpoints: breakpointsShape.isRequired,
+    contextId: string,
+    contextType: string,
     courseSettings: propTypes.courseSettings,
     discussionTopicIndexMenuTools: arrayOf(propTypes.discussionTopicMenuTools),
     fetchCourseSettings: func.isRequired,
@@ -62,14 +66,16 @@ export default class IndexHeader extends Component {
     searchDiscussions: func.isRequired,
     toggleModalOpen: func.isRequired,
     userSettings: propTypes.userSettings.isRequired,
+    searchInputRef: func,
   }
 
   static defaultProps = {
+    searchInputRef: null,
     courseSettings: {},
+    breakpoints: {},
   }
 
   state = {
-    searchTerm: '',
     filter: 'all',
   }
 
@@ -80,52 +86,47 @@ export default class IndexHeader extends Component {
     }
   }
 
-  onSearchStringChange = e => {
-    this.setState({searchTerm: e.target.value}, this.filterDiscussions)
+  onFilterChange = data => {
+    this.setState({filter: data.value}, this.props.searchDiscussions({filter: data.value}))
   }
 
-  onFilterChange = e => {
-    this.setState({filter: e.target.value}, this.filterDiscussions)
+  onSearchChange = data => {
+    this.props.searchDiscussions({searchTerm: data.searchTerm})
   }
-
-  // This is needed to make the search results do not keep cutting each
-  // other off when typing fasting and using a screen reader
-  filterDiscussions = debounce(() => this.props.searchDiscussions(this.state), SEARCH_DELAY, {
-    leading: false,
-    trailing: true,
-  })
 
   renderTrayToolsMenu = () => {
     if (this.props.discussionTopicIndexMenuTools?.length > 0) {
       return (
-        <div className="inline-block">
-          {/* TODO: use InstUI button */}
-          {/* eslint-disable-next-line jsx-a11y/anchor-is-valid */}
-          <a
-            className="al-trigger btn"
-            id="discussion_menu_link"
-            role="button"
-            tabIndex="0"
-            title={I18n.t('Discussions Menu')}
-            aria-label={I18n.t('Discussions Menu')}
-          >
-            <i className="icon-more" aria-hidden="true" />
-            <span className="screenreader-only">{I18n.t('Discussions Menu')}</span>
-          </a>
-          <ul className="al-options" role="menu">
-            {this.props.discussionTopicIndexMenuTools.map(tool => (
-              <li key={tool.id} role="menuitem">
-                {/* TODO: use InstUI button */}
-                {/* eslint-disable-next-line jsx-a11y/anchor-is-valid */}
-                <a aria-label={tool.title} href="#" onClick={this.onLaunchTrayTool(tool)}>
-                  {this.iconForTrayTool(tool)}
-                  {tool.title}
-                </a>
-              </li>
-            ))}
-          </ul>
-          <div id="external-tool-mount-point" />
-        </div>
+        <Flex.Item>
+          <div className="inline-block">
+            {/* TODO: use InstUI button */}
+            {/* eslint-disable-next-line jsx-a11y/anchor-is-valid */}
+            <a
+              className="al-trigger btn"
+              id="discussion_menu_link"
+              role="button"
+              tabIndex="0"
+              title={I18n.t('Discussions Menu')}
+              aria-label={I18n.t('Discussions Menu')}
+            >
+              <i className="icon-more" aria-hidden="true" />
+              <span className="screenreader-only">{I18n.t('Discussions Menu')}</span>
+            </a>
+            <ul className="al-options" role="menu">
+              {this.props.discussionTopicIndexMenuTools.map(tool => (
+                <li key={tool.id} role="menuitem">
+                  {/* TODO: use InstUI button */}
+                  {/* eslint-disable-next-line jsx-a11y/anchor-is-valid */}
+                  <a aria-label={tool.title} href="#" onClick={this.onLaunchTrayTool(tool)}>
+                    {this.iconForTrayTool(tool)}
+                    {tool.title}
+                  </a>
+                </li>
+              ))}
+            </ul>
+            <div id="external-tool-mount-point" />
+          </div>
+        </Flex.Item>
       )
     }
   }
@@ -134,7 +135,7 @@ export default class IndexHeader extends Component {
     if (tool.canvas_icon_class) {
       return <i className={tool.canvas_icon_class} />
     } else if (tool.icon_url) {
-      return <img className="icon" alt="" src={tool.icon_url} />
+      return <img className="icon lti_tool_icon" alt="" src={tool.icon_url} />
     }
   }
 
@@ -168,72 +169,136 @@ export default class IndexHeader extends Component {
     )
   }
 
-  render() {
+  renderActionButtons() {
+    const buttonsDirection = !instUINavEnabled() ? 'row' : 'row-reverse'
+
     return (
-      <View display="block">
-        <Flex wrap="wrap" justifyItems="end">
-          <Flex.Item shouldGrow={true}>
-            <FormField
-              id="discussion-filter"
-              label={<ScreenReaderContent>{I18n.t('Discussion Filter')}</ScreenReaderContent>}
+      <Flex wrap="no-wrap" direction={buttonsDirection} gap="small" justifyItems="end">
+        {this.props.permissions.create && (
+          <Flex.Item>
+            <Button
+              href={`/${this.props.contextType}s/${this.props.contextId}/discussion_topics/new`}
+              color="primary"
+              id="add_discussion"
+              renderIcon={IconPlusLine}
             >
-              <select
-                id="discussion-filter"
-                name="filter-dropdown"
-                onChange={this.onFilterChange}
-                style={{
-                  margin: '0',
-                  width: '100%',
-                }}
-              >
-                {Object.keys(filters).map(filter => (
-                  <option key={filter} value={filter}>
-                    {filters[filter]}
-                  </option>
-                ))}
-              </select>
-            </FormField>
+              <ScreenReaderContent>{I18n.t('Add discussion')}</ScreenReaderContent>
+              <PresentationContent>{I18n.t('Discussion')}</PresentationContent>
+            </Button>
           </Flex.Item>
-          <Flex.Item shouldGrow={true} margin="0 0 0 small">
-            <TextInput
-              renderLabel={
-                <ScreenReaderContent>{I18n.t('Search discussion by title')}</ScreenReaderContent>
-              }
-              placeholder={I18n.t('Search by title or author...')}
-              renderAfterInput={() => <IconSearchLine />}
-              onChange={this.onSearchStringChange}
-              name="discussion_search"
+        )}
+        {Object.keys(this.props.userSettings).length ? (
+          <Flex.Item>
+            <DiscussionSettings
+              courseSettings={this.props.courseSettings}
+              userSettings={this.props.userSettings}
+              permissions={this.props.permissions}
+              saveSettings={this.props.saveSettings}
+              toggleModalOpen={this.props.toggleModalOpen}
+              isSettingsModalOpen={this.props.isSettingsModalOpen}
+              isSavingSettings={this.props.isSavingSettings}
             />
           </Flex.Item>
-          <Flex.Item margin="0 0 0 small">
-            {this.props.permissions.create && (
-              <Button
-                href={`/${this.props.contextType}s/${this.props.contextId}/discussion_topics/new`}
-                color="primary"
-                id="add_discussion"
+        ) : null}
+        {this.renderTrayToolsMenu()}
+      </Flex>
+    )
+  }
+
+  renderOldHeader(breakpoints) {
+    const ddSize = breakpoints.desktopOnly ? '100px' : '100%'
+    const containerSize = breakpoints.tablet ? 'auto' : '100%'
+    const {searchInputRef, searchDiscussions} = this.props
+
+    return (
+      <View>
+        <View margin="0 0 medium" display="block" data-testid="discussions-index-container">
+          <Flex wrap="wrap" justifyItems="end" gap="small">
+            <Flex.Item size={ddSize} shouldGrow={true} shouldShrink={true}>
+              <FormField
+                id="discussion-filter"
+                label={<ScreenReaderContent>{I18n.t('Discussion Filter')}</ScreenReaderContent>}
               >
-                <IconPlusLine />
-                <ScreenReaderContent>{I18n.t('Add discussion')}</ScreenReaderContent>
-                <PresentationContent>{I18n.t('Discussion')}</PresentationContent>
-              </Button>
-            )}
-            &nbsp;
-            {Object.keys(this.props.userSettings).length ? (
-              <DiscussionSettings
-                courseSettings={this.props.courseSettings}
-                userSettings={this.props.userSettings}
-                permissions={this.props.permissions}
-                saveSettings={this.props.saveSettings}
-                toggleModalOpen={this.props.toggleModalOpen}
-                isSettingsModalOpen={this.props.isSettingsModalOpen}
-                isSavingSettings={this.props.isSavingSettings}
+                <SimpleSelect
+                  renderLabel=""
+                  id="discussion-filter"
+                  name="filter-dropdown"
+                  onChange={(_e, data) =>
+                    this.setState(
+                      {filter: data.value},
+                      debounce(() => this.props.searchDiscussions(this.state), SEARCH_DELAY, {
+                        leading: false,
+                        trailing: true,
+                      })
+                    )
+                  }
+                >
+                  {Object.keys(getFilters()).map(filter => (
+                    <SimpleSelect.Option key={filter} id={filter} value={filter}>
+                      {getFilters()[filter]}
+                    </SimpleSelect.Option>
+                  ))}
+                </SimpleSelect>
+              </FormField>
+            </Flex.Item>
+            <Flex.Item size={containerSize} shouldGrow={true} shouldShrink={true} margin="0">
+              <SearchField
+                name="discussion_search"
+                searchInputRef={searchInputRef}
+                onSearchEvent={searchDiscussions}
               />
-            ) : null}
-            &nbsp;
-            {this.renderTrayToolsMenu()}
-          </Flex.Item>
-        </Flex>
+            </Flex.Item>
+            <Flex.Item>{this.renderActionButtons()}</Flex.Item>
+          </Flex>
+        </View>
       </View>
+    )
+  }
+
+  render() {
+    const {breakpoints, searchInputRef} = this.props
+    const containerSize = breakpoints.tablet ? 'auto' : '100%'
+
+    if (!instUINavEnabled()) {
+      return this.renderOldHeader(breakpoints)
+    }
+
+    let flexBasis = 'auto'
+    let flexDirection = 'row'
+    let headerShrink = false
+
+    if (breakpoints.mobileOnly) {
+      flexBasis = '100%'
+      flexDirection = 'column-reverse'
+      headerShrink = true
+    }
+
+    return (
+      <Flex direction="column" as="div" gap="medium">
+        <Flex.Item dmargin="0 0 large" overflow="hidden">
+          <Flex as="div" direction="row" justifyItems="space-between" wrap="wrap" gap="small">
+            <Flex.Item width={flexBasis} shouldGrow={true} shouldShrink={headerShrink}>
+              <HeadingMenu
+                name={I18n.t('Discussion Filter')}
+                filters={getFilters()}
+                defaultSelectedFilter="all"
+                onSelectFilter={this.onFilterChange}
+              />
+            </Flex.Item>
+            <Flex.Item width={flexBasis} overflowX="hidden" overflowY="hidden">
+              <Flex direction={flexDirection}>
+                <Flex.Item size={containerSize}>{this.renderActionButtons()}</Flex.Item>
+              </Flex>
+            </Flex.Item>
+          </Flex>
+        </Flex.Item>
+        <SearchField
+          name="discussion_search"
+          searchInputRef={searchInputRef}
+          onSearchEvent={this.onSearchChange}
+        />
+        <Flex.Item margin="large 0 0 0" />
+      </Flex>
     )
   }
 }
@@ -258,4 +323,6 @@ const selectedActions = [
   'toggleModalOpen',
 ]
 const connectActions = dispatch => bindActionCreators(select(actions, selectedActions), dispatch)
-export const ConnectedIndexHeader = connect(connectState, connectActions)(IndexHeader)
+export const ConnectedIndexHeader = WithBreakpoints(
+  connect(connectState, connectActions)(IndexHeader)
+)

@@ -19,12 +19,11 @@
 
 import React from 'react'
 import {ReactNodeLike} from 'prop-types'
-import {Flex} from '@instructure/ui-flex'
 import {Heading} from '@instructure/ui-heading'
 import {CloseButton} from '@instructure/ui-buttons'
 import {View} from '@instructure/ui-view'
 import {Modal} from '@instructure/ui-modal'
-import formatMessage from 'format-message'
+import formatMessage from '../../../../../format-message'
 import {ModalProps} from '@instructure/ui-modal/types'
 
 export function ExternalToolDialogModal(
@@ -45,14 +44,13 @@ export function ExternalToolDialogModal(
       mountNode={props.mountNode}
     >
       <Modal.Header>
-        <Flex>
-          <Flex.Item grow={true}>
-            <Heading>{props.name}</Heading>
-          </Flex.Item>
-          <Flex.Item>
-            <CloseButton onClick={props.onCloseButton} screenReaderLabel={formatMessage('Close')} />
-          </Flex.Item>
-        </Flex>
+        <Heading>{props.name}</Heading>
+        <CloseButton
+          placement="end"
+          offset="medium"
+          onClick={props.onCloseButton}
+          screenReaderLabel={formatMessage('Close')}
+        />
       </Modal.Header>
       <Modal.Body padding="0">
         <View as="div" height="100%">

@@ -18,6 +18,7 @@
  */
 
 import React, {MouseEvent, useState, useRef, useEffect} from 'react'
+import {AccessibleContent} from '@instructure/ui-a11y-content'
 import {Popover} from '@instructure/ui-popover'
 import {Button} from '@instructure/ui-buttons'
 import {Menu} from '@instructure/ui-menu'
@@ -27,12 +28,10 @@ import {View} from '@instructure/ui-view'
 import {Flex} from '@instructure/ui-flex'
 import {Tooltip} from '@instructure/ui-tooltip'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import {unescape} from 'html-escape'
+import {unescape} from '@instructure/html-escape'
 import type {FilterDrilldownData, FilterDrilldownMenuItem} from '../gradebook.d'
 
 const I18n = useI18nScope('gradebook')
-
-const {Group: MenuGroup, Item: MenuItem, Separator: MenuSeparator} = Menu as any
 
 type Props = {
   rootId?: string
@@ -41,6 +40,7 @@ type Props = {
   filterItems: FilterDrilldownData
   changeAnnouncement: (filterAnnouncement) => void
   applyFiltersButtonRef: React.RefObject<HTMLButtonElement>
+  multiselectGradebookFiltersEnabled?: boolean
 }
 
 const TruncateWithTooltip = ({children}: {children: React.ReactNode}) => {
@@ -65,10 +65,11 @@ const FilterDropdown = ({
   filterItems,
   changeAnnouncement,
   applyFiltersButtonRef,
+  multiselectGradebookFiltersEnabled = false,
 }: Props) => {
   const [currentItemId, setTempItemId] = useState<string>(rootId)
   const [isOpen, setIsOpen] = useState(false)
-  const menuRef = useRef<HTMLElement>()
+  const menuRef = useRef<HTMLElement | null>(null)
   const currentObj = dataMap[currentItemId]
 
   const items = currentObj?.items?.concat() || []
@@ -118,7 +119,7 @@ const FilterDropdown = ({
   }
 
   const backButton = (
-    <MenuItem
+    <Menu.Item
       as="div"
       data-testid="back-button"
       onClick={() => {
@@ -131,7 +132,7 @@ const FilterDropdown = ({
         </View>
         {I18n.t('Back')}
       </Flex>
-    </MenuItem>
+    </Menu.Item>
   )
 
   return (
@@ -168,7 +169,7 @@ const FilterDropdown = ({
             onKeyDown={handleTabbingOut}
           >
             {items.length > 0 && (
-              <MenuGroup
+              <Menu.Group
                 label={I18n.t('Saved Filter Presets')}
                 onSelect={(_event: MouseEvent, updated: [number, ...number[]]) => {
                   items[updated[0]].onToggle?.()
@@ -177,15 +178,15 @@ const FilterDropdown = ({
               >
                 {items.map(a => {
                   return (
-                    <MenuItem key={a.id} as="div" data-testid={`${a.name}-enable-preset`}>
-                      <TruncateText position="middle">{a.name}</TruncateText>
-                    </MenuItem>
+                    <Menu.Item key={a.id} as="div" data-testid={`${a.name}-enable-preset`}>
+                      <TruncateWithTooltip position="middle">{a.name}</TruncateWithTooltip>
+                    </Menu.Item>
                   )
                 })}
-              </MenuGroup>
+              </Menu.Group>
             )}
 
-            <MenuItem
+            <Menu.Item
               as="div"
               data-testid="manage-filter-presets-button"
               onSelect={() => {
@@ -194,14 +195,20 @@ const FilterDropdown = ({
               }}
             >
               <TruncateText>{I18n.t('Create & Manage Filter Presets')}</TruncateText>
-            </MenuItem>
+            </Menu.Item>
 
-            <MenuSeparator />
+            <Menu.Separator />
 
-            <MenuGroup label={I18n.t('Filters')} selected={selectedFilterIndices}>
+            <Menu.Group
+              label={I18n.t('Filters')}
+              selected={selectedFilterIndices}
+              onSelect={() => {
+                // noop
+              }}
+            >
               {Object.values(filterItems).map((item: FilterDrilldownMenuItem) => {
                 return (
-                  <MenuItem
+                  <Menu.Item
                     key={item.id}
                     as="div"
                     onSelect={() => {
@@ -222,10 +229,10 @@ const FilterDropdown = ({
                         </View>
                       )}
                     </Flex>
-                  </MenuItem>
+                  </Menu.Item>
                 )
               })}
-            </MenuGroup>
+            </Menu.Group>
           </Menu>
         )}
 
@@ -239,9 +246,9 @@ const FilterDropdown = ({
             {backButton}
 
             {sortedItemGroups.length > 0 && (
-              <MenuGroup label={currentObj.name}>
-                <MenuSeparator />
-              </MenuGroup>
+              <Menu.Group label={currentObj.name}>
+                <Menu.Separator />
+              </Menu.Group>
             )}
 
             {sortedItemGroups.length > 0 &&
@@ -254,11 +261,16 @@ const FilterDropdown = ({
                 }, [])
 
                 return (
-                  <MenuGroup
+                  <Menu.Group
+                    allowMultiple={multiselectGradebookFiltersEnabled}
                     key={itemGroup.id}
                     label={itemGroup.name}
                     selected={selectedIndices2}
                     onSelect={(_event, updated) => {
+                      if (multiselectGradebookFiltersEnabled) {
+                        return
+                      }
+
                       itemGroup.items[updated[0]].onToggle()
                     }}
                   >
@@ -267,22 +279,38 @@ const FilterDropdown = ({
                       // (-_-)
                       const unescapedName = unescape(item.name)
                       return (
-                        <MenuItem data-testid={`${item.name}-sorted-filter`} key={item.id} as="div">
+                        <Menu.Item
+                          data-testid={`${item.name}-sorted-filter`}
+                          key={item.id}
+                          as="div"
+                          onSelect={() => {
+                            if (!multiselectGradebookFiltersEnabled) {
+                              return
+                            }
+
+                            item.onToggle()
+                          }}
+                        >
                           <Flex as="div" justifyItems="space-between">
                             <TruncateText position="middle">{unescapedName}</TruncateText>
                           </Flex>
-                        </MenuItem>
+                        </Menu.Item>
                       )
                     })}
-                  </MenuGroup>
+                  </Menu.Group>
                 )
               })}
 
             {items.length > 0 && (
-              <MenuGroup
+              <Menu.Group
+                allowMultiple={multiselectGradebookFiltersEnabled}
                 label={currentObj.name}
                 selected={selectedIndices}
                 onSelect={(_event: MouseEvent, updated: [number, ...number[]]) => {
+                  if (multiselectGradebookFiltersEnabled) {
+                    return
+                  }
+
                   if (items[updated[0]].isSelected) {
                     changeAnnouncement(
                       I18n.t('Removed %{filterName} Filter', {filterName: items[updated[0]].name})
@@ -295,15 +323,38 @@ const FilterDropdown = ({
                   items[updated[0]].onToggle?.()
                 }}
               >
-                <MenuSeparator />
-                {items.map(a => {
+                <Menu.Separator />
+                {items.map(item => {
                   return (
-                    <MenuItem data-testid={`${a.name}-filter`} key={a.id} as="div">
-                      <TruncateWithTooltip>{a.name}</TruncateWithTooltip>
-                    </MenuItem>
+                    <Menu.Item
+                      data-testid={`${item.name}-filter`}
+                      key={item.id}
+                      as="div"
+                      onSelect={() => {
+                        if (!multiselectGradebookFiltersEnabled) {
+                          return
+                        }
+
+                        if (item.isSelected) {
+                          changeAnnouncement(
+                            I18n.t('Removed %{filterName} Filter', {filterName: item.name})
+                          )
+                        } else {
+                          changeAnnouncement(
+                            I18n.t('Added %{filterName} Filter', {filterName: item.name})
+                          )
+                        }
+
+                        item.onToggle?.()
+                      }}
+                    >
+                      <AccessibleContent alt={item.name}>
+                        <TruncateWithTooltip>{item.name}</TruncateWithTooltip>
+                      </AccessibleContent>
+                    </Menu.Item>
                   )
                 })}
-              </MenuGroup>
+              </Menu.Group>
             )}
           </Menu>
         )}

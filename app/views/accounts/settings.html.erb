@@ -15,7 +15,6 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
   set_active_tab "settings"
-  add_crumb t(:settings_crumb, "Settings")
   js_bundle :account_settings
   css_bundle :account_settings, :reports, :tinymce
   provide :page_title, t(:page_title, "Account Settings")
@@ -58,9 +57,6 @@
   <ul>
     <% if can_do(@context, @current_user, :manage_account_settings) %>
     <li><a href="#tab-settings" id="tab-settings-link"><%= t(:tab_settings, "Settings") %></a></li>
-    <% end %>
-    <% if can_do(@account, @current_user, :manage_privacy_settings) %>
-    <li><a href="#tab-privacy" id="tab-privacy-link"><%= t(:tab_privacy, "Privacy") %></a></li>
     <% end %>
     <% if can_do(@context, @current_user, :manage_storage_quotas) %>
     <li><a href="#tab-quotas" id="tab-quotas-link"><%= t(:tab_quotas, "Quotas") %></a></li>
@@ -396,6 +392,18 @@
                   </tr>
                 <% end %>
 
+                <% if Account.site_admin.feature_enabled?(:observer_appointment_groups) %>
+                  <%= settings.fields_for :allow_observers_in_appointment_groups do |r| %>
+                    <% hash = @account.allow_observers_in_appointment_groups %>
+                    <tr>
+                      <td colspan="2">
+                        <%= r.check_box :value, checked: hash[:value] %>
+                        <%= r.label :value, t("Allow observers to sign-up for appointments when enabled by the teacher") %>
+                      </td>
+                    </tr>
+                  <% end %>
+                <% end %>
+
                 <% if Account.site_admin.feature_enabled?(:gradebook_show_first_last_names) %>
                   <%= settings.fields_for :allow_gradebook_show_first_last_names do |r| %>
                     <% hash = @account.allow_gradebook_show_first_last_names %>
@@ -416,6 +424,15 @@
                     </td>
                   </tr>
                 <% end %>
+
+                <% if !@account.site_admin? && @account.primary_settings_root_account? && @account.feature_enabled?(:admin_manage_access_tokens)%>
+                  <tr>
+                    <td colspan="2">
+                      <%= settings.check_box :limit_personal_access_tokens, checked: @account.limit_personal_access_tokens? %>
+                      <%= settings.label :limit_personal_access_tokens, t("Limit personal access token creation to Admins.") %>
+                    </td>
+                  </tr>
+                <% end%>
               <% end %>
             <% end %>
           </table>
@@ -437,22 +454,45 @@
             <% end %>
           </fieldset>
         <% end %>
-        <% if !@account.site_admin? && @account.primary_settings_root_account? %>
+        <% if @account.primary_settings_root_account? %>
           <fieldset>
-            <legend><%= t("Personal Pronouns") %></legend>
+            <legend><%= t("Personal Profile Settings") %></legend>
             <%= f.fields_for :settings do |settings| %>
-              <%= settings.check_box :can_add_pronouns, :checked => @account.settings[:can_add_pronouns], class: "element_toggler", "aria-controls": "personal_pronouns_options" %>
-              <%= settings.label :can_add_pronouns, en: "Enable Personal Pronouns" %>
-              <div id="personal_pronouns_options" <%= hidden(true) unless @account.settings[:can_add_pronouns] %>>
-                <%= settings.check_box :can_change_pronouns, :checked => @account.can_change_pronouns? %>
-                <%= settings.label :can_change_pronouns, en: "Allow users to change their pronouns in Canvas" %>
-                <% js_env(PRONOUNS_LIST: ((@account.pronouns.presence || Pronouns.default_pronouns)))
-                js_bundle :available_pronouns_list %>
+              <% if @account.grants_right?(@current_user, :manage_site_settings) %>
+                <div>
+                  <%= settings.check_box :enable_profiles, :checked => @account.settings[:enable_profiles] %>
+                  <%= settings.label :enable_profiles, :en => "Enable Profiles" %>
+                </div>
+              <% end %>
+              <% if !@account.site_admin? && @account.root_account? %>
+                <div>
+                  <%= settings.check_box :enable_name_pronunciation, :checked => @account.enable_name_pronunciation? %>
+                  <%= settings.label :enable_name_pronunciation, :en => "Enable name pronunciation" %>
+                </div>
+              <% end %>
+              <% if !@account.site_admin?  %>
+                <%= settings.check_box :can_add_pronouns, :checked => @account.settings[:can_add_pronouns], class: "element_toggler", "aria-controls": "personal_pronouns_options" %>
+                <%= settings.label :can_add_pronouns, en: "Enable Personal Pronouns" %>
+                <div id="personal_pronouns_options" <%= hidden(true) unless @account.settings[:can_add_pronouns] %>>
+                  <div id="change_personal_pronouns">
+                    <%= settings.check_box :can_change_pronouns, :checked => @account.can_change_pronouns? %>
+                    <%= settings.label :can_change_pronouns, en: "Allow users to change their pronouns in Canvas" %>
+                  </div>
+                    <% js_env(PRONOUNS_LIST: ((@account.pronouns.presence || Pronouns.default_pronouns)))
+                    js_bundle :available_pronouns_list %>
+                </div>
+              <% end %>
+              <div>
+                <%= settings.check_box :users_can_edit_name, :checked => @account.users_can_edit_name? %>
+                <%= settings.label :users_can_edit_name, :en => "Users can edit their name" %>
+              </div>
+              <div>
+                <%= settings.check_box :users_can_edit_profile, :checked => @account.users_can_edit_profile? %>
+                <%= settings.label :users_can_edit_profile, :en => "Users can edit their profile" %>
               </div>
             <% end %>
           </fieldset>
         <% end %>
-
         <% if !@account.site_admin? && @account.root_account? && @account.grants_right?(@current_user, :manage_site_settings) %>
           <% TermsOfService.ensure_terms_for_account(@account) %>
           <% js_bundle :terms_of_service_modal%>
@@ -646,17 +686,11 @@
                   <%= settings.label :show_scheduler, :en => "Enable Scheduler" %>
                 </div>
                 <div>
-                  <%= settings.check_box :enable_profiles, :checked => @account.settings[:enable_profiles] %>
-                  <%= settings.label :enable_profiles, :en => "Enable Profiles" %>
-                </div>
-                <div>
                   <%= settings.check_box :limit_parent_app_web_access, :checked => @account.settings[:limit_parent_app_web_access] %>
                   <%= settings.label :limit_parent_app_web_access, :en => "Limit access to Canvas web from the Canvas Parent app" %>
                 </div>
               <% end %>
               <%# end of :manage_site_settings %>
-
-
               <div>
                 <%= settings.check_box :sub_account_includes, checked: @account.settings[:sub_account_includes] %>
                 <%= settings.label :sub_account_includes, :en => "Let sub-accounts use the Theme Editor to customize their own branding" %>
@@ -682,19 +716,40 @@
                   <% end %>
                 </div>
               <% end %>
-              <div>
-                <%= settings.check_box :users_can_edit_name, :checked => @account.users_can_edit_name? %>
-                <%= settings.label :users_can_edit_name, :en => "Users can edit their name" %>
-              </div>
-              <div>
-                <%= settings.check_box :users_can_edit_profile, :checked => @account.users_can_edit_profile? %>
-                <%= settings.label :users_can_edit_profile, :en => "Users can edit their profile" %>
-              </div>
+              <% if !@account.site_admin? && @account.root_account? && Account.site_admin.feature_enabled?(:inbox_settings) %>
+                <table>
+                  <% inbox_signature_block_enabled = @account.enable_inbox_signature_block? %>
+                  <tr>
+                    <td colspan="2">
+                      <%= settings.check_box :enable_inbox_signature_block, :checked => inbox_signature_block_enabled %>
+                      <%= settings.label     :enable_inbox_signature_block, :en => "Enable Inbox Signature Block" %>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colspan="2" class="sub_checkbox">
+                      <%= settings.check_box :disable_inbox_signature_block_for_students, :checked => @account.disable_inbox_signature_block_for_students?, :disabled => !inbox_signature_block_enabled %>
+                      <%= settings.label     :disable_inbox_signature_block_for_students, :en => "Disable Inbox Signature Block for Students" %>
+                    </td>
+                  </tr>
+                  <% inbox_auto_response_enabled = @account.enable_inbox_auto_response? %>
+                  <tr>
+                    <td colspan="2">
+                      <%= settings.check_box :enable_inbox_auto_response, :checked => inbox_auto_response_enabled %>
+                      <%= settings.label     :enable_inbox_auto_response, :en => "Enable Inbox Auto Response" %>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colspan="2" class="sub_checkbox">
+                      <%= settings.check_box :disable_inbox_auto_response_for_students, :checked => @account.disable_inbox_auto_response_for_students?, :disabled => !inbox_auto_response_enabled %>
+                      <%= settings.label     :disable_inbox_auto_response_for_students, :en => "Disable Inbox Auto Response for Students" %>
+                    </td>
+                  </tr>
+                </table>
+              <% end %>
               <div>
                 <%= settings.check_box :users_can_edit_comm_channels, :checked => @account.users_can_edit_comm_channels? %>
                 <%= settings.label :users_can_edit_comm_channels, :en => "Users can edit their communication channels" %>
               </div>
-
               <div>
                 <%= settings.check_box :edit_institution_email, :checked => @account.edit_institution_email? %>
                 <%= settings.label     :edit_institution_email, :en => "Users can delete their institution-assigned email address" %>
@@ -912,14 +967,10 @@ acknowledge that you have read and agreed to the
                 disabled.concat([0, nil]) unless @account.course_template_id == 0 || @account.grants_any_right?(@current_user, :delete_course_template, :edit_course_template)
               end
 
-              visible_templates = @account.
-                root_account.
-                all_courses.
-                templates.
-                limit(Setting.get('max_visible_course_templates', 25).to_i).
-                order(Course.best_unicode_collation_key('courses.name')).
-                pluck(:name, :id)
-              if @account.course_template_id && !visible_templates.find { |_, id| @account.course_template_id == id }
+              visible_templates = @account.root_account.all_courses.templates
+                                          .order(Course.best_unicode_collation_key('courses.name'))
+                                          .pluck(:name, :id)
+              if @account.course_template_id && !@account.course_template_id.zero?  && !visible_templates.find { |_, id| @account.course_template_id == id }
                 visible_templates.unshift([@account.course_template.name, @account.course_template_id])
               end
               options.concat(visible_templates)
@@ -993,33 +1044,11 @@ acknowledge that you have read and agreed to the
           </fieldset>
         <% end %>
 
-        <div class="button-container">
-          <button type="submit" class="Button Button--primary"><%= t(:update_settings_button, "Update Settings") %></button>
-        </div>
-      <% end %>
-    </div>
-  <% end %>
-
-  <% if can_do(@account, @current_user, :manage_privacy_settings) %>
-    <div id="tab-privacy">
-      <h2 class="screenreader-only"><%= t('headings.privacy', "Privacy") %></h2>
-      <%= form_for(:account, url: account_url(@account), html: {
-            method: :put,
-            id: "account_privacy_settings"
-          }) do |f|
-      %>
-        <%= f.fields_for :settings do |settings| %>
-          <div>
-            <%= settings.check_box :enable_fullstory, checked: @account.settings.fetch(:enable_fullstory, true) %>
-            <%= settings.label :enable_fullstory, en: "Allow tracking with FullStory" %>
+        <footer class="sticky-footer">
+          <div class="form-actions-sticky-footer">
+              <button type="submit" class="Button Button--primary"><%= t(:update_settings_button, "Update Settings") %></button>
           </div>
-        <% end %>
-
-        <div class="button-container">
-          <button type="submit" class="Button Button--primary">
-            <%= t(:update_settings_button, "Update Settings") %>
-          </button>
-        </div>
+        </footer>
       <% end %>
     </div>
   <% end %>
@@ -1182,7 +1211,7 @@ acknowledge that you have read and agreed to the
   <div id="tab-announcements">
     <h2><%= t(:global_announcements_title, "Global Announcements") %></h2>
         <% if can_do(@account, @current_user, :manage_alerts) %>
-      <button id="add_announcement_button" class="Button Button--primary element_toggler add_notification_toggle_focus" aria-controls="add_notification_form" title="<%= t('Add New Announcement') %>" aria-label="<%= t('Add New Announcement') %>">
+      <button id="add_announcement_button" class="Button Button--primary element_toggler add_notification_toggle_focus" title="<%= t('Add New Announcement') %>" aria-label="<%= t('Add New Announcement') %>">
         <i class="icon-plus"></i> <%= t("New Announcement") %>
       </button>
       <%= form_for :account_notification,
@@ -1226,7 +1255,7 @@ acknowledge that you have read and agreed to the
 
         <div class="ic-Form-control">
           <label class="ic-Label"><%= t("Message") %></label>
-          <%= f.text_area :message, :class => 'alert_message' %>
+          <%= f.text_area :message, :id => "account_notification_message", :class => 'alert_message' %>
           <% if @account.site_admin? %>
             <p>
               <%= t(:interpolate_account_domain, "Enter \"{{ACCOUNT_DOMAIN}}\" to substitute the user's root account domain") %>
@@ -1239,7 +1268,7 @@ acknowledge that you have read and agreed to the
 
         <% if @account.root_account.trust_exists? %>
           <div class="ic-Form-control">
-            <%= f.check_box :domain_specific, :checked => !!@account.root_account.settings[:default_announcement_domain_specific] %>
+            <%= f.check_box :domain_specific, :checked => !!@account.root_account.settings[:default_announcement_domain_specific], :id => "domain_specific" %>
             <%= f.label :domain_specific, t("Only show announcement on current account domain") %>
           </div>
         <% end %>
@@ -1320,6 +1349,7 @@ acknowledge that you have read and agreed to the
                 </span>
               </label>
               <%= f.text_field :start_at,
+                               :id => "account_notification_start_at",
                                :class => 'datetime_field',
                                "aria-labelledby" => "announcement_starts_at_label",
                                "data-tooltip" => "",
@@ -1336,6 +1366,7 @@ acknowledge that you have read and agreed to the
                 </span>
               </label>
               <%= f.text_field :end_at,
+                               :id => "account_notification_end_at",
                                :class => 'datetime_field',
                                "aria-labelledby" => "announcement_ends_at_label",
                                "data-tooltip" => "",
@@ -1347,7 +1378,7 @@ acknowledge that you have read and agreed to the
 
         <% if !@account.site_admin? %>
           <div class="ic-Form-control ic-Form-control--checkbox">
-            <%= f.check_box :send_message %>
+            <%= f.check_box :send_message, :id => "account_notification_send_message" %>
             <%= f.label :send_message, t("Send notification directly to users when announcement starts"), :class => "ic-Label" %>
           </div>
         <% end %>
@@ -1384,6 +1415,16 @@ acknowledge that you have read and agreed to the
                   </span>
                   <% if can_do(@account, @current_user, :manage_alerts) %>
                     <div class="ic-notification__admin-actions">
+                      <button
+                        type="button"
+                        id="<%= "notification_copy_#{announcement.id}" %>"
+                        title="<%= t("Copy announcement %{title}", title: announcement.subject) %>"
+                        class="Button Button--icon-action element_toggler copy_notification_toggle_focus"
+                        data-copy-toggle-id="<%= announcement.id %>"
+                      >
+                        <span class="screenreader-only"><%= t("Copy announcement %{title}", :title => announcement.subject) %></span>
+                        <i class="icon-copy"></i>
+                      </button>
                       <button
                         type="button"
                         id="<%= "notification_edit_#{announcement.id}" %>"

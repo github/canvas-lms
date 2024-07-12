@@ -23,6 +23,7 @@ class ContextModule < ActiveRecord::Base
   include SearchTermHelper
   include DuplicatingObjects
   include LockedFor
+  include DifferentiableAssignment
 
   include MasterCourses::Restrictor
   restrict_columns :state, [:workflow_state]
@@ -91,7 +92,7 @@ class ContextModule < ActiveRecord::Base
 
     self.class.connection.after_transaction_commit do
       relocked_modules << self
-      progression_scope = context_module_progressions.where(current: true).where.not(workflow_state: "locked")
+      progression_scope = context_module_progressions.where.not(workflow_state: "locked")
       progression_scope = progression_scope.where(user_id: student_ids) if student_ids
 
       if progression_scope.in_batches(of: 10_000).update_all(["workflow_state = 'locked', lock_version = lock_version + 1, current = ?", false]) > 0
@@ -264,6 +265,14 @@ class ContextModule < ActiveRecord::Base
     self.root_account_id ||= context&.root_account_id
   end
 
+  def only_visible_to_overrides
+    assignment_overrides.active.exists?
+  end
+
+  def visible_to_everyone
+    !only_visible_to_overrides
+  end
+
   def duplicate
     copy_title = get_copy_title(self, t("Copy"), name)
     new_module = duplicate_base_model(copy_title)
@@ -294,9 +303,11 @@ class ContextModule < ActiveRecord::Base
   def destroy
     self.workflow_state = "deleted"
     self.deleted_at = Time.now.utc
+    module_assignments = current_items_with_assignment
     ContentTag.where(context_module_id: self).where.not(workflow_state: "deleted").update(workflow_state: "deleted", updated_at: deleted_at)
     delay_if_production(n_strand: "context_module_update_downstreams", priority: Delayed::LOW_PRIORITY).update_downstreams
     save!
+    update_assignment_submissions(module_assignments)
     true
   end
 
@@ -351,6 +362,15 @@ class ContextModule < ActiveRecord::Base
   scope :starting_with_name, lambda { |name|
     where("name ILIKE ?", "#{name}%")
   }
+  scope :visible_to_students_in_course_with_da, lambda { |user_ids, course_ids|
+    visible_module_ids = ModuleVisibility::ModuleVisibilityService.modules_visible_to_students_in_courses(course_ids:, user_ids:).map(&:context_module_id)
+    if visible_module_ids.any?
+      where(id: visible_module_ids)
+    else
+      none
+    end
+  }
+
   alias_method :published?, :active?
 
   def publish_items!(progress: nil)
@@ -404,6 +424,9 @@ class ContextModule < ActiveRecord::Base
 
     given { |user, session| context.grants_right?(user, session, :read) && active? }
     can :read
+
+    given { |user, session| user && context.grants_any_right?(user, session, :manage_content, :manage_course_content_edit) }
+    can :manage_assign_to
   end
 
   def low_level_locked_for?(user, opts = {})
@@ -444,7 +467,7 @@ class ContextModule < ActiveRecord::Base
   end
 
   def locked_for_tag?(tag, progression)
-    locked = (tag&.context_module_id == id && require_sequential_progress)
+    locked = tag&.context_module_id == id && require_sequential_progress
     locked && (progression.current_position&.< tag.position)
   end
 
@@ -934,7 +957,7 @@ class ContextModule < ActiveRecord::Base
   end
 
   def completion_events=(value)
-    unless value
+    unless value.present?
       write_attribute(:completion_events, nil)
       return
     end
@@ -964,5 +987,35 @@ class ContextModule < ActiveRecord::Base
       callbacks << ->(user) { context.publish_final_grades(user, user.id) }
     end
     callbacks
+  end
+
+  def requirement_type
+    (completion_requirements.present? && requirement_count == 1) ? "one" : "all"
+  end
+
+  def all_assignment_overrides
+    assignment_overrides
+  end
+
+  def update_assignment_submissions(module_assignments = current_items_with_assignment)
+    if Account.site_admin.feature_enabled?(:selective_release_backend)
+      module_assignments.clear_cache_keys(:availability)
+      SubmissionLifecycleManager.recompute_course(context, assignments: module_assignments, update_grades: true)
+    end
+  end
+
+  def current_items_with_assignment
+    return unless Account.site_admin.feature_enabled?(:selective_release_backend)
+
+    module_assignments = Assignment.active.where(id: content_tags.not_deleted.where(content_type: "Assignment").select(:content_id)).pluck(:id)
+
+    module_discussions_assignment_ids = DiscussionTopic.active.where(id: content_tags.not_deleted.where(content_type: "DiscussionTopic").select(:content_id)).select(:assignment_id)
+    module_quizzes_assignment_ids = Quizzes::Quiz.active.where(id: content_tags.not_deleted.where(content_type: "Quizzes::Quiz").select(:content_id)).select(:assignment_id)
+
+    module_quizzes_and_discussions = Assignment.active.where(id: module_discussions_assignment_ids).select(:id)
+    module_quizzes_and_discussions += Assignment.active.where(id: module_quizzes_assignment_ids).select(:id)
+
+    assignments_quizzes = module_assignments + module_quizzes_and_discussions
+    Assignment.where(id: assignments_quizzes)
   end
 end

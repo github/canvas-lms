@@ -25,6 +25,7 @@ describe('Gradebook', () => {
     return {
       students: [
         {
+          status: 'active',
           name: 'Student Test',
           display_name: 'Student Test',
           sortable_name: 'Test, Student',
@@ -32,6 +33,7 @@ describe('Gradebook', () => {
           id: '1',
         },
         {
+          status: 'active',
           name: 'Student Test 2',
           display_name: 'Student Test 2',
           sortable_name: 'Test 2, Student',
@@ -43,12 +45,20 @@ describe('Gradebook', () => {
         {
           id: '1',
           title: 'outcome 1',
+          description: 'Outcome description',
+          display_name: 'Friendly outcome name',
+          calculation_method: 'decaying_average',
+          calculation_int: 65,
           mastery_points: 5,
           ratings: [],
         },
         {
           id: '2',
           title: 'outcome 2',
+          description: 'Outcome description',
+          display_name: 'Friendly outcome name',
+          calculation_method: 'decaying_average',
+          calculation_int: 65,
           mastery_points: 5,
           ratings: [],
         },
@@ -65,6 +75,8 @@ describe('Gradebook', () => {
       ],
       courseId: '100',
       visibleRatings: [true, true, true, true, true, true],
+      gradebookFilters: [],
+      gradebookFilterHandler: jest.fn(),
       ...props,
     }
   }

@@ -118,6 +118,21 @@ describe MissingPolicyApplicator do
       expect(submission.grade).to eql "F"
     end
 
+    describe "content participation" do
+      it "creates a content participation record after applying deductions" do
+        late_policy_missing_enabled
+        create_recent_assignment
+        submission = @course.submissions.first
+        submission.update_columns(score: nil, grade: nil, workflow_state: "unsubmitted")
+        applicator.apply_missing_deductions
+
+        expect(submission.content_participations.count).to eq 1
+        cpc = ContentParticipationCount.where(context_id: submission.course_id, user_id: submission.user_id, content_type: "Submission")
+        expect(cpc.count).to eq 1
+        expect(cpc.first.unread_count).to eq 1
+      end
+    end
+
     it 'sets the submission workflow state to "graded"' do
       late_policy_missing_enabled
       create_recent_assignment
@@ -245,6 +260,52 @@ describe MissingPolicyApplicator do
 
       expect(submission.score).to be_nil
       expect(submission.grade).to be_nil
+    end
+
+    it "does not apply deductions to submissions for parents in checkpointed assignments" do
+      @course.root_account.enable_feature!(:discussion_checkpoints)
+      late_policy_missing_enabled
+      create_recent_assignment
+      assignment = Assignment.last
+      assignment.has_sub_assignments = true
+      assignment.submission_types = "discussion_topic"
+      d = @course.discussion_topics.create!(title: "Test Topic", assignment:)
+      d.publish!
+      assignment.save!
+
+      submission = @course.submissions.find { |s| s.assignment&.has_sub_assignments? }
+      submission.update_columns(score: nil, grade: nil, workflow_state: "unsubmitted")
+
+      checkpoint1 = Checkpoints::DiscussionCheckpointCreatorService.call(
+        discussion_topic: d,
+        checkpoint_label: CheckpointLabels::REPLY_TO_TOPIC,
+        dates: [{ type: "everyone", due_at: 1.hour.ago(now) }],
+        points_possible: 5
+      )
+      checkpoint1_submission = checkpoint1.submissions.find_by(user_id: submission.user_id)
+
+      checkpoint2 = Checkpoints::DiscussionCheckpointCreatorService.call(
+        discussion_topic: d,
+        checkpoint_label: CheckpointLabels::REPLY_TO_ENTRY,
+        dates: [{ type: "everyone", due_at: 1.hour.ago(now) }],
+        points_possible: 5,
+        replies_required: 2
+      )
+      checkpoint2_submission = checkpoint2.submissions.find_by(user_id: submission.user_id)
+      applicator.apply_missing_deductions
+
+      checkpoint1_submission.reload
+      expect(checkpoint1_submission.score).to eq 1.25
+      expect(checkpoint1_submission.grade).to eq "F"
+
+      checkpoint2_submission.reload
+      expect(checkpoint2_submission.score).to eq 1.25
+      expect(checkpoint2_submission.grade).to eq "F"
+
+      submission.reload
+      # submission score is the sum of the already missing policy applied checkpoint scores
+      expect(submission.score).to eq 2.5
+      expect(submission.grade).to eq "F"
     end
 
     it "does not apply deductions to assignments expecting on paper submissions if the due date is past" do
@@ -435,18 +496,19 @@ describe MissingPolicyApplicator do
           applicator.apply_missing_deductions
         end
       end
+    end
 
-      context "when the fix_missing_policy_applicator_gradebook_history flag is not enabled" do
-        before do
-          Account.site_admin.disable_feature!(:fix_missing_policy_applicator_gradebook_history)
-        end
+    describe "apply missing deduction" do
+      it "double checks and doesn't update submissions if they have been submitted" do
+        late_policy_missing_enabled
+        create_recent_assignment
+        submission = @course.submissions.first
+        submission.update_columns(score: nil, grade: nil, workflow_state: "submitted", submission_type: "online_text_entry")
+        assignment = submission.assignment
 
-        it "does not queue a delayed job when the applicator marks submissions as missing" do
-          assignment.submissions.update_all(score: nil, grade: nil)
-          expect(Auditors::GradeChange).not_to receive(:delay)
+        applicator.send(:apply_missing_deduction, assignment, [submission])
 
-          applicator.apply_missing_deductions
-        end
+        expect(submission.reload.score).to be_nil
       end
     end
   end

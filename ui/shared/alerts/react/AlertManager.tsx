@@ -17,10 +17,11 @@
  */
 
 import {Alert} from '@instructure/ui-alerts'
-import React, {createContext, PropsWithChildren} from 'react'
+import React, {createContext, type PropsWithChildren} from 'react'
+import getLiveRegion from '@canvas/instui-bindings/react/liveRegion'
 
 export type AlertManagerContextType = {
-  setOnFailure: (alertMessage: string) => void
+  setOnFailure: (alertMessage: string, screenReaderOnly?: boolean) => void
   setOnSuccess: (alertMessage: string, screenReaderOnly?: boolean) => void
 }
 
@@ -33,7 +34,7 @@ type AlertManagerState = {
   alertStatus?: 'error' | 'success'
   alertMessage?: string
   key: number
-  successScreenReaderOnly: boolean
+  screenReaderOnly: boolean
 }
 
 export default class AlertManager extends React.Component<
@@ -42,22 +43,23 @@ export default class AlertManager extends React.Component<
 > {
   state: AlertManagerState = {
     key: 0,
-    successScreenReaderOnly: true,
+    screenReaderOnly: true,
   }
 
   closeAlert = () => {
     this.setState({
       alertMessage: undefined,
       alertStatus: undefined,
-      successScreenReaderOnly: true,
+      screenReaderOnly: true,
     })
   }
 
-  setOnFailure = (alertMessage: string) => {
+  setOnFailure = (alertMessage: string, screenReaderOnly = false) => {
     this.setState(prevState => ({
       alertMessage,
       alertStatus: 'error',
       key: prevState.key + 1,
+      screenReaderOnly,
     }))
   }
 
@@ -66,7 +68,7 @@ export default class AlertManager extends React.Component<
       alertMessage,
       alertStatus: 'success',
       key: prevState.key + 1,
-      successScreenReaderOnly: screenReaderOnly,
+      screenReaderOnly,
     }))
   }
 
@@ -76,9 +78,9 @@ export default class AlertManager extends React.Component<
       return (
         <Alert
           variant="success"
-          liveRegion={() => document.getElementById('flash_screenreader_holder')}
+          liveRegion={getLiveRegion}
           onDismiss={this.closeAlert}
-          screenReaderOnly={this.state.successScreenReaderOnly}
+          screenReaderOnly={this.state.screenReaderOnly}
           timeout={ALERT_TIMEOUT}
         >
           {this.state.alertMessage}
@@ -87,10 +89,11 @@ export default class AlertManager extends React.Component<
     } else if (this.state.alertStatus === 'error') {
       return (
         <Alert
-          liveRegion={() => document.getElementById('flash_screenreader_holder')}
+          liveRegion={getLiveRegion}
           margin="small"
           onDismiss={this.closeAlert}
           timeout={ALERT_TIMEOUT}
+          screenReaderOnly={this.state.screenReaderOnly}
           variant="error"
         >
           {this.state.alertMessage}

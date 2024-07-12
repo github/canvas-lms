@@ -143,6 +143,7 @@ describe "teacher k5 course dashboard" do
     end
 
     it "shows add module modal when +Module button is clicked" do
+      Account.site_admin.disable_feature! :selective_release_ui_api
       get "/courses/#{@subject_course.id}#modules"
 
       click_add_module_button
@@ -166,7 +167,7 @@ describe "teacher k5 course dashboard" do
   end
 
   context "course color selection" do
-    it "allows for available color to be selected", custom_timeout: 30, ignore_js_errors: true do
+    it "allows for available color to be selected", :ignore_js_errors, custom_timeout: 30 do
       get "/courses/#{@subject_course.id}/settings"
       visit_course_details_tab
 
@@ -179,7 +180,7 @@ describe "teacher k5 course dashboard" do
       expect(hex_value_for_color(course_color_preview, "background-color")).to eq(pink_color)
     end
 
-    it "allows for hex color to be input", ignore_js_errors: true do
+    it "allows for hex color to be input", :ignore_js_errors do
       get "/courses/#{@subject_course.id}/settings"
       visit_course_details_tab
 

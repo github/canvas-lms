@@ -328,7 +328,7 @@ class RubricAssociation < ActiveRecord::Base
     replace_ratings = false
     has_score = false
     rubric.criteria_object.each do |criterion|
-      data = params["criterion_#{criterion.id}".to_sym]
+      data = params[:"criterion_#{criterion.id}"]
       rating = {}
       next unless data
 
@@ -363,6 +363,7 @@ class RubricAssociation < ActiveRecord::Base
         self.summary_data[:saved_comments][criterion.id.to_s] << rating[:comments]
         # TODO: i18n
         self.summary_data[:saved_comments][criterion.id.to_s] = self.summary_data[:saved_comments][criterion.id.to_s].select { |desc| desc.present? && desc != "No Details" }.uniq.sort
+        self.skip_updating_points_possible = true
         save
       end
       rating[:description] = t("no_details", "No details") if rating[:description].blank?

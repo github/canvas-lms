@@ -20,7 +20,7 @@
 
 import {extend} from '@canvas/backbone/utils'
 import $ from 'jquery'
-import _ from 'underscore'
+import {map, find, filter, includes, some} from 'lodash'
 import {Model} from '@canvas/backbone'
 import DefaultUrlMixin from '@canvas/backbone/DefaultUrlMixin'
 import TurnitinSettings from '../../TurnitinSettings'
@@ -30,11 +30,12 @@ import AssignmentOverrideCollection from '../collections/AssignmentOverrideColle
 import DateGroupCollection from '@canvas/date-group/backbone/collections/DateGroupCollection'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import GradingPeriodsHelper from '@canvas/grading/GradingPeriodsHelper'
-import tz from '@canvas/timezone'
+import * as tz from '@instructure/moment-utils'
 import numberHelper from '@canvas/i18n/numberHelper'
 import PandaPubPoller from '@canvas/panda-pub-poller'
 import {matchingToolUrls} from './LtiAssignmentHelpers'
 
+const default_interval = 3000
 const I18n = useI18nScope('models_Assignment')
 
 const hasProp = {}.hasOwnProperty
@@ -47,165 +48,170 @@ const canManage = function () {
 }
 
 const isAdmin = function () {
-  return _.includes(ENV.current_user_roles, 'admin')
+  return ENV.current_user_is_admin
 }
 
 // must check canManage because current_user_roles will include roles from other enrolled courses
 const isStudent = function () {
-  return _.includes(ENV.current_user_roles, 'student') && !canManage()
+  return (ENV.current_user_roles || []).includes('student') && !canManage()
 }
 
 extend(Assignment, Model)
 
 function Assignment() {
-  this.quizzesRespondusEnabled = this.quizzesRespondusEnabled.bind(this)
-  this.showGradersAnonymousToGradersCheckbox = this.showGradersAnonymousToGradersCheckbox.bind(this)
-  this.pollUntilFinished = this.pollUntilFinished.bind(this)
-  this.pollUntilFinishedLoading = this.pollUntilFinishedLoading.bind(this)
-  this.pollUntilFinishedMigrating = this.pollUntilFinishedMigrating.bind(this)
-  this.pollUntilFinishedImporting = this.pollUntilFinishedImporting.bind(this)
-  this.pollUntilFinishedDuplicating = this.pollUntilFinishedDuplicating.bind(this)
-  this.retry_migration = this.retry_migration.bind(this)
-  this.duplicate_failed = this.duplicate_failed.bind(this)
-  this.duplicate = this.duplicate.bind(this)
-  this.setNullDates = this.setNullDates.bind(this)
   this._filterFrozenAttributes = this._filterFrozenAttributes.bind(this)
   this._getAssignmentType = this._getAssignmentType.bind(this)
   this._hasOnlyType = this._hasOnlyType.bind(this)
   this._submissionTypes = this._submissionTypes.bind(this)
-  this.toView = this.toView.bind(this)
-  this.submissionTypesFrozen = this.submissionTypesFrozen.bind(this)
-  this.failedToImport = this.failedToImport.bind(this)
-  this.isImporting = this.isImporting.bind(this)
-  this.isQuizLTIAssignment = this.isQuizLTIAssignment.bind(this)
-  this.is_quiz_assignment = this.is_quiz_assignment.bind(this)
-  this.originalAssignmentName = this.originalAssignmentName.bind(this)
-  this.originalAssignmentID = this.originalAssignmentID.bind(this)
-  this.originalQuizID = this.originalQuizID.bind(this)
-  this.originalCourseID = this.originalCourseID.bind(this)
-  this.failedToMigrate = this.failedToMigrate.bind(this)
-  this.failedToDuplicate = this.failedToDuplicate.bind(this)
-  this.isMigrating = this.isMigrating.bind(this)
-  this.isMasterCourseChildContent = this.isMasterCourseChildContent.bind(this)
-  this.isDuplicating = this.isDuplicating.bind(this)
-  this.canDuplicate = this.canDuplicate.bind(this)
-  this.singleSectionDueDate = this.singleSectionDueDate.bind(this)
-  this.singleSection = this.singleSection.bind(this)
+  this.abGuid = this.abGuid.bind(this)
+  this.acceptsAnnotatedDocument = this.acceptsAnnotatedDocument.bind(this)
+  this.acceptsMediaRecording = this.acceptsMediaRecording.bind(this)
+  this.acceptsOnlineTextEntries = this.acceptsOnlineTextEntries.bind(this)
+  this.acceptsOnlineUpload = this.acceptsOnlineUpload.bind(this)
+  this.acceptsOnlineURL = this.acceptsOnlineURL.bind(this)
+  this.alignment_clone_failed = this.alignment_clone_failed.bind(this)
   this.allDates = this.allDates.bind(this)
-  this.nonBaseDates = this.nonBaseDates.bind(this)
-  this.hasPointsPossible = this.hasPointsPossible.bind(this)
-  this.hasDueDate = this.hasDueDate.bind(this)
-  this.multipleDueDates = this.multipleDueDates.bind(this)
+  this.allowedExtensions = this.allowedExtensions.bind(this)
+  this.allowedToSubmit = this.allowedToSubmit.bind(this)
+  this.anonymousGrading = this.anonymousGrading.bind(this)
+  this.anonymousInstructorAnnotations = this.anonymousInstructorAnnotations.bind(this)
+  this.anonymousPeerReviews = this.anonymousPeerReviews.bind(this)
+  this.assignmentGroupId = this.assignmentGroupId.bind(this)
+  this.assignmentType = this.assignmentType.bind(this)
+  this.automaticPeerReviews = this.automaticPeerReviews.bind(this)
+  this.canDelete = this.canDelete.bind(this)
+  this.canDuplicate = this.canDuplicate.bind(this)
+  this.canFreeze = this.canFreeze.bind(this)
+  this.canMove = this.canMove.bind(this)
+  this.courseID = this.courseID.bind(this)
   this.defaultDates = this.defaultDates.bind(this)
-  this.showBuildButton = this.showBuildButton.bind(this)
-  this.newQuizzesAssignmentBuildButtonEnabled =
-    this.newQuizzesAssignmentBuildButtonEnabled.bind(this)
-  this.hideZeroPointQuizzesOptionEnabled = this.hideZeroPointQuizzesOptionEnabled.bind(this)
-  this.submissionTypeSelectionTools = this.submissionTypeSelectionTools.bind(this)
+  this.defaultToNone = this.defaultToNone.bind(this)
+  this.defaultToolName = this.defaultToolName.bind(this)
+  this.defaultToolSelected = this.defaultToolSelected.bind(this)
+  this.defaultToolUrl = this.defaultToolUrl.bind(this)
+  this.defaultToOnline = this.defaultToOnline.bind(this)
+  this.defaultToOnPaper = this.defaultToOnPaper.bind(this)
+  this.description = this.description.bind(this)
+  this.dueAt = this.dueAt.bind(this)
+  this.dueDateRequired = this.dueDateRequired.bind(this)
   this.dueDateRequiredForAccount = this.dueDateRequiredForAccount.bind(this)
-  this.maxNameLengthRequiredForAccount = this.maxNameLengthRequiredForAccount.bind(this)
-  this.maxNameLength = this.maxNameLength.bind(this)
-  this.sisIntegrationSettingsEnabled = this.sisIntegrationSettingsEnabled.bind(this)
-  this.postToSISName = this.postToSISName.bind(this)
-  this.postToSISEnabled = this.postToSISEnabled.bind(this)
-  this.labelId = this.labelId.bind(this)
+  this.duplicate = this.duplicate.bind(this)
+  this.duplicate_failed = this.duplicate_failed.bind(this)
+  this.expectsSubmission = this.expectsSubmission.bind(this)
+  this.externalToolCustomParams = this.externalToolCustomParams.bind(this)
+  this.externalToolCustomParamsStringified = this.externalToolCustomParamsStringified.bind(this)
+  this.externalToolData = this.externalToolData.bind(this)
+  this.externalToolDataStringified = this.externalToolDataStringified.bind(this)
+  this.externalToolDataStudentLabelText = this.externalToolDataStudentLabelText.bind(this)
+  this.externalToolIframeHeight = this.externalToolIframeHeight.bind(this)
+  this.externalToolIframeWidth = this.externalToolIframeWidth.bind(this)
+  this.externalToolNewTab = this.externalToolNewTab.bind(this)
+  this.externalToolUrl = this.externalToolUrl.bind(this)
+  this.failedToCloneAlignment = this.failedToCloneAlignment.bind(this)
+  this.failedToDuplicate = this.failedToDuplicate.bind(this)
+  this.failedToImport = this.failedToImport.bind(this)
+  this.failedToMigrate = this.failedToMigrate.bind(this)
+  this.freezeOnCopy = this.freezeOnCopy.bind(this)
+  this.frozen = this.frozen.bind(this)
+  this.frozenAttributes = this.frozenAttributes.bind(this)
+  this.gradedSubmissionsExist = this.gradedSubmissionsExist.bind(this)
+  this.gradeGroupStudentsIndividually = this.gradeGroupStudentsIndividually.bind(this)
+  this.graderCommentsVisibleToGraders = this.graderCommentsVisibleToGraders.bind(this)
+  this.gradersAnonymousToGraders = this.gradersAnonymousToGraders.bind(this)
+  this.gradingStandardId = this.gradingStandardId.bind(this)
+  this.gradingType = this.gradingType.bind(this)
+  this.groupCategoryId = this.groupCategoryId.bind(this)
+  this.hasDueDate = this.hasDueDate.bind(this)
+  this.hasPointsPossible = this.hasPointsPossible.bind(this)
+  this.hasSubAssignments = this.hasSubAssignments.bind(this)
+  this.hasSubmittedSubmissions = this.hasSubmittedSubmissions.bind(this)
+  this.hideInGradebook = this.hideInGradebook.bind(this)
+  this.hideZeroPointQuizzesOptionEnabled = this.hideZeroPointQuizzesOptionEnabled.bind(this)
   this.htmlBuildUrl = this.htmlBuildUrl.bind(this)
   this.htmlEditUrl = this.htmlEditUrl.bind(this)
   this.htmlUrl = this.htmlUrl.bind(this)
-  this.objectType = this.objectType.bind(this)
   this.iconType = this.iconType.bind(this)
-  this.useNewQuizIcon = this.useNewQuizIcon.bind(this)
-  this.published = this.published.bind(this)
-  this.isGpaScaled = this.isGpaScaled.bind(this)
-  this.isLetterGraded = this.isLetterGraded.bind(this)
-  this.isSimple = this.isSimple.bind(this)
-  this.externalToolNewTab = this.externalToolNewTab.bind(this)
-  this.externalToolDataStudentLabelText = this.externalToolDataStudentLabelText.bind(this)
-  this.isMasteryConnectTool = this.isMasteryConnectTool.bind(this)
-  this.externalToolCustomParamsStringified = this.externalToolCustomParamsStringified.bind(this)
-  this.externalToolCustomParams = this.externalToolCustomParams.bind(this)
-  this.externalToolDataStringified = this.externalToolDataStringified.bind(this)
-  this.externalToolData = this.externalToolData.bind(this)
-  this.externalToolIframeHeight = this.externalToolIframeHeight.bind(this)
-  this.externalToolIframeWidth = this.externalToolIframeWidth.bind(this)
-  this.externalToolUrl = this.externalToolUrl.bind(this)
-  this.gradingStandardId = this.gradingStandardId.bind(this)
-  this.groupCategoryId = this.groupCategoryId.bind(this)
-  this.vericiteEnabled = this.vericiteEnabled.bind(this)
-  this.turnitinEnabled = this.turnitinEnabled.bind(this)
-  this.gradeGroupStudentsIndividually = this.gradeGroupStudentsIndividually.bind(this)
-  this.vericiteAvailable = this.vericiteAvailable.bind(this)
-  this.turnitinAvailable = this.turnitinAvailable.bind(this)
-  this.allowedExtensions = this.allowedExtensions.bind(this)
-  this.restrictFileExtensions = this.restrictFileExtensions.bind(this)
-  this.notifyOfUpdate = this.notifyOfUpdate.bind(this)
-  this.peerReviewsAssignAt = this.peerReviewsAssignAt.bind(this)
-  this.peerReviewCount = this.peerReviewCount.bind(this)
-  this.automaticPeerReviews = this.automaticPeerReviews.bind(this)
-  this.anonymousPeerReviews = this.anonymousPeerReviews.bind(this)
-  this.peerReviews = this.peerReviews.bind(this)
-  this.graderCommentsVisibleToGraders = this.graderCommentsVisibleToGraders.bind(this)
-  this.gradersAnonymousToGraders = this.gradersAnonymousToGraders.bind(this)
-  this.anonymousGrading = this.anonymousGrading.bind(this)
-  this.anonymousInstructorAnnotations = this.anonymousInstructorAnnotations.bind(this)
-  this.moderatedGrading = this.moderatedGrading.bind(this)
-  this.postToSIS = this.postToSIS.bind(this)
-  this.isOnlineSubmission = this.isOnlineSubmission.bind(this)
-  this.acceptsOnlineTextEntries = this.acceptsOnlineTextEntries.bind(this)
-  this.acceptsMediaRecording = this.acceptsMediaRecording.bind(this)
-  this.acceptsOnlineURL = this.acceptsOnlineURL.bind(this)
-  this.acceptsAnnotatedDocument = this.acceptsAnnotatedDocument.bind(this)
-  this.acceptsOnlineUpload = this.acceptsOnlineUpload.bind(this)
-  this.withoutGradedSubmission = this.withoutGradedSubmission.bind(this)
-  this.hasSubmittedSubmissions = this.hasSubmittedSubmissions.bind(this)
-  this.allowedToSubmit = this.allowedToSubmit.bind(this)
-  this.expectsSubmission = this.expectsSubmission.bind(this)
-  this.submissionType = this.submissionType.bind(this)
-  this.selectedSubmissionTypeToolId = this.selectedSubmissionTypeToolId.bind(this)
-  this.isNonPlacementExternalTool = this.isNonPlacementExternalTool.bind(this)
-  this.isGenericExternalTool = this.isGenericExternalTool.bind(this)
-  this.defaultToolSelected = this.defaultToolSelected.bind(this)
-  this.isQuickCreateDefaultTool = this.isQuickCreateDefaultTool.bind(this)
-  this.defaultToOnPaper = this.defaultToOnPaper.bind(this)
-  this.defaultToOnline = this.defaultToOnline.bind(this)
-  this.defaultToNone = this.defaultToNone.bind(this)
-  this.isDefaultTool = this.isDefaultTool.bind(this)
-  this.shouldShowDefaultTool = this.shouldShowDefaultTool.bind(this)
-  this.isNewAssignment = this.isNewAssignment.bind(this)
-  this.submissionTypes = this.submissionTypes.bind(this)
-  this.inPacedCourse = this.inPacedCourse.bind(this)
-  this.courseID = this.courseID.bind(this)
-  this.omitFromFinalGrade = this.omitFromFinalGrade.bind(this)
-  this.hideInGradebook = this.hideInGradebook.bind(this)
-  this.gradingType = this.gradingType.bind(this)
-  this.gradedSubmissionsExist = this.gradedSubmissionsExist.bind(this)
-  this.inClosedGradingPeriod = this.inClosedGradingPeriod.bind(this)
-  this.frozenAttributes = this.frozenAttributes.bind(this)
-  this.frozen = this.frozen.bind(this)
-  this.freezeOnCopy = this.freezeOnCopy.bind(this)
-  this.canMove = this.canMove.bind(this)
-  this.canDelete = this.canDelete.bind(this)
-  this.canFreeze = this.canFreeze.bind(this)
-  this.assignmentGroupId = this.assignmentGroupId.bind(this)
-  this.secureParams = this.secureParams.bind(this)
-  this.pointsPossible = this.pointsPossible.bind(this)
-  this.name = this.name.bind(this)
-  this.description = this.description.bind(this)
   this.importantDates = this.importantDates.bind(this)
-  this.dueDateRequired = this.dueDateRequired.bind(this)
-  this.lockAt = this.lockAt.bind(this)
-  this.unlockAt = this.unlockAt.bind(this)
-  this.dueAt = this.dueAt.bind(this)
-  this.assignmentType = this.assignmentType.bind(this)
-  this.isAssignment = this.isAssignment.bind(this)
-  this.isNotGraded = this.isNotGraded.bind(this)
-  this.defaultToolUrl = this.defaultToolUrl.bind(this)
-  this.defaultToolName = this.defaultToolName.bind(this)
-  this.isNonPlacementExternalTool = this.isNonPlacementExternalTool.bind(this)
-  this.isExternalTool = this.isExternalTool.bind(this)
-  this.isPage = this.isPage.bind(this)
+  this.inClosedGradingPeriod = this.inClosedGradingPeriod.bind(this)
+  this.inPacedCourse = this.inPacedCourse.bind(this)
+  this.is_quiz_assignment = this.is_quiz_assignment.bind(this)
+  this.isCloningAlignment = this.isCloningAlignment.bind(this)
+  this.isDefaultTool = this.isDefaultTool.bind(this)
   this.isDiscussionTopic = this.isDiscussionTopic.bind(this)
+  this.isDuplicating = this.isDuplicating.bind(this)
+  this.isExternalTool = this.isExternalTool.bind(this)
+  this.isGenericExternalTool = this.isGenericExternalTool.bind(this)
+  this.isGpaScaled = this.isGpaScaled.bind(this)
+  this.isImporting = this.isImporting.bind(this)
+  this.isLetterGraded = this.isLetterGraded.bind(this)
+  this.isMasterCourseChildContent = this.isMasterCourseChildContent.bind(this)
+  this.isMasteryConnectTool = this.isMasteryConnectTool.bind(this)
+  this.isMigrating = this.isMigrating.bind(this)
+  this.isNewAssignment = this.isNewAssignment.bind(this)
+  this.isNonPlacementExternalTool = this.isNonPlacementExternalTool.bind(this)
+  this.isNotGraded = this.isNotGraded.bind(this)
+  this.isOnlineSubmission = this.isOnlineSubmission.bind(this)
+  this.isPage = this.isPage.bind(this)
+  this.isQuickCreateDefaultTool = this.isQuickCreateDefaultTool.bind(this)
   this.isQuiz = this.isQuiz.bind(this)
+  this.isQuizLTIAssignment = this.isQuizLTIAssignment.bind(this)
+  this.isSimple = this.isSimple.bind(this)
+  this.labelId = this.labelId.bind(this)
+  this.lockAt = this.lockAt.bind(this)
+  this.maxNameLength = this.maxNameLength.bind(this)
+  this.maxNameLengthRequiredForAccount = this.maxNameLengthRequiredForAccount.bind(this)
+  this.moderatedGrading = this.moderatedGrading.bind(this)
+  this.multipleDueDates = this.multipleDueDates.bind(this)
+  this.name = this.name.bind(this)
+  this.newQuizzesAssignmentBuildButtonEnabled =
+    this.newQuizzesAssignmentBuildButtonEnabled.bind(this)
+  this.nonBaseDates = this.nonBaseDates.bind(this)
+  this.notifyOfUpdate = this.notifyOfUpdate.bind(this)
+  this.objectType = this.objectType.bind(this)
+  this.omitFromFinalGrade = this.omitFromFinalGrade.bind(this)
+  this.originalAssignmentID = this.originalAssignmentID.bind(this)
+  this.originalAssignmentName = this.originalAssignmentName.bind(this)
+  this.originalCourseID = this.originalCourseID.bind(this)
+  this.originalQuizID = this.originalQuizID.bind(this)
+  this.peerReviewCount = this.peerReviewCount.bind(this)
+  this.peerReviews = this.peerReviews.bind(this)
+  this.peerReviewsAssignAt = this.peerReviewsAssignAt.bind(this)
+  this.pointsPossible = this.pointsPossible.bind(this)
+  this.pollUntilFinished = this.pollUntilFinished.bind(this)
+  this.pollUntilFinishedCloningAlignment = this.pollUntilFinishedCloningAlignment.bind(this)
+  this.pollUntilFinishedDuplicating = this.pollUntilFinishedDuplicating.bind(this)
+  this.pollUntilFinishedImporting = this.pollUntilFinishedImporting.bind(this)
+  this.pollUntilFinishedLoading = this.pollUntilFinishedLoading.bind(this)
+  this.pollUntilFinishedMigrating = this.pollUntilFinishedMigrating.bind(this)
+  this.postToSIS = this.postToSIS.bind(this)
+  this.postToSISEnabled = this.postToSISEnabled.bind(this)
+  this.postToSISName = this.postToSISName.bind(this)
+  this.published = this.published.bind(this)
+  this.quizzesRespondusEnabled = this.quizzesRespondusEnabled.bind(this)
+  this.resourceLink = this.resourceLink.bind(this)
+  this.restrictFileExtensions = this.restrictFileExtensions.bind(this)
+  this.retry_migration = this.retry_migration.bind(this)
+  this.secureParams = this.secureParams.bind(this)
+  this.selectedSubmissionTypeToolId = this.selectedSubmissionTypeToolId.bind(this)
+  this.setNullDates = this.setNullDates.bind(this)
+  this.shouldShowDefaultTool = this.shouldShowDefaultTool.bind(this)
+  this.showBuildButton = this.showBuildButton.bind(this)
+  this.showGradersAnonymousToGradersCheckbox = this.showGradersAnonymousToGradersCheckbox.bind(this)
+  this.singleSection = this.singleSection.bind(this)
+  this.singleSectionDueDate = this.singleSectionDueDate.bind(this)
+  this.sisIntegrationSettingsEnabled = this.sisIntegrationSettingsEnabled.bind(this)
+  this.submissionType = this.submissionType.bind(this)
+  this.submissionTypes = this.submissionTypes.bind(this)
+  this.submissionTypeSelectionTools = this.submissionTypeSelectionTools.bind(this)
+  this.submissionTypesFrozen = this.submissionTypesFrozen.bind(this)
+  this.toView = this.toView.bind(this)
+  this.turnitinAvailable = this.turnitinAvailable.bind(this)
+  this.turnitinEnabled = this.turnitinEnabled.bind(this)
+  this.unlockAt = this.unlockAt.bind(this)
+  this.useNewQuizIcon = this.useNewQuizIcon.bind(this)
+  this.vericiteAvailable = this.vericiteAvailable.bind(this)
+  this.vericiteEnabled = this.vericiteEnabled.bind(this)
+  this.withoutGradedSubmission = this.withoutGradedSubmission.bind(this)
   return Assignment.__super__.constructor.apply(this, arguments)
 }
 
@@ -267,10 +273,6 @@ Assignment.prototype.isExternalTool = function () {
   return this._hasOnlyType('external_tool')
 }
 
-Assignment.prototype.isNonPlacementExternalTool = function () {
-  return this.isExternalTool
-}
-
 Assignment.prototype.defaultToolName = function () {
   return (
     ENV.DEFAULT_ASSIGNMENT_TOOL_NAME &&
@@ -286,16 +288,6 @@ Assignment.prototype.isNotGraded = function () {
   return this._hasOnlyType('not_graded')
 }
 
-Assignment.prototype.isAssignment = function () {
-  return !_.includes(
-    this._submissionTypes(),
-    'online_quiz',
-    'discussion_topic',
-    'not_graded',
-    'external_tool'
-  )
-}
-
 Assignment.prototype.assignmentType = function (type) {
   if (!(arguments.length > 0)) {
     return this._getAssignmentType()
@@ -305,6 +297,13 @@ Assignment.prototype.assignmentType = function (type) {
   } else {
     return this.set('submission_types', [type])
   }
+}
+
+Assignment.prototype.abGuid = function (ab_guid) {
+  if (!(arguments.length > 0)) {
+    return this.get('ab_guid')
+  }
+  return this.set('ab_guid', ab_guid)
 }
 
 Assignment.prototype.dueAt = function (date) {
@@ -389,9 +388,7 @@ Assignment.prototype.canDelete = function () {
 }
 
 Assignment.prototype.canMove = function () {
-  return (
-    !this.inClosedGradingPeriod() && !_.includes(this.frozenAttributes(), 'assignment_group_id')
-  )
+  return !this.inClosedGradingPeriod() && !includes(this.frozenAttributes(), 'assignment_group_id')
 }
 
 Assignment.prototype.freezeOnCopy = function () {
@@ -513,7 +510,7 @@ Assignment.prototype.selectedSubmissionTypeToolId = function () {
   const tool_id = (ref = this.get('external_tool_tag_attributes')) != null ? ref.content_id : void 0
   if (
     tool_id &&
-    _.find(this.submissionTypeSelectionTools(), function (tool) {
+    find(this.submissionTypeSelectionTools(), function (tool) {
       return tool_id === tool.id
     })
   ) {
@@ -522,14 +519,14 @@ Assignment.prototype.selectedSubmissionTypeToolId = function () {
 }
 
 Assignment.prototype.submissionType = function () {
-  const submissionTypes = this._submissionTypes()
-  if (_.includes(submissionTypes, 'none') || submissionTypes.length === 0) {
+  const submissionTypes = this._submissionTypes() || []
+  if (submissionTypes.length === 0 || submissionTypes.includes('none')) {
     return 'none'
-  } else if (_.includes(submissionTypes, 'on_paper')) {
+  } else if (submissionTypes.includes('on_paper')) {
     return 'on_paper'
-  } else if (_.includes(submissionTypes, 'external_tool')) {
+  } else if (submissionTypes.includes('external_tool')) {
     return 'external_tool'
-  } else if (_.includes(submissionTypes, 'default_external_tool')) {
+  } else if (submissionTypes.includes('default_external_tool')) {
     return 'external_tool'
   } else {
     return 'online'
@@ -537,24 +534,24 @@ Assignment.prototype.submissionType = function () {
 }
 
 Assignment.prototype.expectsSubmission = function () {
-  const submissionTypes = this._submissionTypes()
+  const submissionTypes = this._submissionTypes() || []
   return (
     submissionTypes.length > 0 &&
-    !_.includes(submissionTypes, '') &&
-    !_.includes(submissionTypes, 'none') &&
-    !_.includes(submissionTypes, 'not_graded') &&
-    !_.includes(submissionTypes, 'on_paper') &&
-    !_.includes(submissionTypes, 'external_tool')
+    !submissionTypes.includes('') &&
+    !submissionTypes.includes('none') &&
+    !submissionTypes.includes('not_graded') &&
+    !submissionTypes.includes('on_paper') &&
+    !submissionTypes.includes('external_tool')
   )
 }
 
 Assignment.prototype.allowedToSubmit = function () {
-  const submissionTypes = this._submissionTypes()
+  const submissionTypes = this._submissionTypes() || []
   return (
     this.expectsSubmission() &&
     !this.get('locked_for_user') &&
-    !_.includes(submissionTypes, 'online_quiz') &&
-    !_.includes(submissionTypes, 'attendance')
+    !submissionTypes.includes('online_quiz') &&
+    !submissionTypes.includes('attendance')
   )
 }
 
@@ -568,27 +565,32 @@ Assignment.prototype.withoutGradedSubmission = function () {
 }
 
 Assignment.prototype.acceptsOnlineUpload = function () {
-  return !!_.includes(this._submissionTypes(), 'online_upload')
+  const submissionTypes = this._submissionTypes() || []
+  return submissionTypes.includes('online_upload')
 }
 
 Assignment.prototype.acceptsAnnotatedDocument = function () {
-  return !!_.includes(this._submissionTypes(), 'student_annotation')
+  const submissionTypes = this._submissionTypes() || []
+  return submissionTypes.includes('student_annotation')
 }
 
 Assignment.prototype.acceptsOnlineURL = function () {
-  return !!_.includes(this._submissionTypes(), 'online_url')
+  const submissionTypes = this._submissionTypes() || []
+  return submissionTypes.includes('online_url')
 }
 
 Assignment.prototype.acceptsMediaRecording = function () {
-  return !!_.includes(this._submissionTypes(), 'media_recording')
+  const submissionTypes = this._submissionTypes() || []
+  return submissionTypes.includes('media_recording')
 }
 
 Assignment.prototype.acceptsOnlineTextEntries = function () {
-  return !!_.includes(this._submissionTypes(), 'online_text_entry')
+  const submissionTypes = this._submissionTypes() || []
+  return submissionTypes.includes('online_text_entry')
 }
 
 Assignment.prototype.isOnlineSubmission = function () {
-  return _.some(this._submissionTypes(), function (thing) {
+  return (this._submissionTypes() || []).some(function (thing) {
     return (
       thing === 'online' ||
       thing === 'online_text_entry' ||
@@ -753,7 +755,7 @@ Assignment.prototype.canGroup = function () {
 
 Assignment.prototype.isPlagiarismPlatformLocked = function () {
   return (
-    this.get('has_submitted_submissions') || _.includes(this.frozenAttributes(), 'submission_types')
+    this.get('has_submitted_submissions') || includes(this.frozenAttributes(), 'submission_types')
   )
 }
 
@@ -804,6 +806,19 @@ Assignment.prototype.externalToolIframeHeight = function (height) {
 Assignment.prototype.externalToolData = function () {
   const tagAttributes = this.get('external_tool_tag_attributes') || {}
   return tagAttributes.external_data
+}
+
+Assignment.prototype.externalToolDataTitle = function () {
+  const data = this.get('external_tool_tag_attributes')
+  return data?.title
+}
+
+Assignment.prototype.resourceLink = function () {
+  const data = this.get('external_tool_tag_attributes')
+  if (data?.resource_link_id) {
+    return {id: data.resource_link_id, title: data.resource_link_title}
+  }
+  return undefined
 }
 
 Assignment.prototype.externalToolDataStringified = function () {
@@ -1057,26 +1072,25 @@ Assignment.prototype.hasPointsPossible = function () {
   return !this.isQuiz() && !this.isPage()
 }
 
+Assignment.prototype.hasSubAssignments = function () {
+  return this.get('has_sub_assignments')
+}
+
 Assignment.prototype.nonBaseDates = function () {
   const dateGroups = this.get('all_dates')
   if (!dateGroups) {
     return false
   }
-  const withouBase = _.filter(
-    dateGroups.models,
-    (function (_this) {
-      return function (dateGroup) {
-        return dateGroup && !dateGroup.get('base')
-      }
-    })(this)
-  )
+  const withouBase = filter(dateGroups.models, function (dateGroup) {
+    return dateGroup && !dateGroup.get('base')
+  })
   return withouBase.length > 0
 }
 
 Assignment.prototype.allDates = function () {
   const groups = this.get('all_dates')
   const models = (groups && groups.models) || []
-  return _.map(models, function (group) {
+  return map(models, function (group) {
     return group.toJSON()
   })
 }
@@ -1117,6 +1131,10 @@ Assignment.prototype.isDuplicating = function () {
   return this.get('workflow_state') === 'duplicating'
 }
 
+Assignment.prototype.isCloningAlignment = function () {
+  return this.get('workflow_state') === 'outcome_alignment_cloning'
+}
+
 Assignment.prototype.isMigrating = function () {
   return this.get('workflow_state') === 'migrating'
 }
@@ -1127,6 +1145,10 @@ Assignment.prototype.isMasterCourseChildContent = function () {
 
 Assignment.prototype.failedToDuplicate = function () {
   return this.get('workflow_state') === 'failed_to_duplicate'
+}
+
+Assignment.prototype.failedToCloneAlignment = function () {
+  return this.get('workflow_state') === 'failed_to_clone_outcome_alignment'
 }
 
 Assignment.prototype.failedToMigrate = function () {
@@ -1166,16 +1188,17 @@ Assignment.prototype.failedToImport = function () {
 }
 
 Assignment.prototype.submissionTypesFrozen = function () {
-  return _.includes(this.frozenAttributes(), 'submission_types')
+  return includes(this.frozenAttributes(), 'submission_types')
 }
 
 Assignment.prototype.toView = function () {
   const fields = [
+    'abGuid',
     'acceptsAnnotatedDocument',
     'acceptsMediaRecording',
     'acceptsOnlineTextEntries',
-    'acceptsOnlineURL',
     'acceptsOnlineUpload',
+    'acceptsOnlineURL',
     'allDates',
     'allowedExtensions',
     'anonymousGrading',
@@ -1185,21 +1208,24 @@ Assignment.prototype.toView = function () {
     'automaticPeerReviews',
     'canFreeze',
     'defaultToNone',
-    'defaultToOnPaper',
-    'defaultToOnline',
     'defaultToolName',
+    'defaultToOnline',
+    'defaultToOnPaper',
     'description',
     'dueAt',
     'dueDateRequired',
     'externalToolCustomParams',
     'externalToolCustomParamsStringified',
     'externalToolData',
-    'externalToolLineItem',
-    'externalToolLineItemStringified',
     'externalToolDataStringified',
     'externalToolDataStudentLabelText',
+    'externalToolIframeHeight',
+    'externalToolIframeWidth',
+    'externalToolLineItem',
+    'externalToolLineItemStringified',
     'externalToolNewTab',
     'externalToolUrl',
+    'failedToCloneAlignment',
     'failedToDuplicate',
     'failedToImport',
     'failedToMigrate',
@@ -1213,12 +1239,17 @@ Assignment.prototype.toView = function () {
     'groupCategoryId',
     'hasDueDate',
     'hasPointsPossible',
+    'hasSubAssignments',
     'hideInGradebook',
-    'htmlEditUrl',
+    'hideZeroPointQuizzesOptionEnabled',
     'htmlBuildUrl',
+    'htmlEditUrl',
     'htmlUrl',
     'iconType',
+    'importantDates',
     'inClosedGradingPeriod',
+    'is_quiz_assignment',
+    'isCloningAlignment',
     'isDefaultTool',
     'isDuplicating',
     'isExternalTool',
@@ -1226,9 +1257,9 @@ Assignment.prototype.toView = function () {
     'isGpaScaled',
     'isImporting',
     'isLetterGraded',
+    'isMasterCourseChildContent',
     'isMasteryConnectTool',
     'isMigrating',
-    'isMasterCourseChildContent',
     'isNonPlacementExternalTool',
     'isNotGraded',
     'isOnlineSubmission',
@@ -1236,14 +1267,12 @@ Assignment.prototype.toView = function () {
     'isPlagiarismPlatformLocked',
     'isQuizLTIAssignment',
     'isSimple',
-    'is_quiz_assignment',
     'labelId',
     'lockAt',
     'moderatedGrading',
     'multipleDueDates',
     'name',
     'newQuizzesAssignmentBuildButtonEnabled',
-    'hideZeroPointQuizzesOptionEnabled',
     'nonBaseDates',
     'notifyOfUpdate',
     'objectTypeDisplayName',
@@ -1271,9 +1300,6 @@ Assignment.prototype.toView = function () {
     'unlockAt',
     'vericiteAvailable',
     'vericiteEnabled',
-    'importantDates',
-    'externalToolIframeWidth',
-    'externalToolIframeHeight',
   ]
   const hash = {
     id: this.get('id'),
@@ -1316,13 +1342,8 @@ Assignment.prototype.inGradingPeriod = function (gradingPeriod) {
   const dateGroups = this.get('all_dates')
   const gradingPeriodsHelper = new GradingPeriodsHelper(gradingPeriod)
   if (dateGroups) {
-    return _.some(
-      dateGroups.models,
-      (function (_this) {
-        return function (dateGroup) {
-          return gradingPeriodsHelper.isDateInGradingPeriod(dateGroup.dueAt(), gradingPeriod.id)
-        }
-      })(this)
+    return some(dateGroups.models, dateGroup =>
+      gradingPeriodsHelper.isDateInGradingPeriod(dateGroup.dueAt(), gradingPeriod.id)
     )
   } else {
     return gradingPeriodsHelper.isDateInGradingPeriod(tz.parse(this.dueAt()), gradingPeriod.id)
@@ -1406,17 +1427,17 @@ Assignment.prototype._filterFrozenAttributes = function (data) {
   const ref = this.attributes
   for (key in ref) {
     if (!hasProp.call(ref, key)) continue
-    if (_.includes(this.frozenAttributes(), key)) {
+    if (includes(this.frozenAttributes(), key)) {
       delete data[key]
     }
   }
-  if (_.includes(this.frozenAttributes(), 'title')) {
+  if (includes(this.frozenAttributes(), 'title')) {
     delete data.name
   }
-  if (_.includes(this.frozenAttributes(), 'group_category_id')) {
+  if (includes(this.frozenAttributes(), 'group_category_id')) {
     delete data.grade_group_students_individually
   }
-  if (_.includes(this.frozenAttributes(), 'peer_reviews')) {
+  if (includes(this.frozenAttributes(), 'peer_reviews')) {
     delete data.automatic_peer_reviews
     delete data.peer_review_count
     delete data.peer_reviews_assign_at
@@ -1483,6 +1504,29 @@ Assignment.prototype.duplicate_failed = function (callback) {
   )
 }
 
+Assignment.prototype.alignment_clone_failed = function (callback) {
+  let query_string
+  const target_course_id = this.courseID()
+  const target_assignment_id = this.id
+  const original_course_id = this.originalCourseID()
+  const original_assignment_id = this.originalAssignmentID()
+  query_string = '?target_assignment_id=' + target_assignment_id
+  if (original_course_id !== target_course_id) {
+    query_string += '&target_course_id=' + target_course_id
+  }
+  return $.ajaxJSON(
+    '/api/v1/courses/' +
+      original_course_id +
+      '/assignments/' +
+      original_assignment_id +
+      '/retry_alignment_clone' +
+      query_string,
+    'POST',
+    {},
+    callback
+  )
+}
+
 // caller is failed migrated assignment
 Assignment.prototype.retry_migration = function (callback) {
   const course_id = this.courseID()
@@ -1509,6 +1553,13 @@ Assignment.prototype.pollUntilFinishedDuplicating = function (interval) {
   return this.pollUntilFinished(interval, this.isDuplicating)
 }
 
+Assignment.prototype.pollUntilFinishedCloningAlignment = function (interval) {
+  if (interval == null) {
+    interval = default_interval
+  }
+  return this.pollUntilFinished(interval, this.isCloningAlignment)
+}
+
 Assignment.prototype.pollUntilFinishedImporting = function (interval) {
   if (interval == null) {
     interval = 3000
@@ -1533,6 +1584,8 @@ Assignment.prototype.pollUntilFinishedLoading = function (interval) {
     return this.pollUntilFinishedImporting(interval)
   } else if (this.isMigrating()) {
     return this.pollUntilFinishedMigrating(interval)
+  } else if (this.isCloningAlignment()) {
+    return this.pollUntilFinishedCloningAlignment(interval)
   }
 }
 
@@ -1557,6 +1610,9 @@ Assignment.prototype.pollUntilFinished = function (interval, isFinished) {
 
 Assignment.prototype.isOnlyVisibleToOverrides = function (override_flag) {
   if (!(arguments.length > 0)) {
+    if (ENV.FEATURES?.selective_release_ui_api && this.get('visible_to_everyone') != null) {
+      return !this.get('visible_to_everyone')
+    }
     return this.get('only_visible_to_overrides') || false
   }
   return this.set('only_visible_to_overrides', override_flag)

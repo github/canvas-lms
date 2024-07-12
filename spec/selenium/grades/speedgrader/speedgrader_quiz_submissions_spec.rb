@@ -20,7 +20,7 @@
 require_relative "../../common"
 require_relative "../pages/speedgrader_page"
 
-describe "speed grader - quiz submissions" do
+describe "SpeedGrader - quiz submissions" do
   include_context "in-process server selenium tests"
 
   before do
@@ -38,7 +38,7 @@ describe "speed grader - quiz submissions" do
   end
 
   it "links to the quiz history page when there are too many quiz submissions", priority: "2" do
-    Setting.set("too_many_quiz_submission_versions", 2)
+    stub_const("AbstractAssignment::QUIZ_SUBMISSION_VERSIONS_LIMIT", 2)
     get "/courses/#{@course.id}/gradebook/speed_grader?assignment_id=#{@assignment.id}"
     expect(f("#content")).not_to contain_css("#submission_to_view")
     uri = URI.parse(f(".see-all-attempts")[:href])

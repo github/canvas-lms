@@ -18,6 +18,8 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 class ContentTag < ActiveRecord::Base
+  include Lti::Migratable
+
   class LastLinkToOutcomeNotDestroyed < StandardError
   end
 
@@ -80,6 +82,7 @@ class ContentTag < ActiveRecord::Base
   after_save :send_items_to_stream
   after_save :clear_total_outcomes_cache
   after_save :update_course_pace_module_items
+  after_save :update_module_item_submissions
   after_create :update_outcome_contexts
 
   include CustomValidations
@@ -119,8 +122,10 @@ class ContentTag < ActiveRecord::Base
 
   scope :active, -> { where(workflow_state: "active") }
   scope :not_deleted, -> { where("content_tags.workflow_state<>'deleted'") }
+  scope :nondeleted, -> { not_deleted }
 
   attr_accessor :skip_touch
+  attr_accessor :reassociate_external_tool
 
   def touch_context_module
     return true if skip_touch.present? || context_module_id.nil?
@@ -167,8 +172,28 @@ class ContentTag < ActiveRecord::Base
   end
 
   def associate_external_tool
-    return if content.present? || content_type != "ContextExternalTool" || context.blank? || url.blank?
+    return if context.blank? || url.blank? || content_type != "ContextExternalTool"
 
+    if reassociate_external_tool
+      # set only when editing module item to allow changing the url,
+      # which will force a lookup of the new correct tool
+      # IF the url is potentially for a different tool.
+      old_url_host = Addressable::URI.parse(url_was)&.host
+      new_url_host = Addressable::URI.parse(url)&.host
+      if old_url_host != new_url_host
+        set_content_from_external_tool
+      end
+
+      return
+    end
+
+    # happy path
+    return if content.present?
+
+    set_content_from_external_tool
+  end
+
+  def set_content_from_external_tool
     content = ContextExternalTool.find_external_tool(url, context)
     self.content = content if content
   end
@@ -243,6 +268,10 @@ class ContentTag < ActiveRecord::Base
     end
   end
 
+  def show_assign_to?
+    ["Assignment", "Quizzes::Quiz", "WikiPage"].include?(content_type) || (content_type == "DiscussionTopic" && (graded? || (!graded? && content&.group_category_id.blank?)))
+  end
+
   def direct_shareable?
     content_id.to_i > 0 && direct_share_type
   end
@@ -294,9 +323,8 @@ class ContentTag < ActiveRecord::Base
     end
   end
 
-  alias_method :old_content, :content
   def content
-    TABLELESS_CONTENT_TYPES.include?(content_type) ? nil : old_content
+    TABLELESS_CONTENT_TYPES.include?(content_type) ? nil : super
   end
 
   def content_or_self
@@ -424,6 +452,7 @@ class ContentTag < ActiveRecord::Base
     delete_outcome_friendly_description if content_type == "LearningOutcome"
 
     run_submission_lifecycle_manager_for_quizzes_next(force: true)
+    update_module_item_submissions(change_of_module: false)
 
     # after deleting the last native link to an unaligned outcome, delete the
     # outcome. we do this here instead of in LearningOutcome#destroy because
@@ -566,22 +595,28 @@ class ContentTag < ActiveRecord::Base
     differentiable_classes = ["Assignment", "DiscussionTopic", "Quiz", "Quizzes::Quiz", "WikiPage"]
     scope = for_non_differentiable_classes(course_ids, differentiable_classes)
 
-    cyoe_courses, non_cyoe_courses = Course.where(id: course_ids).partition { |course| ConditionalRelease::Service.enabled_in_context?(course) }
-    if non_cyoe_courses.any?
-      scope = scope.union(where(context_id: non_cyoe_courses, context_type: "Course", content_type: "WikiPage"))
+    if Account.site_admin.feature_enabled?(:selective_release_backend)
+      visible_page_ids = WikiPage.visible_to_students_in_course_with_da(user_ids, course_ids).select(:id)
+      scope = scope.union(where(content_id: visible_page_ids, context_id: course_ids, context_type: "Course", content_type: "WikiPage"))
+    else
+      cyoe_courses, non_cyoe_courses = Course.where(id: course_ids).partition { |course| ConditionalRelease::Service.enabled_in_context?(course) }
+      if non_cyoe_courses.any?
+        scope = scope.union(where(context_id: non_cyoe_courses, context_type: "Course", content_type: "WikiPage"))
+      end
+      if cyoe_courses.any?
+        scope = scope.union(
+          for_non_differentiable_wiki_pages(cyoe_courses.map(&:id)),
+          for_differentiable_wiki_pages(user_ids, cyoe_courses.map(&:id))
+        )
+      end
     end
-    if cyoe_courses.any?
-      scope = scope.union(
-        for_non_differentiable_wiki_pages(cyoe_courses.map(&:id)),
-        for_differentiable_wiki_pages(user_ids, cyoe_courses.map(&:id))
-      )
-    end
+
     scope.union(
       for_non_differentiable_discussions(course_ids)
-        .merge(DiscussionTopic.visible_to_student_sections(user_ids)),
+        .merge(DiscussionTopic.visible_to_ungraded_discussion_student_visibilities(user_ids)),
       for_differentiable_assignments(user_ids, course_ids),
       for_differentiable_discussions(user_ids, course_ids)
-        .merge(DiscussionTopic.visible_to_student_sections(user_ids)),
+        .merge(DiscussionTopic.visible_to_ungraded_discussion_student_visibilities(user_ids)),
       for_differentiable_quizzes(user_ids, course_ids)
     )
   }
@@ -600,6 +635,7 @@ class ContentTag < ActiveRecord::Base
   }
 
   scope :for_non_differentiable_wiki_pages, lambda { |course_ids|
+    # remove with selective_release_backend
     joins("JOIN #{WikiPage.quoted_table_name} as wp ON wp.id = content_tags.content_id")
       .where("content_tags.context_id IN (?)
              AND content_tags.context_type = 'Course'
@@ -609,61 +645,92 @@ class ContentTag < ActiveRecord::Base
   }
 
   scope :for_differentiable_quizzes, lambda { |user_ids, course_ids|
-    joins("JOIN #{Quizzes::QuizStudentVisibility.quoted_table_name} as qsv ON qsv.quiz_id = content_tags.content_id")
-      .where("content_tags.context_id IN (?)
-             AND content_tags.context_type = 'Course'
-             AND qsv.course_id IN (?)
-             AND content_tags.content_type in ('Quiz', 'Quizzes::Quiz')
-             AND qsv.user_id = ANY( '{?}'::INT8[] )
-        ",
-             course_ids,
-             course_ids,
-             user_ids)
+    if Account.site_admin.feature_enabled?(:selective_release_backend)
+      visible_quiz_ids = QuizVisibility::QuizVisibilityService.quizzes_visible_to_students_in_courses(user_ids:, course_ids:).map(&:quiz_id)
+      where(content_id: visible_quiz_ids, context_id: course_ids, context_type: "Course", content_type: ["Quiz", "Quizzes::Quiz"])
+    else
+      joins("JOIN #{Quizzes::QuizStudentVisibility.quoted_table_name} as qsv ON qsv.quiz_id = content_tags.content_id")
+        .where("content_tags.context_id IN (?)
+              AND content_tags.context_type = 'Course'
+              AND qsv.course_id IN (?)
+              AND content_tags.content_type in ('Quiz', 'Quizzes::Quiz')
+              AND qsv.user_id = ANY( '{?}'::INT8[] )
+          ",
+               course_ids,
+               course_ids,
+               user_ids)
+    end
   }
 
   scope :for_differentiable_assignments, lambda { |user_ids, course_ids|
-    joins("JOIN #{AssignmentStudentVisibility.quoted_table_name} as asv ON asv.assignment_id = content_tags.content_id")
-      .where("content_tags.context_id IN (?)
+    if Account.site_admin.feature_enabled?(:selective_release_backend)
+      visible_assignment_ids = AssignmentVisibility::AssignmentVisibilityService.assignments_visible_to_students_in_courses(user_ids:, course_ids:).map(&:assignment_id)
+      where(content_id: visible_assignment_ids, context_id: course_ids, context_type: "Course", content_type: "Assignment")
+    else
+      joins("JOIN #{AssignmentStudentVisibility.quoted_table_name} as asv ON asv.assignment_id = content_tags.content_id")
+        .where("content_tags.context_id IN (?)
              AND content_tags.context_type = 'Course'
              AND asv.course_id IN (?)
              AND content_tags.content_type = 'Assignment'
              AND asv.user_id = ANY( '{?}'::INT8[] )
         ",
-             course_ids,
-             course_ids,
-             user_ids)
+               course_ids,
+               course_ids,
+               user_ids)
+    end
   }
 
   scope :for_differentiable_discussions, lambda { |user_ids, course_ids|
-    joins("JOIN #{DiscussionTopic.quoted_table_name} ON discussion_topics.id = content_tags.content_id
+    if Account.site_admin.feature_enabled?(:selective_release_backend)
+      unfiltered_discussion_ids = where(content_type: "DiscussionTopic").pluck(:content_id)
+      assignment_ids = DiscussionTopic.where(id: unfiltered_discussion_ids).where.not(assignment_id: nil).pluck(:assignment_id)
+      visible_assignment_ids = AssignmentVisibility::AssignmentVisibilityService.assignment_visible_to_students_in_course(user_ids:, course_ids:, assignment_ids:).map(&:assignment_id)
+      discussion_topic_ids = DiscussionTopic.where(assignment_id: visible_assignment_ids).pluck(:id)
+      joins("JOIN #{DiscussionTopic.quoted_table_name} ON discussion_topics.id = content_tags.content_id
+             AND content_tags.content_type = 'DiscussionTopic'")
+        .where(content_id: discussion_topic_ids, context_id: course_ids, context_type: "Course", content_type: "DiscussionTopic")
+    else
+      joins("JOIN #{DiscussionTopic.quoted_table_name} ON discussion_topics.id = content_tags.content_id
            AND content_tags.content_type = 'DiscussionTopic'")
-      .joins("JOIN #{AssignmentStudentVisibility.quoted_table_name} as asv ON asv.assignment_id = discussion_topics.assignment_id")
-      .where("content_tags.context_id IN (?)
+        .joins("JOIN #{AssignmentStudentVisibility.quoted_table_name} as asv ON asv.assignment_id = discussion_topics.assignment_id")
+        .where("content_tags.context_id IN (?)
              AND content_tags.context_type = 'Course'
              AND asv.course_id IN (?)
              AND content_tags.content_type = 'DiscussionTopic'
              AND discussion_topics.assignment_id IS NOT NULL
              AND asv.user_id = ANY( '{?}'::INT8[] )
       ",
-             course_ids,
-             course_ids,
-             user_ids)
+               course_ids,
+               course_ids,
+               user_ids)
+    end
   }
 
   scope :for_differentiable_wiki_pages, lambda { |user_ids, course_ids|
-    joins("JOIN #{WikiPage.quoted_table_name} as wp on wp.id = content_tags.content_id
+    # remove with selective_release_backend
+    if Account.site_admin.feature_enabled?(:selective_release_backend) # TODO: I feel like this could be better
+      unfiltered_page_ids = where(content_type: "WikiPage").pluck(:content_id)
+      assignment_ids = WikiPage.where(id: unfiltered_page_ids).where.not(assignment_id: nil).pluck(:assignment_id)
+      visible_assignment_ids = AssignmentVisibility::AssignmentVisibilityService.assignment_visible_to_students_in_course(user_ids:, course_ids:, assignment_ids:).map(&:assignment_id)
+      page_ids = WikiPage.where(assignment_id: visible_assignment_ids).pluck(:id)
+      joins("JOIN #{WikiPage.quoted_table_name} ON wiki_pages.id = content_tags.content_id
+            AND content_tags.content_type = 'WikiPage'")
+        .where(content_id: page_ids, context_id: course_ids, context_type: "Course", content_type: "WikiPage")
+    else
+      joins("JOIN #{WikiPage.quoted_table_name} as wp on wp.id = content_tags.content_id
            AND content_tags.content_type = 'WikiPage'")
-      .joins("JOIN #{AssignmentStudentVisibility.quoted_table_name} as asv on asv.assignment_id = wp.assignment_id")
-      .where("content_tags.context_id IN (?)
+        .joins("JOIN #{AssignmentStudentVisibility.quoted_table_name} as asv on asv.assignment_id = wp.assignment_id")
+        .where("content_tags.context_id IN (?)
              AND content_tags.context_type = 'Course'
              AND asv.course_id in (?)
              AND content_tags.content_type = 'WikiPage'
              AND wp.assignment_id IS NOT NULL
              AND asv.user_id = ANY( '{?}'::INT8[] )
       ",
-             course_ids,
-             course_ids,
-             user_ids)
+               course_ids,
+               course_ids,
+               user_ids)
+    end
   }
 
   scope :can_have_assignment, -> { where(content_type: ["Assignment", "DiscussionTopic", "Quizzes::Quiz", "WikiPage"]) }
@@ -677,6 +744,67 @@ class ContentTag < ActiveRecord::Base
     eager_load(:learning_outcome_content).order(outcome_title_order_by_clause)
   end
 
+  # Used to either Just-In-Time migrate a ContentTag to fully support 1.3 or
+  # as part of a backfill job to migrate existing 1.3 ContentTags to fully
+  # support 1.3. Fully support in this case means the associated resource link
+  # has the LTI 1.1 resource_link_id stored on it. Will only migrate tags that
+  # are module items that are associated with ContextExternalTools.
+  # @see Lti::Migratable
+  def migrate_to_1_3_if_needed!(tool)
+    return if !tool&.use_1_3? || associated_asset_lti_resource_link&.lti_1_1_id.present?
+
+    return unless context_module_id.present? && content_type == ContextExternalTool.to_s
+
+    # Updating a 1.3 module item
+    if associated_asset_lti_resource_link.present? && content&.use_1_3?
+      associated_asset_lti_resource_link.update!(lti_1_1_id: tool.opaque_identifier_for(self))
+    # Migrating a 1.1 module item
+    elsif !content&.use_1_3?
+      rl = Lti::ResourceLink.create_with(context, tool, nil, url, lti_1_1_id: tool.opaque_identifier_for(self))
+      update!(associated_asset: rl, content: tool)
+    end
+  end
+
+  # filtered by context during migrate_content_to_1_3
+  # @see Lti::Migratable
+  def self.directly_associated_items(tool_id)
+    ContentTag.nondeleted.where(tag_type: :context_module, content_id: tool_id)
+  end
+
+  # filtered by context during migrate_content_to_1_3
+  # @see Lti::Migratable
+  def self.indirectly_associated_items(_tool_id)
+    # TODO: this does not account for content tags that _are_ linked to a
+    # tool and the tag has a content_id, but the content_id doesn't match
+    # the current tool
+    ContentTag.nondeleted.where(tag_type: :context_module, content_id: nil)
+  end
+
+  # @param [Array<Integer>] ids The IDs of the resources to fetch for this batch
+  # @see Lti::Migratable
+  def self.fetch_direct_batch(ids, &)
+    ContentTag
+      .where(id: ids)
+      .preload(:associated_asset, :context)
+      .find_each(&)
+  end
+
+  # @param [Integer] tool_id The ID of the LTI 1.1 tool that the resource is indirectly
+  # associated with
+  # @param [Array<Integer>] ids The IDs of the resources to fetch for this batch
+  # @see Lti::Migratable
+  def self.fetch_indirect_batch(tool_id, new_tool_id, ids)
+    ContentTag
+      .where(id: ids)
+      .preload(:associated_asset, :context)
+      .find_each do |item|
+      possible_tool = ContextExternalTool.find_external_tool(item.url, item.context, nil, new_tool_id)
+      next if possible_tool.nil? || possible_tool.id != tool_id
+
+      yield item
+    end
+  end
+
   def visible_to_user?(user, opts = nil, session = nil)
     return false unless context_module
 
@@ -687,9 +815,9 @@ class ContentTag < ActiveRecord::Base
     return false unless published?
 
     if assignment
-      assignment.visible_to_user?(user, opts)
+      assignment.visible_to_user?(user)
     elsif content_type_quiz?
-      content.visible_to_user?(user, opts)
+      content.visible_to_user?(user)
     else
       true
     end
@@ -768,6 +896,26 @@ class ContentTag < ActiveRecord::Base
 
       # Republish the course pace if changes were made
       course_pace.create_publish_progress if deleted? || cpmi.destroyed? || cpmi.saved_change_to_id? || saved_change_to_position?
+    end
+  end
+
+  def update_module_item_submissions(change_of_module: true)
+    valid_types = ["Assignment", "Quizzes::Quiz", "DiscussionTopic"]
+    return unless Account.site_admin.feature_enabled?(:selective_release_backend)
+
+    return unless tag_type == "context_module" && valid_types.include?(content_type)
+
+    if change_of_module
+      return unless saved_change_to_context_module_id? && AssignmentOverride.active.where(context_module_id: saved_change_to_context_module_id).exists?
+    end
+
+    content.clear_cache_key(:availability)
+
+    if content_type == "Assignment"
+      SubmissionLifecycleManager.recompute(content, update_grades: true)
+    elsif content.assignment
+      content.assignment.clear_cache_key(:availability)
+      SubmissionLifecycleManager.recompute(content.assignment, update_grades: true)
     end
   end
 

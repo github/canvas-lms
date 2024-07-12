@@ -16,7 +16,6 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import _ from 'underscore'
 import React from 'react'
 import PropTypes from 'prop-types'
 import {useScope as useI18nScope} from '@canvas/i18n'
@@ -24,9 +23,10 @@ import $ from 'jquery'
 import customPropTypes from '../modules/customPropTypes'
 import Folder from '../../backbone/models/Folder'
 import File from '../../backbone/models/File'
-import '@canvas/datetime'
 import accessibleDateFormat from '@canvas/datetime/accessibleDateFormat'
 import filesEnv from '../modules/filesEnv'
+import {datetimeString} from '@canvas/datetime/date-functions'
+import { renderDatetimeField } from '@canvas/datetime/jquery/DatetimeField'
 
 const I18n = useI18nScope('restrict_student_access')
 
@@ -110,7 +110,8 @@ class RestrictedRadioButtons extends React.Component {
   ]
 
   componentDidMount() {
-    return $([this.unlock_at, this.lock_at]).datetime_field()
+    renderDatetimeField($(this.unlock_at))
+    renderDatetimeField($(this.lock_at))
   }
 
   extractFormValues = () => {
@@ -145,9 +146,7 @@ class RestrictedRadioButtons extends React.Component {
     }
   }
 
-  isPermissionChecked = option =>
-    this.state.selectedOption === option.selectedOptionKey ||
-    _.includes(option.selectedOptionKey, this.state.selectedOption)
+  isPermissionChecked = option => this.state.selectedOption === option.selectedOptionKey
 
   renderPermissionOptions = () => (
     <div>
@@ -194,7 +193,7 @@ class RestrictedRadioButtons extends React.Component {
           <input
             id="dateSelectInput"
             ref={e => (this.unlock_at = e)}
-            defaultValue={this.state.unlock_at ? $.datetimeString(this.state.unlock_at) : ''}
+            defaultValue={this.state.unlock_at ? datetimeString(this.state.unlock_at) : ''}
             className="form-control dateSelectInput"
             type="text"
             title={accessibleDateFormat()}
@@ -210,7 +209,7 @@ class RestrictedRadioButtons extends React.Component {
             <input
               id="lockDate"
               ref={e => (this.lock_at = e)}
-              defaultValue={this.state.lock_at ? $.datetimeString(this.state.lock_at) : ''}
+              defaultValue={this.state.lock_at ? datetimeString(this.state.lock_at) : ''}
               className="form-control dateSelectInput"
               type="text"
               title={accessibleDateFormat()}

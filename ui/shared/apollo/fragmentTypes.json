@@ -24,6 +24,9 @@
             "name": "AdhocStudents"
           },
           {
+            "name": "Course"
+          },
+          {
             "name": "Group"
           },
           {
@@ -76,9 +79,6 @@
           },
           {
             "name": "AssignmentGroup"
-          },
-          {
-            "name": "AssignmentOverride"
           },
           {
             "name": "CommentBankItem"
@@ -219,6 +219,9 @@
             "name": "Term"
           },
           {
+            "name": "UsageRights"
+          },
+          {
             "name": "User"
           }
         ]
@@ -291,9 +294,6 @@
             "name": "AssignmentGroup"
           },
           {
-            "name": "AssignmentOverride"
-          },
-          {
             "name": "CommentBankItem"
           },
           {
@@ -328,6 +328,9 @@
           },
           {
             "name": "GradingPeriodGroup"
+          },
+          {
+            "name": "GradingStandard"
           },
           {
             "name": "Group"
@@ -400,6 +403,9 @@
           },
           {
             "name": "Term"
+          },
+          {
+            "name": "UsageRights"
           },
           {
             "name": "User"
@@ -508,6 +514,9 @@
           },
           {
             "name": "GroupMembership"
+          },
+          {
+            "name": "InboxSettings"
           },
           {
             "name": "InternalSetting"

@@ -59,10 +59,11 @@ const ManageOutcomesView = ({
 
   const [isEnhanced, setIsEnhanced] = useState(false)
 
-  useEffect(()=>{
+  useEffect(() => {
     // for rendering math equations in outcome descriptions
     setIsEnhanced(!isEnhanced)
-  }, [outcomes, selectedOutcomes]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [outcomes, selectedOutcomes])
 
   if (loading && !outcomeGroup) {
     return (
@@ -118,7 +119,7 @@ const ManageOutcomesView = ({
               />
             </Flex.Item>
             <Flex.Item as="div" padding="xx-small 0">
-              <Text size="medium">
+              <Text size="medium" weight="bold">
                 {I18n.t(
                   {
                     one: '%{count} Outcome',
@@ -166,6 +167,7 @@ const ManageOutcomesView = ({
                 friendlyDescription,
                 contextType,
                 contextId,
+                canArchive,
               },
             }) => (
               <ManageOutcomeItem
@@ -187,6 +189,7 @@ const ManageOutcomesView = ({
                 onMenuHandler={onOutcomeMenuHandler}
                 onCheckboxHandler={onSelectOutcomesHandler}
                 isEnhanced={isEnhanced}
+                canArchive={canArchive}
               />
             )
           )}
@@ -222,6 +225,7 @@ ManageOutcomesView.propTypes = {
             canEdit: PropTypes.bool.isRequired,
             contextType: PropTypes.string,
             contextId: PropTypes.string,
+            canArchive: PropTypes.bool,
           }),
         })
       ),

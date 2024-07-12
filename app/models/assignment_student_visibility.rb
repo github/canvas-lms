@@ -21,7 +21,7 @@ class AssignmentStudentVisibility < ActiveRecord::Base
   include VisibilityPluckingHelper
 
   belongs_to :user
-  belongs_to :assignment
+  belongs_to :assignment, inverse_of: :assignment_student_visibilities, class_name: "AbstractAssignment"
   belongs_to :course
 
   # create_or_update checks for !readonly? before persisting
@@ -29,11 +29,32 @@ class AssignmentStudentVisibility < ActiveRecord::Base
     true
   end
 
+  def self.where_with_guard(*args)
+    if Account.site_admin.feature_enabled?(:selective_release_backend)
+      raise StandardError, "AssignmentStudentVisibility view should not be used when selective_release_backend site admin flag is on.  Use AssignmentVisibilityService instead"
+    end
+
+    where_without_guard(*args)
+  end
+
+  class << self
+    alias_method :where_without_guard, :where
+    alias_method :where, :where_with_guard
+  end
+
   def self.visible_assignment_ids_in_course_by_user(opts)
+    if Account.site_admin.feature_enabled?(:selective_release_backend)
+      raise StandardError, "AssignmentStudentVisibility view should not be used when selective_release_backend site admin flag is on.  Use AssignmentVisibilityService instead"
+    end
+
     visible_object_ids_in_course_by_user(:assignment_id, opts)
   end
 
   def self.assignments_with_user_visibilities(course, assignments)
+    if Account.site_admin.feature_enabled?(:selective_release_backend)
+      raise StandardError, "AssignmentStudentVisibility view should not be used when selective_release_backend site admin flag is on.  Use AssignmentVisibilityService instead"
+    end
+
     only_visible_to_overrides, visible_to_everyone = assignments.partition(&:only_visible_to_overrides)
     assignment_visibilities = {}
 
@@ -51,6 +72,10 @@ class AssignmentStudentVisibility < ActiveRecord::Base
   end
 
   def self.assignments_visible_to_all_students(assignments_visible_to_everyone)
+    if Account.site_admin.feature_enabled?(:selective_release_backend)
+      raise StandardError, "AssignmentStudentVisibility view should not be used when selective_release_backend site admin flag is on.  Use AssignmentVisibilityService instead"
+    end
+
     assignments_visible_to_everyone.each_with_object({}) do |assignment, assignment_visibilities|
       # if an assignment is visible to everyone, we do not care about the contents
       # of its assignment_visibilities. instead of setting this to an array of every
@@ -60,10 +85,18 @@ class AssignmentStudentVisibility < ActiveRecord::Base
   end
 
   def self.users_with_visibility_by_assignment(opts)
+    if Account.site_admin.feature_enabled?(:selective_release_backend)
+      raise StandardError, "AssignmentStudentVisibility view should not be used when selective_release_backend site admin flag is on.  Use AssignmentVisibilityService instead"
+    end
+
     users_with_visibility_by_object_id(:assignment_id, opts)
   end
 
   def self.visible_assignment_ids_for_user(user_id, course_ids = nil)
+    if Account.site_admin.feature_enabled?(:selective_release_backend)
+      raise StandardError, "AssignmentStudentVisibility view should not be used when selective_release_backend site admin flag is on.  Use AssignmentVisibilityService instead"
+    end
+
     opts = { user_id: }
     if course_ids
       opts[:course_id] = course_ids

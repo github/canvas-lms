@@ -21,7 +21,7 @@ import {fireEvent, render} from '@testing-library/react'
 
 import {COURSE, BLACKOUT_DATES} from '../../../__tests__/fixtures'
 
-import CoursePaceDateInput, {CoursePacesDateInputProps} from '../course_pace_date_input'
+import CoursePaceDateInput, {type CoursePacesDateInputProps} from '../course_pace_date_input'
 import moment from 'moment'
 
 beforeAll(() => {
@@ -86,8 +86,8 @@ describe('CoursePacesDateSelector', () => {
     const blackoutDates = [
       {
         event_title: 'Student Break',
-        start_date: moment('September 2, 2021'),
-        end_date: moment('September 10, 2021'),
+        start_date: moment('09-02-2021', 'MM-DD-YYYY'),
+        end_date: moment('09-10-2021', 'MM-DD-YYYY'),
       },
     ]
     const {getByText} = render(

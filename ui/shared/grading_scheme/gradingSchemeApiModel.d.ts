@@ -25,6 +25,16 @@ export interface GradingSchemeTemplate {
   points_based: boolean
 }
 
+export type UsedLocation = {
+  id: string
+  name: string
+  'concluded?'?: boolean
+  assignments: {
+    id: string
+    title: string
+  }[]
+}
+
 export interface GradingScheme {
   id: string
   title: string
@@ -36,6 +46,9 @@ export interface GradingScheme {
   assessed_assignment: boolean
   scaling_factor: number
   points_based: boolean
+  used_locations?: UsedLocation[]
+  workflow_state: 'active' | 'archived' | 'deleted'
+  used_as_default: boolean
 }
 
 export interface GradingSchemeUpdateRequest {
@@ -49,4 +62,10 @@ export interface GradingSchemeUpdateRequest {
 export interface GradingSchemeSummary {
   title: string
   id: string
+  context_type: 'Account' | 'Course'
+}
+
+export interface GradingSchemeCardData {
+  editing: boolean
+  gradingScheme: GradingScheme
 }

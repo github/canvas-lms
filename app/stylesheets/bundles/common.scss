@@ -73,6 +73,7 @@
 @import 'base/layout';
 @import 'base/ic_app_layout';
 @import 'base/ic_app_header';
+@import 'base/SideNav';
 @import 'base/left-side';
 @import 'base/right-side';
 @import 'base/print';
@@ -97,3 +98,4 @@
 @import 'bundles/context_cards';
 @import 'bundles/rce';
 @import 'pages/react_files/_FilePreview.scss';
+@import 'components/media_recorder';

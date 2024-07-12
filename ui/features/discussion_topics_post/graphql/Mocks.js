@@ -29,6 +29,7 @@ import {
   CREATE_DISCUSSION_ENTRY,
   DELETE_DISCUSSION_TOPIC,
   UPDATE_DISCUSSION_READ_STATE,
+  UPDATE_DISCUSSION_THREAD_READ_STATE,
   UPDATE_DISCUSSION_TOPIC,
   UPDATE_USER_DISCUSSION_SPLITSCREEN_PREFERENCE,
 } from './Mutations'
@@ -41,12 +42,10 @@ import {AnonymousUser} from './AnonymousUser'
 
 /* Query Mocks */
 export const getDiscussionQueryMock = ({
-  courseID = '1',
   discussionID = 'Discussion-default-mock',
   filter = 'all',
   page = 'MA==',
   perPage = 20,
-  rolePillTypes = ['TaEnrollment', 'TeacherEnrollment', 'DesignerEnrollment'],
   rootEntries = true,
   searchTerm = '',
   sort = 'desc',
@@ -58,12 +57,10 @@ export const getDiscussionQueryMock = ({
     request: {
       query: DISCUSSION_QUERY,
       variables: {
-        courseID,
         discussionID,
         filter,
         page,
         perPage,
-        rolePillTypes,
         rootEntries,
         searchTerm,
         sort,
@@ -136,12 +133,10 @@ export const getDiscussionQueryMock = ({
 ]
 
 export const getAnonymousDiscussionQueryMock = ({
-  courseID = '1',
   discussionID = 'Discussion-default-mock',
   filter = 'all',
   page = 'MA==',
   perPage = 20,
-  rolePillTypes = ['TaEnrollment', 'TeacherEnrollment', 'DesignerEnrollment'],
   rootEntries = true,
   searchTerm = '',
   sort = 'desc',
@@ -152,12 +147,10 @@ export const getAnonymousDiscussionQueryMock = ({
     request: {
       query: DISCUSSION_QUERY,
       variables: {
-        courseID,
         discussionID,
         filter,
         page,
         perPage,
-        rolePillTypes,
         rootEntries,
         searchTerm,
         sort,
@@ -197,13 +190,11 @@ export const getDiscussionSubentriesQueryMock = ({
   after = null,
   before = null,
   beforeRelativeEntry = null,
-  courseID = '1',
   discussionEntryID = 'DiscussionEntry-default-mock',
   first = null,
   includeRelativeEntry = null,
   last = null,
   relativeEntryId = null,
-  rolePillTypes = ['TaEnrollment', 'TeacherEnrollment', 'DesignerEnrollment'],
   sort = 'asc',
   shouldError = false,
 } = {}) => [
@@ -214,13 +205,11 @@ export const getDiscussionSubentriesQueryMock = ({
         ...(after !== null && {after}),
         ...(before !== null && {before}),
         ...(beforeRelativeEntry !== null && {beforeRelativeEntry}),
-        courseID,
         discussionEntryID,
         ...(first !== null && {first}),
         ...(includeRelativeEntry !== null && {includeRelativeEntry}),
         ...(last !== null && {last}),
         ...(relativeEntryId !== null && {relativeEntryId}),
-        ...(rolePillTypes !== null && {rolePillTypes}),
         sort,
       },
     },
@@ -291,18 +280,14 @@ export const getDiscussionSubentriesQueryMock = ({
 ]
 
 export const getDiscussionEntryAllRootEntriesQueryMock = ({
-  courseID = '1',
   discussionEntryID = 'DiscussionEntry-default-mock',
-  rolePillTypes = ['TaEnrollment', 'TeacherEnrollment', 'DesignerEnrollment'],
   shouldError = false,
 } = {}) => [
   {
     request: {
       query: DISCUSSION_ENTRY_ALL_ROOT_ENTRIES_QUERY,
       variables: {
-        courseID,
         discussionEntryID,
-        ...(rolePillTypes !== null && {rolePillTypes}),
       },
     },
     result: {
@@ -339,6 +324,7 @@ export const deleteDiscussionEntryMock = ({id = 'DiscussionEntry-default-mock'} 
             id,
             _id: id,
             deleted: true,
+            anonymousAuthor: AnonymousUser.mock({shortName: 'current_user'}),
           }),
           errors: null,
           __typename: 'DeleteDiscussionEntryPayload',
@@ -381,6 +367,7 @@ export const updateDiscussionEntryParticipantMock = ({
               reportType: reportType !== null ? reportType : null,
               __typename: 'EntryParticipant',
             },
+            anonymousAuthor: AnonymousUser.mock({shortName: 'current_user'}),
           }),
           __typename: 'UpdateDiscussionEntryParticipantPayload',
         },
@@ -395,6 +382,7 @@ export const updateDiscussionEntryMock = ({
   message = '<p>This is the parent reply</p>',
   fileId = '7',
   removeAttachment = !fileId,
+  quotedEntryId = null,
 } = {}) => [
   {
     request: {
@@ -404,6 +392,7 @@ export const updateDiscussionEntryMock = ({
         message,
         ...(fileId !== null && {fileId}),
         removeAttachment,
+        quotedEntryId,
       },
     },
     result: {
@@ -414,6 +403,7 @@ export const updateDiscussionEntryMock = ({
             _id: discussionEntryId,
             message,
             attachment: removeAttachment ? null : Attachment.mock(),
+            anonymousAuthor: AnonymousUser.mock({shortName: 'current_user'}),
           }),
           errors: null,
           __typename: 'UpdateDiscussionEntryPayload',
@@ -457,7 +447,6 @@ export const createDiscussionEntryMock = ({
   parentEntryId = null,
   fileId = null,
   isAnonymousAuthor = false,
-  courseID = '1',
   quotedEntryId = undefined,
 } = {}) => [
   {
@@ -469,7 +458,6 @@ export const createDiscussionEntryMock = ({
         isAnonymousAuthor,
         ...(parentEntryId !== null && {parentEntryId}),
         ...(fileId !== null && {fileId}),
-        ...(courseID !== null && {courseID}),
         ...(quotedEntryId !== undefined && {quotedEntryId}),
       },
     },
@@ -553,6 +541,35 @@ export const updateDiscussionReadStateMock = ({
             _id: discussionTopicId,
           }),
           __typename: 'UpdateDiscussionReadStatePayload',
+        },
+      },
+    },
+  },
+]
+
+export const updateDiscussionThreadReadStateMock = ({
+  discussionEntryId = 'discussion-entry-default-mock',
+  read = true,
+} = {}) => [
+  {
+    request: {
+      query: UPDATE_DISCUSSION_THREAD_READ_STATE,
+      variables: {
+        discussionEntryId,
+        read,
+      },
+    },
+    result: {
+      data: {
+        updateDiscussionThreadReadState: {
+          discussionEntry: DiscussionEntry.mock({
+            id: discussionEntryId,
+            _id: discussionEntryId,
+            read,
+            anonymousAuthor: AnonymousUser.mock({shortName: 'current_user'}),
+          }),
+          errors: null,
+          __typename: 'UpdateDiscussionThreadReadStatePayload',
         },
       },
     },

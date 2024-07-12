@@ -57,8 +57,6 @@ describe('HeaderInputs', () => {
   })
 
   beforeAll(() => {
-    // eslint-disable-next-line no-undef
-    fetchMock.dontMock()
     server.listen()
 
     window.matchMedia = jest.fn().mockImplementation(() => {
@@ -91,8 +89,6 @@ describe('HeaderInputs', () => {
   })
 
   afterAll(() => {
-    // eslint-disable-next-line no-undef
-    fetchMock.enableMocks()
     server.close()
   })
 

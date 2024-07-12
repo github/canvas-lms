@@ -509,6 +509,43 @@ describe AssignmentGroupsController do
           expect(assignment_json.fetch("in_closed_grading_period")).to be true
         end
       end
+
+      context "cross shard observer" do
+        specs_require_sharding
+
+        it "fetches observees submissions" do
+          @shard1.activate do
+            student_in_course(active_all: true)
+            @cross_shard_observer = User.create!
+            @course.enroll_student(@cross_shard_observer, enrollment_state: "active")
+          end
+          @shard2.activate do
+            account = Account.create!
+            @course2 = Course.create!(account:, workflow_state: "available")
+            @teacher = @course2.enroll_teacher(@teacher, enrollment_state: "active").user
+            @observer_enrollment = @course2.enroll_user(@cross_shard_observer, "ObserverEnrollment", enrollment_state: "active")
+            @course2.enroll_student(@student, enrollment_state: "active")
+            @observer_enrollment.update_attribute(:associated_user_id, @student.id)
+            @assignment = @course2.assignments.create!(name: "Assignment 1", submission_types: "online_text_entry")
+            @assignment.grade_student(@student, grade: 9, grader: @teacher)
+          end
+
+          json = api_call_as_user(@cross_shard_observer,
+                                  :get,
+                                  "/api/v1/courses/#{@course2.id}/assignment_groups",
+                                  {
+                                    controller: "assignment_groups",
+                                    action: "index",
+                                    format: "json",
+                                    course_id: @course2.id,
+                                    include: %w[assignments observed_users submission]
+                                  })
+
+          expect(json[0]["assignments"][0]["submission"]).to be_present
+          expect(json[0]["assignments"][0]["submission"][0]["grade"]).to eq "9"
+          expect(json[0]["assignments"][0]["submission"][0]["user_id"]).to eq @student.id
+        end
+      end
     end
 
     context "passing include_param assessment_requests", type: :request do
@@ -623,6 +660,35 @@ describe AssignmentGroupsController do
           expect(assessment_request0["available"]).to be true
           expect(assessment_request1["available"]).to be false
         end
+      end
+    end
+
+    context "passing include_param checkpoints", type: :request do
+      before do
+        course_with_teacher(active_all: true)
+        @student1 = student_in_course(course: @course, active_enrollment: true).user
+        @course.root_account.enable_feature!(:discussion_checkpoints)
+        assignment = @course.assignments.create!(has_sub_assignments: true)
+        assignment.sub_assignments.create!(context: @course, sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC, due_at: 2.days.from_now)
+        assignment.sub_assignments.create!(context: @course, sub_assignment_tag: CheckpointLabels::REPLY_TO_ENTRY, due_at: 3.days.from_now)
+        @topic = @course.discussion_topics.create!(assignment:, reply_to_entry_required_count: 4)
+      end
+
+      it "returns the checkpointed discussions data" do
+        json = api_call_as_user(
+          @student1,
+          :get,
+          "/api/v1/courses/#{@course.id}/assignment_groups?include[]=assignments&include[]=discussion_topic&include[]=checkpoints",
+          {
+            controller: "assignment_groups",
+            action: "index",
+            format: "json",
+            course_id: @course.id,
+            include: %w[assignments discussion_topic checkpoints]
+          }
+        )
+        expect(json[0]["assignments"][0]["checkpoints"].count).to eq 2
+        expect(json[0]["assignments"][0]["discussion_topic"]["reply_to_entry_required_count"]).to eq 4
       end
     end
   end

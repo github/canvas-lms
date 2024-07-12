@@ -19,7 +19,7 @@
 import {AlertManagerContext} from '@canvas/alerts/react/AlertManager'
 import {ApolloProvider} from 'react-apollo'
 import CanvasInbox from '../CanvasInbox'
-import {handlers} from '../../../graphql/mswHandlers'
+import {handlers, inboxSettingsHandlers} from '../../../graphql/mswHandlers'
 import {mswClient} from '../../../../../shared/msw/mswClient'
 import {mswServer} from '../../../../../shared/msw/mswServer'
 import React from 'react'
@@ -33,11 +33,9 @@ jest.mock('../../../util/utils', () => ({
 }))
 
 describe('CanvasInbox App Container', () => {
-  const server = mswServer(handlers)
+  const server = mswServer(handlers.concat(inboxSettingsHandlers()))
 
   beforeAll(() => {
-    // eslint-disable-next-line no-undef
-    fetchMock.dontMock()
     server.listen()
     window.matchMedia = jest.fn().mockImplementation(() => {
       return {
@@ -61,8 +59,6 @@ describe('CanvasInbox App Container', () => {
 
   afterAll(() => {
     server.close()
-    // eslint-disable-next-line no-undef
-    fetchMock.enableMocks()
     window.ENV = {}
   })
 
@@ -70,7 +66,7 @@ describe('CanvasInbox App Container', () => {
     mswClient.cache.reset()
     window.location.hash = ''
     window.ENV = {
-      current_user_id: 9,
+      current_user_id: '9',
       current_user: {
         id: '9',
       },
@@ -212,6 +208,41 @@ describe('CanvasInbox App Container', () => {
         expect(window.location.hash).toBe('#filter=type=inbox')
         expect(mailboxDropdown.getAttribute('value')).toBe('')
       })
+      it('should set course select in compose modal to course name when the context id param is in the url', async () => {
+        const originalLocation = window.location
+        delete window.location
+        window.location = {
+          search: '',
+          hash: '',
+        }
+        window.location.hash = '#filter=type=inbox'
+        window.location.search = '?context_id=course_195&user_id=9&user_name=Ally'
+        const container = setup()
+        await waitForApolloLoading()
+
+        const courseSelectModal = await container.findByTestId('course-select-modal')
+        expect(courseSelectModal.getAttribute('value')).toBe('XavierSchool')
+        window.location = originalLocation
+      })
+    })
+  })
+
+  describe('Inbox Signature Block Settings enabled', () => {
+    it('should display Inbox Settings in header', () => {
+      window.ENV.CONVERSATIONS.INBOX_SIGNATURE_BLOCK_ENABLED = true
+      const {getByTestId} = setup()
+      expect(getByTestId('inbox-settings-in-header')).toBeInTheDocument()
+    })
+
+    it('should redirect to inbox when submission_comments and click on Compose button', async () => {
+      window.ENV.CONVERSATIONS.INBOX_SIGNATURE_BLOCK_ENABLED = true
+      const {findByText} = setup()
+      await waitForApolloLoading()
+      window.location.hash = '#filter=type=submission_comments=randomstring'
+      const composeButton = await findByText('Compose')
+      fireEvent.click(composeButton)
+      await waitForApolloLoading()
+      expect(window.location.hash).toBe('#filter=type=inbox')
     })
   })
 })

@@ -17,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require "byebug"
+require "debug"
 require "canvas_cache"
 require "action_controller"
 require "active_record"
@@ -27,6 +27,7 @@ Rails.env = "test"
 # give the logger some implementation since
 # we aren't initializing a full app in these specs
 Rails.logger = Logger.new($stdout)
+ActiveSupport::Cache.format_version = 7.0
 
 RSpec.shared_context "caching_helpers", shared_context: :metadata do
   # provide a way to temporarily replace the rails
@@ -50,7 +51,7 @@ RSpec.shared_context "caching_helpers", shared_context: :metadata do
   def set_cache(new_cache)
     cache_opts = {}
     if new_cache == :redis_cache_store
-      if CanvasCache::Redis.redis_enabled?
+      if CanvasCache::Redis.enabled?
         cache_opts[:redis] = CanvasCache::Redis.redis
       else
         skip "redis required"
@@ -108,6 +109,8 @@ RSpec.configure do |config|
     allow(Rails).to receive(:root).and_return(target_location)
 
     # make sure redis is in a stable state before every spec
+    CanvasCache::Redis.redis._client.config.circuit_breaker&.instance_variable_set(:@state, :closed)
+    CanvasCache::Redis.redis._client.config.circuit_breaker&.instance_variable_get(:@errors)&.clear
     GuardRail.activate(:deploy) { CanvasCache::Redis.redis.flushdb }
   end
 end

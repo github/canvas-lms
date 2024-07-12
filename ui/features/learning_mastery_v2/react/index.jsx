@@ -20,7 +20,6 @@ import React, {useEffect, useState} from 'react'
 import PropTypes from 'prop-types'
 import {View} from '@instructure/ui-view'
 import {Text} from '@instructure/ui-text'
-import {Link} from '@instructure/ui-link'
 import {IconArrowOpenDownSolid} from '@instructure/ui-icons'
 import {Spinner} from '@instructure/ui-spinner'
 import {useScope as useI18nScope} from '@canvas/i18n'
@@ -29,17 +28,18 @@ import Gradebook from './Gradebook'
 import useRollups from './hooks/useRollups'
 import GradebookMenu from '@canvas/gradebook-menu/react/GradebookMenu'
 import {Flex} from '@instructure/ui-flex'
-import {ApplyTheme} from '@instructure/ui-themeable'
+import {InstUISettingsProvider} from '@instructure/emotion'
 import {IconButton} from '@instructure/ui-buttons'
+import LMGBContext, {getLMGBContext} from '@canvas/outcomes/react/contexts/LMGBContext'
+import ExportCSVButton from './ExportCSVButton'
 
 const I18n = useI18nScope('LearningMasteryGradebook')
 
-const getRatings = () => {
-  const ratings = ENV.GRADEBOOK_OPTIONS.outcome_proficiency.ratings
+const getRatings = ratings => {
   const masteryAt = ratings.find(rating => rating.mastery).points
   return [
     ...ratings.map(({points, description, color}) => ({
-      description: description === I18n.t("Below Mastery") ? I18n.t("Remediation") : description,
+      description: description === I18n.t('Below Mastery') ? I18n.t('Remediation') : description,
       points,
       masteryAt,
       color: '#' + color,
@@ -48,10 +48,10 @@ const getRatings = () => {
   ]
 }
 
-const gradebookMenuOverride = {
-  [Link.theme]: {
-    color: 'licorice'
-  }
+const componentOverrides = {
+  Link: {
+    color: 'licorice',
+  },
 }
 
 const renderLoader = () => (
@@ -61,14 +61,27 @@ const renderLoader = () => (
 )
 
 const LearningMastery = ({courseId}) => {
-  const options = ENV.GRADEBOOK_OPTIONS
-  const accountLevelMasteryScalesFF = options.ACCOUNT_LEVEL_MASTERY_SCALES
+  const contextValues = getLMGBContext()
+  const {contextURL, outcomeProficiency, accountLevelMasteryScalesFF} = contextValues.env
 
-  const {isLoading, students, outcomes, rollups} = useRollups({
-    courseId,
-    accountLevelMasteryScalesFF,
-  })
+  const {isLoading, students, outcomes, rollups, gradebookFilters, setGradebookFilters} =
+    useRollups({
+      courseId,
+      accountLevelMasteryScalesFF,
+    })
   const [visibleRatings, setVisibleRatings] = useState([])
+
+  const onGradebookFilterChange = filterItem => {
+    const filters = new Set(gradebookFilters)
+
+    if (filters.has(filterItem)) {
+      filters.delete(filterItem)
+    } else {
+      filters.add(filterItem)
+    }
+
+    setGradebookFilters(Array.from(filters))
+  }
 
   useEffect(() => {
     if (accountLevelMasteryScalesFF) {
@@ -77,39 +90,50 @@ const LearningMastery = ({courseId}) => {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <>
-      <ApplyTheme theme={gradebookMenuOverride}>
+    <LMGBContext.Provider value={contextValues}>
+      <InstUISettingsProvider theme={{componentOverrides}}>
         <Flex
           height="100%"
           display="flex"
           alignItems="center"
-          justifyItems="start"
+          justifyItems="space-between"
           padding="medium 0 0 0"
-          data-testid="lmgb-gradebook-menu"
+          data-testid="lmgb-menu-and-settings"
         >
-          <Text size='xx-large' weight='bold'>{I18n.t('Learning Mastery Gradebook')}</Text>
-          <View padding="xx-small">
-            <GradebookMenu
-              courseUrl={options.context_url}
-              learningMasteryEnabled={true}
-              variant="DefaultGradebookLearningMastery"
-              customTrigger={
-                <IconButton
-                  withBorder={false}
-                  withBackground={false}
-                  screenReaderLabel={I18n.t("Gradebook Menu Dropdown")}
-                >
-                  <IconArrowOpenDownSolid size='x-small'/>
-                </IconButton>
-              }
+          <Flex alignItems="center" data-testid="lmgb-gradebook-menu">
+            <Text size="xx-large" weight="bold">
+              {I18n.t('Learning Mastery Gradebook')}
+            </Text>
+            <View padding="xx-small">
+              <GradebookMenu
+                courseUrl={contextURL}
+                learningMasteryEnabled={true}
+                variant="DefaultGradebookLearningMastery"
+                customTrigger={
+                  <IconButton
+                    withBorder={false}
+                    withBackground={false}
+                    screenReaderLabel={I18n.t('Gradebook Menu Dropdown')}
+                  >
+                    <IconArrowOpenDownSolid size="x-small" />
+                  </IconButton>
+                }
+              />
+            </View>
+          </Flex>
+          <View>
+            <ExportCSVButton
+              courseId={courseId}
+              gradebookFilters={gradebookFilters}
+              data-testid="export-csv-button"
             />
           </View>
         </Flex>
-      </ApplyTheme>
+      </InstUISettingsProvider>
       {accountLevelMasteryScalesFF && (
         <Flex.Item as="div" width="100%" padding="small 0 0 0">
           <ProficiencyFilter
-            ratings={getRatings()}
+            ratings={getRatings(outcomeProficiency.ratings)}
             visibleRatings={visibleRatings}
             setVisibleRatings={setVisibleRatings}
           />
@@ -124,9 +148,11 @@ const LearningMastery = ({courseId}) => {
           students={students}
           rollups={rollups}
           visibleRatings={visibleRatings}
+          gradebookFilters={gradebookFilters}
+          gradebookFilterHandler={onGradebookFilterChange}
         />
       )}
-    </>
+    </LMGBContext.Provider>
   )
 }
 

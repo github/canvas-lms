@@ -17,49 +17,43 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
+require "redis"
+
 module CanvasHttp
   # For managing host specific failure history
   # so that in cases where there is a downstream service
   # that is failing, we can stop wasting server time
   # blocking on responses that aren't coming.
   #
-  # Threshold, interval, and window callbacks are all provided
-  # with a host so that it's possible for consuming
-  # application to configure different parameters
-  # for different services
-  #
-  # e.g.
-  #
-  # CanvasHttp::CircuitBreaker.threshold = lambda do |domain|
-  #  Setting.get("http_cb_#{domain}_threshold", 20).to_i
-  # end
-  #
   module CircuitBreaker
-    DEFAULT_THRESHOLD = 10
-    DEFAULT_INTERVAL = 15
-    DEFAULT_WINDOW = 20
+    THRESHOLD = 10
+    INTERVAL = 15
+    WINDOW = 20
 
     class << self
-      attr_writer :threshold, :interval, :window
       attr_accessor :redis
 
       def tripped?(domain)
         return false if redis_client.nil?
 
-        !redis_client.get(tripped_key(domain)).nil?
+        !redis_client.get(tripped_key(domain), failsafe: nil).nil?
       end
 
       def trip_if_necessary(domain)
         return if redis_client.nil?
 
         key = threshold_key(domain)
-        redis_client.setnx(key, 0)
-        redis_client.expire(key, window(domain))
-        current_count = redis_client.incr(key)
-        if current_count > threshold(domain)
-          redis_client.setex(tripped_key(domain), interval(domain), "1")
-          CanvasHttp.logger.warn("CANVAS_HTTP CB_TRIP ON #{domain} | interval: #{interval(domain)} | thresh: #{threshold(domain)} | window: #{window(domain)}")
+        current_count = redis_client.pipelined(key) do |pipeline|
+          pipeline.setnx(key, 0)
+          pipeline.expire(key, WINDOW)
+          pipeline.incr(key)
+        end.last
+        if current_count > THRESHOLD
+          redis_client.setex(tripped_key(domain), INTERVAL, "1")
+          CanvasHttp.logger.warn("CANVAS_HTTP CB_TRIP ON #{domain}")
         end
+      rescue Redis::BaseConnectionError
+        # ignore
       end
 
       def tripped_key(domain)
@@ -72,18 +66,6 @@ module CanvasHttp
 
       def redis_client
         @redis.respond_to?(:call) ? @redis.call : @redis || nil
-      end
-
-      def threshold(domain)
-        (@threshold.respond_to?(:call) ? @threshold.call(domain) : @threshold) || DEFAULT_THRESHOLD
-      end
-
-      def interval(domain)
-        (@interval.respond_to?(:call) ? @interval.call(domain) : @interval) || DEFAULT_INTERVAL
-      end
-
-      def window(domain)
-        (@window.respond_to?(:call) ? @window.call(domain) : @window) || DEFAULT_WINDOW
       end
     end
   end

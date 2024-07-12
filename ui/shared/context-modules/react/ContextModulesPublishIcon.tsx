@@ -17,8 +17,7 @@
  */
 
 import React from 'react'
-import {CanvasId} from './types'
-// @ts-ignore
+import type {CanvasId} from './types'
 import {IconMiniArrowDownLine, IconPublishSolid, IconUnpublishedLine} from '@instructure/ui-icons'
 import {IconButton} from '@instructure/ui-buttons'
 import {Menu} from '@instructure/ui-menu'
@@ -75,7 +74,7 @@ const ContextModulesPublishIcon = ({
 
   const unpublishAll = () => {
     if (isPublishing) return
-    unpublishModule(courseId, moduleId)
+    unpublishModule(courseId, moduleId, false)
   }
 
   const publishAll = () => {
@@ -88,6 +87,13 @@ const ContextModulesPublishIcon = ({
     publishModule(courseId, moduleId, true)
   }
 
+  const unpublishModuleOnly = () => {
+    if (isPublishing) return
+    unpublishModule(courseId, moduleId, true)
+  }
+
+  const publishedStatus = published ? I18n.t('published') : I18n.t('unpublished')
+
   return (
     <View textAlign="center">
       <Menu
@@ -96,7 +102,10 @@ const ContextModulesPublishIcon = ({
         trigger={
           <IconButton
             withBorder={false}
-            screenReaderLabel={I18n.t('%{moduleName} Module publish options', {moduleName})}
+            screenReaderLabel={I18n.t('%{moduleName} module publish options, %{publishedStatus}', {
+              moduleName,
+              publishedStatus,
+            })}
           >
             {statusIcon()}
           </IconButton>
@@ -110,6 +119,9 @@ const ContextModulesPublishIcon = ({
         </MenuItem>
         <MenuItem onClick={unpublishAll}>
           <IconUnpublishedLine /> {I18n.t('Unpublish module and all items')}
+        </MenuItem>
+        <MenuItem onClick={unpublishModuleOnly}>
+          <IconUnpublishedLine /> {I18n.t('Unpublish module only')}
         </MenuItem>
       </Menu>
     </View>

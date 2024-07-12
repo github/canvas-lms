@@ -107,5 +107,31 @@ module FeatureFlags
                                 )
       end
     end
+
+    def self.archive_outcomes_after_change_hook(_user, context, _old_state, new_state)
+      # Get all root accounts that isn't the site admin account
+      root_accounts = Account.active.excluding(context).where(parent_account_id: nil)
+      # Filter out root accounts that aren't OS enabled
+      os_enabled_ras = root_accounts.select { |ra| OutcomesService::Service.enabled_in_context?(ra) }
+      os_enabled_ras.each do |account|
+        OutcomesService::Service.delay_if_production(priority: Delayed::LOW_PRIORITY,
+                                                     n_strand: [
+                                                       "outcomes_service_toggle_archive_outcomes_feature_flag",
+                                                       account.global_root_account_id
+                                                     ])
+                                .toggle_feature_flag(
+                                  account,
+                                  "archive_outcomes",
+                                  new_state == "on"
+                                )
+      end
+    end
+
+    def self.lti_registrations_discover_page_hook(_user, context, _from_state, transitions)
+      unless context.feature_enabled?(:lti_registrations_page)
+        transitions["on"] ||= {}
+        transitions["on"]["message"] = I18n.t("The LTI Extensions Discover page won't be accessible unless the LTI Registrations page is enabled")
+      end
+    end
   end
 end

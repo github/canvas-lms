@@ -62,7 +62,10 @@ export const Rating = props => {
     selected,
   } = props
 
-  const shaderStyle = {backgroundColor: tierColor}
+  const shaderStyle =
+    selected && tierColor
+      ? {borderBottom: `0.3em solid ${tierColor}`}
+      : {backgroundColor: tierColor}
   const triangleStyle = {borderBottomColor: tierColor}
   const shaderClasses = classNames('shader', shaderClass)
 
@@ -246,6 +249,7 @@ const Ratings = props => {
             onClick={() => handleClick(tier, selected)}
             shaderClass={getShaderClass(selected)}
             tierColor={getTierColor(selected)}
+            long_description={tier.long_description}
             hidePoints={isSummary || hidePoints}
             isSummary={isSummary}
             selected={selected}

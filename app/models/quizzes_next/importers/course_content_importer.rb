@@ -43,6 +43,12 @@ module QuizzesNext::Importers
         assignment = quiz_assignment(quiz)
         next unless assignment
 
+        if @migration.cc_qti_migration?
+          next unless assignment.ready_to_migrate_to_quiz_next?
+
+          assignment.unmark_as_ready_to_migrate_to_quiz_next
+        end
+
         lti_assignment_quiz_set << [assignment.global_id, quiz.global_id]
         assignment.workflow_state = "importing"
         assignment.importing_started_at = Time.zone.now
@@ -51,12 +57,26 @@ module QuizzesNext::Importers
           assignment.save!
         end
 
+        # For Quizzes::Quiz, the context_module_tags are associated with the quiz
+        # This migrates context_module_tags over to the assignment so that modules
+        # are retained for Quizzes.Next.
+        migrate_context_module_tags(quiz, assignment)
+
         # Quizzes will be created in Quizzes.Next app
         # assignment.quiz_lti! breaks relation to quiz. Destroying Quizzes:Quiz wouldn't
         # mark assignment to be deleted.
         quiz.destroy
       end
       setup_assets_imported(lti_assignment_quiz_set)
+    end
+
+    def migrate_context_module_tags(quiz, assignment)
+      return unless quiz && assignment
+
+      quiz.context_module_tags.find_each do |tag|
+        tag.content = assignment
+        tag.save!
+      end
     end
 
     def quiz_assignment(quiz)

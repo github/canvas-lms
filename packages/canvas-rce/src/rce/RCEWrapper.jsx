@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, {Suspense} from 'react'
+import React, {Lazy, Suspense} from 'react'
 import {Editor} from '@tinymce/tinymce-react'
 import _ from 'lodash'
 import {StoreProvider} from './plugins/shared/StoreContext'
@@ -61,23 +61,21 @@ import {countShouldIgnore} from './plugins/instructure_wordcount/utils/countCont
 import launchWordcountModal from './plugins/instructure_wordcount/clickCallback'
 import {determineOSDependentKey} from './userOS'
 
-import skinCSSBinding from 'tinymce/skins/ui/oxide/skin.min.css'
-import contentCSSBinding from 'tinymce/skins/ui/oxide/content.css'
+import skinCSS from './tinymce.oxide.skin.min.css'
+import contentCSS from './tinymce.oxide.content.min.css'
 import {rceWrapperPropTypes} from './RCEWrapperProps'
 import {insertPlaceholder, placeholderInfoFor, removePlaceholder} from '../util/loadingPlaceholder'
 import {transformRceContentForEditing} from './transformContent'
 import {IconMoreSolid} from '@instructure/ui-icons/es/svg'
 import EncryptedStorage from '../util/encrypted-storage'
 import buildStyle from './style'
+import {externalToolsForToolbar} from './plugins/instructure_rce_external_tools/RceToolWrapper'
 
 const RestoreAutoSaveModal = React.lazy(() => import('./RestoreAutoSaveModal'))
 const RceHtmlEditor = React.lazy(() => import('./RceHtmlEditor'))
 
 const ASYNC_FOCUS_TIMEOUT = 250
 const DEFAULT_RCE_HEIGHT = '400px'
-
-const skinCSS = skinCSSBinding.template().replace(/tinymce__oxide--/g, '')
-const contentCSS = contentCSSBinding.template().replace(/tinymce__oxide--/g, '')
 
 function addKebabIcon(editor) {
   // This has to be done here instead of of in plugins/instructure-ui-icons/plugin.ts
@@ -92,10 +90,7 @@ function injectTinySkin() {
   inserted = true
   const style = document.createElement('style')
   style.setAttribute('data-skin', 'tiny oxide skin')
-  style.appendChild(
-    // the .replace here is because the ui-themeable babel hook adds that prefix to all the class names
-    document.createTextNode(skinCSS)
-  )
+  style.appendChild(document.createTextNode(skinCSS))
   // there's CSS from discussions that turns the instui Selectors bold
   // and in classic quizzes that also mucks with padding
   style.appendChild(
@@ -163,14 +158,6 @@ export function storageAvailable() {
     )
   }
 }
-
-function getHtmlEditorCookie() {
-  const value = getCookie('rce.htmleditor')
-  return value === RAW_HTML_EDITOR_VIEW || value === PRETTY_HTML_EDITOR_VIEW
-    ? value
-    : PRETTY_HTML_EDITOR_VIEW
-}
-
 function renderLoading() {
   return formatMessage('Loading')
 }
@@ -265,20 +252,20 @@ class RCEWrapper extends React.Component {
         typeof IntersectionObserver === 'undefined' ||
         maxInitRenderedRCEs <= 0 ||
         currentRCECount < maxInitRenderedRCEs,
-      popupMountNode: instuiPopupMountNode(),
+      AIToolsOpen: false,
     }
     this._statusBarId = `${this.state.id}_statusbar`
 
     this.pendingEventHandlers = []
 
-    // Get top 2 favorited LTI Tools
-    this.ltiToolFavorites =
-      this.props.ltiTools
-        .filter(e => e.favorite)
-        .map(e => `instructure_external_button_${e.id}`)
-        .slice(0, 2) || []
+    this.ltiToolFavorites = externalToolsForToolbar(this.props.ltiTools).map(
+      e => `instructure_external_button_${e.id}`
+    )
 
     this.pluginsToExclude = parsePluginsToExclude(props.editorOptions?.plugins || [])
+
+    this.resourceType = props.resourceType
+    this.resourceId = props.resourceId
 
     this.tinymceInitOptions = this.wrapOptions(props.editorOptions)
 
@@ -289,6 +276,8 @@ class RCEWrapper extends React.Component {
     this.resizeObserver = new ResizeObserver(_entries => {
       this._handleFullscreenResize()
     })
+
+    this.AIToolsTray = undefined
   }
 
   // when the RCE is put into fullscreen we need to move the div
@@ -315,20 +304,20 @@ class RCEWrapper extends React.Component {
   getRequiredFeatureStatuses() {
     const {
       new_math_equation_handling = false,
-      rce_ux_improvements = false,
       explicit_latex_typesetting = false,
       rce_transform_loaded_content = false,
       media_links_use_attachment_id = false,
-      improved_no_results_messaging = false,
+      rce_find_replace = false,
+      file_verifiers_for_quiz_links = false,
     } = this.props.features
 
     return {
       new_math_equation_handling,
-      rce_ux_improvements,
       explicit_latex_typesetting,
       rce_transform_loaded_content,
       media_links_use_attachment_id,
-      improved_no_results_messaging,
+      file_verifiers_for_quiz_links,
+      rce_find_replace,
     }
   }
 
@@ -337,12 +326,18 @@ class RCEWrapper extends React.Component {
       locale: normalizeLocale(this.props.language),
       flashAlertTimeout: this.props.flashAlertTimeout,
       timezone: this.props.timezone,
-      lockedAttachments: this.props.lockedAttachments,
     }
   }
 
   getCanvasUrl() {
     return this.props.canvasOrigin
+  }
+
+  getResourceIdentifiers() {
+    return {
+      resourceType: this.resourceType,
+      resourceId: this.resourceId,
+    }
   }
 
   // getCode and setCode naming comes from tinyMCE
@@ -452,6 +447,19 @@ class RCEWrapper extends React.Component {
     const editor = this.mceInstance()
     const element = contentInsertion.insertContent(editor, code)
     this.contentInserted(element)
+  }
+
+  replaceCode(code) {
+    if (
+      code !== '' &&
+      window.confirm(
+        formatMessage(
+          'Content in the editor will be changed. Press Cancel to keep the original content.'
+        )
+      )
+    ) {
+      this.mceInstance().setContent(code)
+    }
   }
 
   insertEmbedCode(code) {
@@ -615,6 +623,17 @@ class RCEWrapper extends React.Component {
     return this.state.id
   }
 
+  getHtmlEditorStorage() {
+    const cookieValue = getCookie('rce.htmleditor')
+    if (cookieValue) {
+      document.cookie = `rce.htmleditor=${cookieValue};path=/;max-age=0`
+    }
+    const value = cookieValue || this.storage?.getItem?.('rce.htmleditor')?.content
+    return value === RAW_HTML_EDITOR_VIEW || value === PRETTY_HTML_EDITOR_VIEW
+      ? value
+      : PRETTY_HTML_EDITOR_VIEW
+  }
+
   toggleView = newView => {
     // coming from the menubar, we don't have a newView,
 
@@ -632,7 +651,7 @@ class RCEWrapper extends React.Component {
     this.setState(newState)
     this.checkAccessibility()
     if (newView === PRETTY_HTML_EDITOR_VIEW || newView === RAW_HTML_EDITOR_VIEW) {
-      document.cookie = `rce.htmleditor=${newView};path=/;max-age=31536000`
+      this.storage?.setItem?.('rce.htmleditor', newView)
     }
 
     // Emit view change event
@@ -695,7 +714,6 @@ class RCEWrapper extends React.Component {
         FocusRegionManager.blurRegion(event.target, this._focusRegion.id)
       }
     }
-    this.setState({popupMountNode: instuiPopupMountNode()})
     this.focusCurrentView()
   }
 
@@ -1011,82 +1029,15 @@ class RCEWrapper extends React.Component {
 
     this.fixToolbarKeyboardNavigation()
 
-    this.forwardPostMessages()
-
     this.props.onInitted?.(editor)
-  }
 
-  static editorFrameName = 'active_rce_frame'
-
-  /**
-   * Forwards postMessages from child frames, like LTI tools
-   * embedded in the editor, to the parent frame.
-   * Also forwards response postMessages from the parent
-   * back to the child frame that sent it.
-   *
-   * Initializes message listener.
-   */
-  forwardPostMessages = () => {
-    const windowReferences = []
-    const rceWindow = this.editor.getWin()
-    // explicitly assign name for reference by parent window
-    rceWindow.name = `${RCEWrapper.editorFrameName}_${this.id}`
-
-    rceWindow.addEventListener(
-      'message',
-      this.forwardPostMessagesHandler(rceWindow, windowReferences)
-    )
-  }
-
-  /**
-   * Forwards postMessages from child frames, like LTI tools
-   * embedded in the editor, to the parent frame.
-   * Also forwards response postMessages from the parent
-   * back to the child frame that sent it.
-   * Requires that the message data is an object, since it attaches
-   * `sourceToolInfo` to it. Uses `sourceToolInfo` on response messages
-   * to determine which child frame should get the message.
-   *
-   * Actual handler function with parameters passed for testing.
-   */
-  forwardPostMessagesHandler = (rceWindow, windowReferences) => e => {
-    let message
-    try {
-      message = typeof e.data === 'string' ? JSON.parse(e.data) : e.data
-    } catch (err) {
-      // unparseable message may not be meant for our handlers
-      return false
-    }
-
-    // NOTE: the code to encode/decode `sourceToolInfo` is duplicated in
-    // the ui/features/post_message_forwarding/index.ts, and
-    // cannot be DRY'd because RCE is in a package
-    if (e.origin === rceWindow.origin) {
-      const {sourceToolInfo, ...messageWithoutSourceToolInfo} = message
-      const targetOrigin = sourceToolInfo?.origin
-      const targetWindow = windowReferences[sourceToolInfo?.windowId]
-      if (!targetOrigin || !targetWindow) {
-        return false
-      }
-      targetWindow?.postMessage(messageWithoutSourceToolInfo, targetOrigin)
-    } else {
-      // message is from tool, forward to Canvas window
-
-      // We can't forward the whole `e.source` window in the postMessage,
-      // so we keep a list (`windowReferences`) of all windows we've received
-      // messages from, and include the index into that list as `windowId`
-      let windowId = windowReferences.indexOf(e.source)
-      if (windowId === -1) {
-        windowReferences.push(e.source)
-        windowId = windowReferences.length - 1
-      }
-
-      const newMessage = {
-        ...message,
-        sourceToolInfo: {origin: e.origin, windowId},
-        frameName: rceWindow.name,
-      }
-      rceWindow.parent.postMessage(newMessage, rceWindow.origin)
+    // cleans up highlight artifacts from findreplace plugin
+    if (this.getRequiredFeatureStatuses().rce_find_replace) {
+      editor.on('undo redo', e => {
+        if (editor?.dom?.doc?.getElementsByClassName?.('mce-match-marker')?.length > 0) {
+          editor.plugins?.searchreplace?.done()
+        }
+      })
     }
   }
 
@@ -1415,13 +1366,14 @@ class RCEWrapper extends React.Component {
     }
   }
 
-  onA11yChecker = () => {
+  onA11yChecker = triggerElementId => {
     const editor = this.mceInstance()
     editor.execCommand(
       'openAccessibilityChecker',
       false,
       {
         mountNode: instuiPopupMountNode,
+        triggerElementId,
         onFixError: errors => {
           this.setState({a11yErrorsCount: errors.length})
         },
@@ -1474,6 +1426,72 @@ class RCEWrapper extends React.Component {
     }
   }
 
+  handleAIClick = () => {
+    import('./plugins/shared/ai_tools')
+      .then(module => {
+        this.AIToolsTray = module.AIToolsTray
+
+        this.setState({
+          AIToolsOpen: true,
+          AITToolsFocusReturn: document.activeElement,
+        })
+      })
+      .catch(ex => {
+        // eslint-disable-next-line no-console
+        console.error('Failed loading the AIToolsTray', ex)
+      })
+  }
+
+  closeAITools = () => {
+    this.setState({AIToolsOpen: false})
+  }
+
+  AIToolsExited = () => {
+    if (this.state.AITToolsFocusReturn === this.iframe) {
+      // launched using a kb shortcut
+      // the iframe has focus so we need to forward it on to tinymce editor
+      this.editor.focus(false)
+    } else if (
+      this.state.AITToolsFocusReturn === document.getElementById(`show-on-focus-btn-${this.id}`)
+    ) {
+      // launched from showOnFocus button
+      // edge case where focusing KBShortcutFocusReturn doesn't work
+      this._showOnFocusButton?.focus()
+    } else {
+      // launched from kb shortcut button on status bar
+      this.state.AITToolsFocusReturn?.focus()
+    }
+  }
+
+  handleInsertAIContent = content => {
+    const editor = this.mceInstance()
+    contentInsertion.insertContent(editor, content)
+  }
+
+  handleReplaceAIContent = content => {
+    const ed = this.mceInstance()
+    const selection = ed.selection
+    if (selection.getContent().length > 0) {
+      selection.setContent(content)
+    } else {
+      ed.selection.select(ed.getBody(), true)
+      selection.setContent(content)
+    }
+  }
+
+  getCurrentContentForAI = () => {
+    const selected = this.mceInstance().selection.getContent()
+    return selected
+      ? {
+          type: 'selection',
+          content: selected,
+        }
+      : {
+          type: 'full',
+          content: this.mceInstance().getContent(),
+        }
+  }
+
   setFocusAbilityForHeader = focusable => {
     // Sets aria-hidden to prevent screen readers focus in RCE menus and toolbar
     const header = this._elementRef.current.querySelector('.tox-editor-header')
@@ -1520,6 +1538,11 @@ class RCEWrapper extends React.Component {
 
     if (document[FS_ENABLED]) {
       canvasPlugins.push('instructure_fullscreen')
+    }
+
+    if (this.getRequiredFeatureStatuses().rce_find_replace) {
+      canvasPlugins.push('searchreplace')
+      canvasPlugins.push('instructure_search_and_replace')
     }
 
     const possibleNewMenubarItems = this.props.editorOptions.menu
@@ -1596,7 +1619,10 @@ class RCEWrapper extends React.Component {
             items:
               'instructure_links instructure_image instructure_media instructure_document instructure_icon_maker | instructure_equation inserttable instructure_media_embed | hr',
           },
-          tools: {title: formatMessage('Tools'), items: 'instructure_wordcount lti_tools_menuitem'},
+          tools: {
+            title: formatMessage('Tools'),
+            items: 'instructure_wordcount lti_tools_menuitem instructure_search_and_replace',
+          },
           view: {
             title: formatMessage('View'),
             items: 'instructure_fullscreen instructure_exit_fullscreen instructure_html_view',
@@ -1797,20 +1823,14 @@ class RCEWrapper extends React.Component {
   setEditorView(view) {
     switch (view) {
       case RAW_HTML_EDITOR_VIEW:
-        this.getTextarea().removeAttribute('aria-hidden')
-        this.getTextarea().labels?.[0]?.removeAttribute('aria-hidden')
         this.mceInstance().hide()
         break
       case PRETTY_HTML_EDITOR_VIEW:
-        this.getTextarea().setAttribute('aria-hidden', true)
-        this.getTextarea().labels?.[0]?.setAttribute('aria-hidden', true)
         this.mceInstance().hide()
         this._elementRef.current.querySelector('.CodeMirror')?.CodeMirror.setCursor(0, 0)
         break
       case WYSIWYG_VIEW:
         this.setCode(this.textareaValue())
-        this.getTextarea().setAttribute('aria-hidden', true)
-        this.getTextarea().labels?.[0]?.setAttribute('aria-hidden', true)
         this.mceInstance().show()
     }
   }
@@ -1955,7 +1975,7 @@ class RCEWrapper extends React.Component {
                   path={this.state.path}
                   wordCount={this.state.wordCount}
                   editorView={this.state.editorView}
-                  preferredHtmlEditor={getHtmlEditorCookie()}
+                  preferredHtmlEditor={this.getHtmlEditorStorage()}
                   onResize={this.onResize}
                   onKBShortcutModalOpen={this.openKBShortcutModal}
                   onA11yChecker={this.onA11yChecker}
@@ -1966,10 +1986,12 @@ class RCEWrapper extends React.Component {
                     launchWordcountModal(this.mceInstance(), document, {skipEditorFocus: true})
                   }
                   disabledPlugins={this.pluginsToExclude}
+                  ai_text_tools={this.props.ai_text_tools}
+                  onAI={this.handleAIClick}
                 />
                 {this.props.trayProps?.containingContext && (
                   <CanvasContentTray
-                    mountNode={this.state.popupMountNode}
+                    mountNode={instuiPopupMountNode}
                     key={this.id}
                     canvasOrigin={this.getCanvasUrl()}
                     bridge={bridge}
@@ -1985,6 +2007,19 @@ class RCEWrapper extends React.Component {
                   onDismiss={this.closeKBShortcutModal}
                   open={this.state.KBShortcutModalOpen}
                 />
+                {this.props.ai_text_tools && this.AIToolsTray && (
+                  <this.AIToolsTray
+                    open={this.state.AIToolsOpen}
+                    container={document.querySelector('[role="main"]')}
+                    mountNode={instuiPopupMountNode}
+                    contextId={trayProps.contextId}
+                    contextType={trayProps.contextId}
+                    currentContent={this.getCurrentContentForAI()}
+                    onClose={this.closeAITools}
+                    onInsertContent={this.handleInsertAIContent}
+                    onReplaceContent={this.handleReplaceAIContent}
+                  />
+                )}
                 {this.state.confirmAutoSave ? (
                   <Suspense fallback={<Spinner renderTitle={renderLoading} size="small" />}>
                     <RestoreAutoSaveModal

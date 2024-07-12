@@ -49,6 +49,10 @@ class Speedgrader
       f("#average_score")
     end
 
+    def proceed_draft_comment_modal
+      f("#unposted_comment_proceed").click
+    end
+
     def grade_input
       f("#grading-box-extended")
     end
@@ -344,8 +348,8 @@ class Speedgrader
     end
 
     # action
-    def visit(course_id, assignment_id, timeout = 10)
-      get "/courses/#{course_id}/gradebook/speed_grader?assignment_id=#{assignment_id}"
+    def visit(course_id, assignment_id, timeout = 10, student_id = nil)
+      get "/courses/#{course_id}/gradebook/speed_grader?assignment_id=#{assignment_id}#{student_id ? "&student_id=#{student_id}" : ""}"
       visibility_check = grade_input
       wait_for(method: :visit, timeout:) { visibility_check.displayed? }
     end
@@ -556,6 +560,10 @@ class Speedgrader
     end
 
     # rubric
+    def rubric_grid
+      f(".react-rubric")
+    end
+
     def view_rubric_button
       f("button.toggle_full_rubric")
     end
@@ -578,6 +586,10 @@ class Speedgrader
 
     def rating_tiers
       ff(".rating-tier")
+    end
+
+    def free_form_comment_ratings
+      ff(".rubric-freeform")
     end
 
     def rating_by_text(rating_text)

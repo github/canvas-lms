@@ -74,6 +74,8 @@ class MediaObjectsController < ApplicationController
   include Api::V1::MediaObject
   include FilesHelper
 
+  MISSED_MEDIA_ADDITIONAL_COST = 200
+
   before_action :load_media_object, except: %i[create_media_object index]
   before_action :load_media_object_from_service, only: %i[show iframe_media_player]
   before_action :check_media_permissions, except: %i[create_media_object index media_object_thumbnail update_media_object]
@@ -231,8 +233,14 @@ class MediaObjectsController < ApplicationController
         @media_object.user_entered_title = CanvasTextHelper.truncate_text(params[:user_entered_title], max_length: 255) if params[:user_entered_title].present?
         @media_object.save
       end
-      render json: @media_object.as_json.merge(embedded_iframe_url: media_object_iframe_url(@media_object.media_id))
-      # render :json => media_object_api_json(@media_object, @current_user, session, %w[sources tracks])
+      media_object_json = @media_object.as_json
+      if Account.site_admin.feature_enabled?(:media_links_use_attachment_id)
+        embedded_iframe_url = media_attachment_iframe_url(@media_object.attachment_id)
+        media_object_json["media_object"]["uuid"] = @media_object.attachment.uuid
+      else
+        embedded_iframe_url = media_object_iframe_url(@media_object.media_id)
+      end
+      render json: media_object_json.merge(embedded_iframe_url:)
     end
   end
 
@@ -250,16 +258,22 @@ class MediaObjectsController < ApplicationController
     config = CanvasKaltura::ClientV3.config
     if config
       if Account.site_admin.feature_enabled?(:authenticated_iframe_content)
-        media_sources = CanvasKaltura::ClientV3.new.media_sources(@attachment.media_entry_id)
-        # the bitrate query gives us a unique-enough key to use when querying for specific versions of the file
-        media_source = media_sources.find { |ms| ms[:bitrate].to_i == params[:bitrate].to_i } if params[:bitrate]
-        media_source ||= media_sources.first # if the bitrate is invalid or doesn't find anything
         begin
-          temp_file = media_source_temp_file(media_source[:url])
+          media_source = @media_object.media_sources.find { |ms| ms[:bitrate].to_s == params[:bitrate].to_s } || @media_object.media_sources.min_by { |ms| ms[:bitrate]&.to_i }
+          url = media_source[:url]
+          # keep track of the redirects and use the last one
+          redirect_spy = ->(res) { url = res.header["location"] }
+          CanvasHttp.get(url, redirect_spy:) do |res|
+            raise CanvasHttp::InvalidResponseCodeError, res.code.to_i unless /^2/.match?(res.code.to_s)
+
+            # don't load body
+          end
+          redirect_to url
         rescue CanvasHttp::InvalidResponseCodeError => e
-          return(render(plain: e.message, status: e.code))
+          render plain: e.message, status: e.code
+        rescue Errno::ECONNREFUSED, CanvasHttp::Error => e
+          render plain: e.message, status: :bad_request
         end
-        send_file(temp_file, filename: @attachment.filename, type: @attachment.content_type, stream: true)
       else
         redirect_to CanvasKaltura::ClientV3.new.assetSwfUrl(params[:id])
       end
@@ -294,7 +308,7 @@ class MediaObjectsController < ApplicationController
     @embeddable = true
 
     media_api_json = if @attachment && @media_object
-                       media_attachment_api_json(@attachment, @media_object, @current_user, session)
+                       media_attachment_api_json(@attachment, @media_object, @current_user, session, verifier: params[:verifier])
                      elsif @media_object
                        media_object_api_json(@media_object, @current_user, session)
                      end
@@ -320,26 +334,9 @@ class MediaObjectsController < ApplicationController
       raise ActiveRecord::RecordNotFound, "invalid media_object_id" unless @media_object
 
       @media_object.delay(singleton: "retrieve_media_details:#{@media_object.media_id}").retrieve_details
-      increment_request_cost(Setting.get("missed_media_additional_request_cost", "200").to_i)
+      increment_request_cost(MISSED_MEDIA_ADDITIONAL_COST)
     end
 
     @media_object.viewed!
-  end
-
-  # Fetches the media source file from the given url and returns a tempfile
-  # This logic is similar to the logic in Attachment#clone_url_as_attachment to handle large files except
-  # that it doesn't store it in the database
-  def media_source_temp_file(url)
-    _, uri = CanvasHttp.validate_url(url, check_host: true)
-    tmpfile = CanvasHttp.tempfile_for_uri(uri)
-    CanvasHttp.get(url) do |http_response|
-      if http_response.code.to_i == 200
-        http_response.read_body(tmpfile)
-        tmpfile.rewind
-      else
-        raise CanvasHttp::InvalidResponseCodeError.new(http_response.code.to_i, "error fetching #{url}")
-      end
-    end
-    tmpfile
   end
 end

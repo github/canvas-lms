@@ -109,18 +109,11 @@ describe "profile" do
     end
 
     it "adds a new email address on profile settings page" do
-      @user.account.enable_feature!(:international_sms)
       notification_model(category: "Grading")
       notification_policy_model(notification_id: @notification.id)
 
       get "/profile/settings"
       add_email_link
-
-      f('#communication_channels a[href="#register_sms_number"]').click
-
-      click_option("#communication_channel_sms_country", "United States (+1)")
-      replace_content(f("#register_sms_number #communication_channel_sms_email"), "test@example.com")
-      expect(f('#register_sms_number button[type="submit"]')).to be_displayed
       f('#communication_channels a[href="#register_email_address"]').click
       form = f("#register_email_address")
       test_email = "nobody+1234@example.com"
@@ -207,20 +200,39 @@ describe "profile" do
       end
     end
 
-    it "adds another contact method - sms" do
-      @user.account.enable_feature!(:international_sms)
-      test_cell_number = "8017121011"
-      get "/profile/settings"
-      f(".add_contact_link").click
-      click_option("#communication_channel_sms_country", "United States (+1)")
-      register_form = f("#register_sms_number")
-      register_form.find_element(:css, ".sms_number").send_keys(test_cell_number)
-      click_option("select.user_selected.carrier", "AT&T")
-      driver.action.send_keys(:tab).perform
-      submit_form(register_form)
-      wait_for_ajaximations
-      close_visible_dialog
-      expect(f(".other_channels .path")).to include_text(test_cell_number)
+    describe "adding SMS contact method" do
+      let(:original_region) { Shard.current.database_server.config[:region] }
+
+      after do
+        # reset to original region after each test
+        Shard.current.database_server.config[:region] = original_region
+      end
+
+      it "shows the SMS number registration form when in US region" do
+        # temporarily set to a US region needed for SMS tab to appear
+        Shard.current.database_server.config[:region] = "us-west-2"
+        test_cell_number = "8017121011"
+        get "/profile/settings"
+        f(".add_contact_link").click
+        register_form = f("#register_sms_number")
+        register_form.find_element(:css, ".sms_number").send_keys(test_cell_number)
+        driver.action.send_keys(:tab).perform
+        submit_form(register_form)
+        wait_for_ajaximations
+        close_visible_dialog
+        expect(f(".other_channels .path")).to include_text(test_cell_number)
+      end
+
+      it "shows the email address registration form when not in US region" do
+        # set to a non-US region
+        Shard.current.database_server.config[:region] = "eu-central-1"
+        get "/profile/settings"
+        f(".add_contact_link").click
+        # ensure sms number registration form is not present
+        expect(element_exists?("#register_sms_number")).to be false
+        # ensure email address registration form is shown
+        expect(f("#register_email_address")).to be_present
+      end
     end
 
     it "adds another contact method - slack" do
@@ -309,7 +321,7 @@ describe "profile" do
     it "views the details of an access token" do
       get "/profile/settings"
       generate_access_token("testing", true)
-      # had to use :visible because it was failing saying element wasn't visible
+      # using :visible because we don't want to grab the template element
       fj("#access_tokens .show_token_link:visible").click
       expect(f("#token_details_dialog")).to be_displayed
     end
@@ -318,7 +330,7 @@ describe "profile" do
       skip_if_safari(:alert)
       get "/profile/settings"
       generate_access_token("testing", true)
-      # had to use :visible because it was failing saying element wasn't visible
+      # using :visible because we don't want to grab the template element
       fj("#access_tokens .delete_key_link:visible").click
       expect(driver.switch_to.alert).not_to be_nil
       driver.switch_to.alert.accept
@@ -331,11 +343,32 @@ describe "profile" do
       @token1 = @user.access_tokens.create! purpose: "token_one"
       @token2 = @user.access_tokens.create! purpose: "token_two"
       get "/profile/settings"
-      fj(".delete_key_link[rel$=#{@token2.id}]").click
+      fj(".delete_key_link[rel$='#{@token2.token_hint}']").click
       expect(driver.switch_to.alert).not_to be_nil
       driver.switch_to.alert.accept
       wait_for_ajaximations
-      check_element_has_focus fj(".delete_key_link[rel$=#{@token1.id}]")
+      check_element_has_focus fj(".delete_key_link[rel$='#{@token1.token_hint}']")
+    end
+
+    context "when access token restrictions are enabled" do
+      before do
+        @course.root_account.enable_feature!(:admin_manage_access_tokens)
+        @course.root_account.settings[:limit_personal_access_tokens] = true
+        @course.root_account.save!
+      end
+
+      it "the new token button is disabled for non-admins" do
+        get "/profile/settings"
+        expect(f(".add_access_token_link")).to be_disabled
+      end
+
+      it "doesn't show the regenerate button for non-admins" do
+        @user.access_tokens.create! purpose: "token_one"
+        get "/profile/settings"
+        # using :visible because we don't want to grab the template element
+        fj("#access_tokens .show_token_link:visible").click
+        expect(element_exists?(".regenerate_token")).to be_falsey
+      end
     end
   end
 
@@ -361,7 +394,9 @@ describe "profile" do
     it "saves admin profile pics setting", priority: "1" do
       site_admin_logged_in
       get "/accounts/#{Account.default.id}/settings"
-      f("#account_services_avatars").click
+      avatars = f("#account_services_avatars")
+      scroll_into_view(avatars)
+      avatars.click
       f('.Button.Button--primary[type="submit"]').click
       wait_for_ajaximations
       expect(is_checked("#account_services_avatars")).to be_truthy

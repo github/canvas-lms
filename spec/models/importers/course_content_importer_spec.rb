@@ -196,7 +196,7 @@ describe Course do
       # files
       expect(@course.attachments.length).to eq(4)
       @course.attachments.each do |f|
-        expect(File).to be_exist(f.full_filename)
+        expect(File).to exist(f.full_filename)
       end
       file = @course.attachments.where(migration_id: "1865116044002").first
       expect(file).not_to be_nil
@@ -320,14 +320,14 @@ describe Course do
       params = { copy: { "assignments" => { "gf455e2add230724ba190bb20c1491aa9" => true } } }
       migration = build_migration(@course, params)
       setup_import(@course, "discussion_assignments.json", migration)
-      a1 = @course.assignments.where(migration_id: "gf455e2add230724ba190bb20c1491aa9").take
+      a1 = @course.assignments.find_by(migration_id: "gf455e2add230724ba190bb20c1491aa9")
       a1.assignment_group.destroy!
 
       # import again but just the discus
       params = { copy: { "discussion_topics" => { "g8bacee869e70bf19cd6784db3efade7e" => true } } }
       migration = build_migration(@course, params)
       setup_import(@course, "discussion_assignments.json", migration)
-      dt = @course.discussion_topics.where(migration_id: "g8bacee869e70bf19cd6784db3efade7e").take
+      dt = @course.discussion_topics.find_by(migration_id: "g8bacee869e70bf19cd6784db3efade7e")
       expect(dt.assignment.assignment_group).to eq a1.assignment_group
       expect(dt.assignment.assignment_group).to_not be_deleted
       expect(a1.reload).to be_deleted # didn't restore the previously deleted assignment too
@@ -418,6 +418,21 @@ describe Course do
         import_data = { course: { enable_course_paces: "false" } }.with_indifferent_access
         Importers::CourseContentImporter.import_content(@course, import_data, nil, migration)
         expect(@course.enable_course_paces).to be false
+      end
+    end
+
+    describe "import_blueprint_settings" do
+      it "runs blueprint importer if set to do so" do
+        migration = ContentMigration.create!(context: @course, user: account_admin_user, source_course: @course, migration_settings: { import_blueprint_settings: true })
+        expect(Importers::BlueprintSettingsImporter).to receive(:process_migration).once
+        Importers::CourseContentImporter.import_content(@course, {}, nil, migration)
+      end
+
+      it "skips the blueprint importer if the user lacks proper permission" do
+        usr = account_admin_user_with_role_changes(role_changes: { manage_master_courses: false })
+        migration = ContentMigration.create!(context: @course, user: usr, source_course: @course, migration_settings: { import_blueprint_settings: true })
+        expect(Importers::BlueprintSettingsImporter).not_to receive(:process_migration)
+        Importers::CourseContentImporter.import_content(@course, {}, nil, migration)
       end
     end
   end
@@ -511,6 +526,20 @@ describe Course do
   end
 
   describe "import_settings_from_migration" do
+    shared_examples "setting set correctly" do |param|
+      it "should set #{param} when data exist" do
+        data = { course: { param => true } }
+        Importers::CourseContentImporter.import_settings_from_migration(@course, data, @cm)
+        expect(@course.settings[param]).to be_truthy
+      end
+
+      it "should not set #{param} when data not exist" do
+        data = { course: {} }
+        Importers::CourseContentImporter.import_settings_from_migration(@course, data, @cm)
+        expect(@course.settings).not_to have_key(param)
+      end
+    end
+
     before :once do
       course_with_teacher
       @course.storage_quota = 1
@@ -550,6 +579,14 @@ describe Course do
         Importers::CourseContentImporter.import_settings_from_migration(@course, { course: { storage_quota: 4 } }, @cm)
         expect(@course.storage_quota).to eq 4
       end
+    end
+
+    context "with allow_student_discussion_reporting" do
+      include_examples "setting set correctly", :allow_student_discussion_reporting
+    end
+
+    context "with allow_student_anonymous_discussion_topics" do
+      include_examples "setting set correctly", :allow_student_anonymous_discussion_topics
     end
   end
 
@@ -651,7 +688,7 @@ describe Course do
     it "puts a new assignment into assignment group" do
       @course.assignments.create! title: "other", assignment_group: @new_group
       Importers::CourseContentImporter.import_content(@course, @data, @params, @migration)
-      new_assign = @course.assignments.where(migration_id: "1865116014002").take
+      new_assign = @course.assignments.find_by(migration_id: "1865116014002")
       expect(new_assign.assignment_group_id).to eq @new_group.id
     end
 
@@ -664,7 +701,7 @@ describe Course do
 
     it "moves classic quiz assignment into new group" do
       Importers::CourseContentImporter.import_content(@course, @data, @params, @migration)
-      quiz = @course.quizzes.where(migration_id: "1865116160002").take
+      quiz = @course.quizzes.find_by(migration_id: "1865116160002")
       expect(quiz.reload.assignment_group_id).to eq @new_group.id
       expect(quiz.assignment.reload.assignment_group_id).to eq @new_group.id
     end

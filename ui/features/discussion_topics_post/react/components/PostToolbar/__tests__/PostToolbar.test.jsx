@@ -36,7 +36,6 @@ beforeAll(() => {
       removeListener: jest.fn(),
     }
   })
-  window.ENV.split_screen_view = true
 })
 
 const setup = props => {
@@ -303,7 +302,7 @@ describe('PostToolbar', () => {
       it('does not render if the callback is not provided', () => {
         const {queryByText, getByTestId} = setup()
         fireEvent.click(getByTestId('discussion-post-menu-trigger'))
-        expect(queryByText('Open in Speedgrader')).toBeFalsy()
+        expect(queryByText('Open in SpeedGrader')).toBeFalsy()
       })
 
       it('calls provided callback when clicked', () => {
@@ -311,7 +310,7 @@ describe('PostToolbar', () => {
         const {getByTestId, getByText} = setup({onOpenSpeedgrader: onOpenSpeedgraderMock})
         fireEvent.click(getByTestId('discussion-post-menu-trigger'))
         expect(onOpenSpeedgraderMock.mock.calls.length).toBe(0)
-        fireEvent.click(getByText('Open in Speedgrader'))
+        fireEvent.click(getByText('Open in SpeedGrader'))
         expect(onOpenSpeedgraderMock.mock.calls.length).toBe(1)
       })
     })

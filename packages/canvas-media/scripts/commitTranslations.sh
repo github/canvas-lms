@@ -10,7 +10,7 @@ push() {
     return 0
   fi
 
-  OUTPUT=$( git push origin sync-translations-media:refs/for/master%submit,t=learning-materials,l=Verified+1 2>&1 )
+  OUTPUT=$( git push origin sync-translations-media:refs/for/master%submit,l=Verified+1 2>&1 )
   return $?
 }
 
@@ -39,7 +39,7 @@ if [ ! -z "$OUTPUT" ]; then
     (
       aws --region us-east-1 sqs send-message \
         --queue-url https://sqs.us-east-1.amazonaws.com/636161780776/slack-lambda \
-        --message-body "{\"channel\":\"#learning-foundations\",\"username\":\"Package Translations\",\"text\":\"$SLACK_MESSAGE\"}"
+        --message-body "{\"channel\":\"#rcx-eng\",\"username\":\"Package Translations\",\"text\":\"$SLACK_MESSAGE\"}"
     ) || echo "Failed to send Slack message."
   fi
 fi

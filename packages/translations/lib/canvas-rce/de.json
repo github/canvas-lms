@@ -164,6 +164,9 @@
   "congruent_5a244acd": { "message": "Kongruent" },
   "contains_311f37b7": { "message": "Enthält" },
   "content_1440204b": { "message": "Inhalt" },
+  "content_in_the_editor_will_be_changed_press_cancel_d5bf3357": {
+    "message": "Inhalt im Editor wird geändert Klicken Sie auf „Abbrechen“, um den originlaen Inhalt beizubehalten."
+  },
   "content_is_still_being_uploaded_if_you_continue_it_8f06d0cb": {
     "message": "Der Inhalt wird noch hochgeladen, wenn Sie fortfahren, wird er nicht richtig eingebettet."
   },
@@ -181,7 +184,7 @@
   "count_plural_one_item_loaded_other_items_loaded_857023b7": {
     "message": "{ count, plural,\n    one {# Objekt geladen}\n  other {# Objekte geladen}\n}"
   },
-  "course_documents_104d76e0": { "message": "Kursunterlagen" },
+  "course_documents_104d76e0": { "message": "Kursdokumente" },
   "course_files_62deb8f8": { "message": "Kursdateien" },
   "course_files_a31f97fc": { "message": "Kursdateien" },
   "course_images_f8511d04": { "message": "Kursbilder" },
@@ -305,6 +308,8 @@
   "enter_at_least_3_characters_to_search_4f037ee0": {
     "message": "Geben Sie für die Suche mindestens 3 Zeichen ein."
   },
+  "enter_replacement_text_17631bbc": { "message": "Ersatztext eingeben" },
+  "enter_search_text_26cb4459": { "message": "Suchtext eingeben" },
   "epsilon_54bb8afa": { "message": "Epsilon" },
   "epsilon_variant_d31f1e77": { "message": "Epsilon (Variante)" },
   "equals_sign_c51bdc58": { "message": "Gleichheitszeichen" },
@@ -347,6 +352,8 @@
   },
   "files_c300e900": { "message": "Dateien" },
   "files_index_af7c662b": { "message": "Dateienindex" },
+  "find_8d605019": { "message": "Suchen" },
+  "find_and_replace_6e345933": { "message": "Finden und Ersetzen" },
   "finish_bc343002": { "message": "Beenden" },
   "fix_heading_hierarchy_f60884c4": {
     "message": "Feste Überschriftshierarchie"
@@ -473,6 +480,7 @@
   "in_element_of_19ca2f33": { "message": "In (Element von)" },
   "increase_indent_6af90f7c": { "message": "Einzug vergrößern" },
   "indefinite_integral_6623307e": { "message": "Unbestimmtes Integral" },
+  "index_of_max_80dcf7a5": { "message": "{ index } von { max }" },
   "indigo_2035fc55": { "message": "Indigo" },
   "inference_fed5c960": { "message": "Schlussfolgerung" },
   "infinity_7a10f206": { "message": "Unendlichkeit" },
@@ -642,6 +650,7 @@
   "nested_less_than_27d17e58": { "message": "Geschachtelt kleiner als" },
   "new_quiz_34aacba6": { "message": "Neues Quiz" },
   "next_40e12421": { "message": "Weiter" },
+  "next_findtext_9d69f0fe": { "message": "Nächster { findText }" },
   "no_accessibility_issues_were_detected_f8d3c875": {
     "message": "Es wurden keine Zugangsprobleme festgestellt."
   },
@@ -683,6 +692,7 @@
   },
   "no_quizzes_found_c80c537a": { "message": "Keine Quizze gefunden." },
   "no_results_940393cf": { "message": "Keine Ergebnisse." },
+  "no_results_found_58717065": { "message": "Keine Ergebnisse gefunden" },
   "no_results_found_for_filterterm_ad1b04c8": {
     "message": "Es wurden keine Ergebnisse für { filterTerm } gefunden."
   },
@@ -773,11 +783,16 @@
   "precedes_196b9aef": { "message": "Vorrangig" },
   "precedes_equal_20701e84": { "message": "Vorrangig oder gleich" },
   "preformatted_d0670862": { "message": "Vorformatiert" },
+  "prepend_findtext_append_8e0e769a": {
+    "message": "{ prepend }{ findText }{ append }"
+  },
   "prev_f82cbc48": { "message": "Vorher" },
   "preview_53003fd2": { "message": "Vorschau" },
   "preview_a3f8f854": { "message": "VORSCHAU" },
   "preview_in_overlay_ed772c46": { "message": "Vorschau in Overlay" },
   "preview_inline_9787330": { "message": "Inline-Vorschau" },
+  "previous_bd2ac015": { "message": "Vorherige" },
+  "previous_findtext_8dfbfd30": { "message": "Vorheriger { findText }" },
   "prime_917ea60e": { "message": "Primzahl" },
   "prime_numbers_13464f61": { "message": "Primzahlen" },
   "product_39cf144f": { "message": "Produkt" },
@@ -806,11 +821,28 @@
   "religion_icon_246e0be1": { "message": "Religionssymbol" },
   "remove_heading_style_5fdc8855": { "message": "Überschriftsstil entfernen" },
   "remove_link_d1f2f4d0": { "message": "Link entfernen" },
+  "replace_all_d3d68b3": { "message": "Alle ersetzen" },
+  "replace_all_findtext_with_replacetext_da574b32": {
+    "message": "Alle { findText } mit { replaceText } ersetzen"
+  },
   "replace_e61834a7": { "message": "Ersetzen" },
+  "replace_findtext_with_replacetext_7b5c7fb3": {
+    "message": "{ findText } mit { replaceText } ersetzen"
+  },
+  "replace_with_eeff01ad": { "message": "Ersetzen mit" },
+  "replaced_alertfindtext_with_alertreplacetext_de5c1795": {
+    "message": "{ alertFindText } mit { alertReplaceText } ersetzt"
+  },
+  "replaced_all_alertfindtext_with_alertreplacetext_83fdfe59": {
+    "message": "Alle { alertFindText } mit { alertReplaceText } ersetzt"
+  },
   "reset_95a81614": { "message": "Zurücksetzen" },
   "resize_ec83d538": { "message": "Größe ändern" },
   "restore_auto_save_deccd84b": {
     "message": "Automatisches Speichern wiederherstellen"
+  },
+  "result_index_of_max_7db5ad8b": {
+    "message": "Ergebnis { index } von { max }"
   },
   "reverse_turnstile_does_not_yield_7558be06": {
     "message": "Reverses Drehkreuz (kein Ergebnis)"
@@ -1174,10 +1206,10 @@
   "used_by_screen_readers_to_describe_the_video_37ebad25": {
     "message": "Wird von Screenreadern verwendet, um das Video zu beschreiben."
   },
-  "user_documents_c206e61f": { "message": "Benutzer*in Dokumente" },
+  "user_documents_c206e61f": { "message": "Meine Dokumente" },
   "user_files_78e21703": { "message": "Benutzerdateien" },
-  "user_images_b6490852": { "message": "Benutzerbilder" },
-  "user_media_14fbf656": { "message": "Nutzer-Medien" },
+  "user_images_b6490852": { "message": "Meine Bilder" },
+  "user_media_14fbf656": { "message": "Meine Medien" },
   "vector_notation_cf6086ab": { "message": "Vektor (Notation)" },
   "vertical_bar_set_builder_notation_4300495f": {
     "message": "Vertikale Leiste (Set Builder Notation)"

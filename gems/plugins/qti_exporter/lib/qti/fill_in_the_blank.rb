@@ -20,7 +20,7 @@
 module Qti
   class FillInTheBlank < AssessmentItemConverter
     def initialize(opts)
-      super(opts)
+      super
       @type = opts[:custom_type]
       @question[:question_type] = if @type == "multiple_dropdowns_question" || @type == "inline_choice"
                                     "multiple_dropdowns_question"
@@ -118,7 +118,7 @@ module Qti
       @doc.css("responseDeclaration").each do |res_node|
         res_id = res_node["identifier"]
         res_node.css("correctResponse value").each do |correct_id|
-          if (answer = (answer_hash[res_id] && answer_hash[res_id][correct_id.text]))
+          if (answer = answer_hash[res_id] && answer_hash[res_id][correct_id.text])
             answer[:weight] = AssessmentItemConverter::DEFAULT_CORRECT_WEIGHT
           end
         end

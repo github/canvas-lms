@@ -117,14 +117,17 @@ const ConversationListContainer = ({
 
   const inboxItemData = useMemo(() => {
     if (
-      (conversationsQuery.loading && !conversationsQuery.data) ||
-      (submissionCommentsQuery.loading && !submissionCommentsQuery.data)
+      (conversationsQuery.loading && !conversationsQuery?.data?.legacyNode) ||
+      (submissionCommentsQuery.loading && !submissionCommentsQuery?.data?.legacyNode)
     ) {
       return []
     }
+
     const data = isSubmissionCommentsType
       ? submissionCommentsQuery.data?.legacyNode?.viewableSubmissionsConnection?.nodes
-      : conversationsQuery.data?.legacyNode?.conversationsConnection?.nodes
+      : conversationsQuery.data?.legacyNode?.conversationsConnection?.nodes?.filter(
+          ({conversation}) => conversation
+        )
     const inboxData = inboxConversationsWrapper(data, isSubmissionCommentsType)
 
     if (inboxData.length > 0 && !conversationsQuery.loading && !submissionCommentsQuery.loading) {
@@ -143,7 +146,11 @@ const ConversationListContainer = ({
     return (
       <View as="div" style={{position: 'relative'}} height="100%">
         <Mask>
-          <Spinner renderTitle={() => I18n.t('Loading Message List')} variant="inverse" />
+          <Spinner
+            renderTitle={() => I18n.t('Loading Message List')}
+            variant="inverse"
+            delay={300}
+          />
         </Mask>
       </View>
     )

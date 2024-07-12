@@ -23,7 +23,6 @@ class LearningOutcome < ActiveRecord::Base
   include Workflow
   include MasterCourses::Restrictor
   restrict_columns :state, [:workflow_state]
-  self.ignored_columns += %i[migration_id_2 vendor_guid_2 root_account_id]
 
   belongs_to :context, polymorphic: [:account, :course]
   has_many :learning_outcome_results
@@ -209,7 +208,7 @@ class LearningOutcome < ActiveRecord::Base
 
   def default_calculation_method
     if new_decaying_average_calculation_ff_enabled?
-      "weighted_average"
+      "standard_decaying_average"
     else
       "decaying_average"
     end
@@ -233,7 +232,7 @@ class LearningOutcome < ActiveRecord::Base
       create_missing_outcome_link(context)
       if MasterCourses::MasterTemplate.is_master_course?(context)
         # mark for re-sync
-        context.learning_outcome_links.where(content: self).touch_all if context_type == "Account"
+        context.learning_outcome_links.where(content: self).touch_all
         touch
       end
     end
@@ -281,6 +280,7 @@ class LearningOutcome < ActiveRecord::Base
 
   workflow do
     state :active
+    state :archived
     state :retired
     state :deleted
   end
@@ -375,6 +375,28 @@ class LearningOutcome < ActiveRecord::Base
     save!
   end
 
+  def archive!
+    # Only active outcomes can be archived
+    if workflow_state == "active"
+      self.workflow_state = "archived"
+      self.archived_at = Time.now.utc
+      save!
+    elsif workflow_state == "deleted"
+      raise ActiveRecord::RecordNotSaved, "Cannot archive a deleted LearningOutcome"
+    end
+  end
+
+  def unarchive!
+    # Only archived outcomes can be unarchived
+    if workflow_state == "archived"
+      self.workflow_state = "active"
+      self.archived_at = nil
+      save!
+    elsif workflow_state == "deleted"
+      raise ActiveRecord::RecordNotSaved, "Cannot unarchive a deleted LearningOutcome"
+    end
+  end
+
   def assessed?(course = nil)
     if course
       learning_outcome_results.active.where(context_id: course, context_type: "Course").exists?
@@ -434,7 +456,7 @@ class LearningOutcome < ActiveRecord::Base
   end
 
   scope(:for_context_codes, ->(codes) { where(context_code: codes) })
-  scope(:active, -> { where("learning_outcomes.workflow_state<>'deleted'") })
+  scope(:active, -> { where("learning_outcomes.workflow_state NOT IN ('deleted', 'archived')") })
   scope(:active_first, -> { order(Arel.sql("CASE WHEN workflow_state = 'active' THEN 0 ELSE 1 END")) })
   scope(:has_result_for_user,
         lambda do |user|
@@ -484,6 +506,27 @@ class LearningOutcome < ActiveRecord::Base
 
   def updateable_rubrics?
     updateable_rubrics.exists?
+  end
+
+  def fetch_outcome_copies
+    sql = <<~SQL.squish
+      WITH RECURSIVE parents AS (
+        SELECT id, copied_from_outcome_id
+        FROM #{LearningOutcome.quoted_table_name} WHERE id = #{id}
+        UNION ALL
+        SELECT lo.id, lo.copied_from_outcome_id FROM #{LearningOutcome.quoted_table_name} lo
+        JOIN parents p ON lo.id = p.copied_from_outcome_id
+      ), children AS (
+        SELECT id, copied_from_outcome_id
+        FROM parents
+        UNION ALL
+        SELECT lo.id, lo.copied_from_outcome_id
+        FROM #{LearningOutcome.quoted_table_name} lo
+        JOIN children c ON lo.copied_from_outcome_id = c.id
+      )
+      SELECT DISTINCT id FROM children order by id desc
+    SQL
+    LearningOutcome.joins("JOIN (#{sql}) children ON children.id = #{LearningOutcome.quoted_table_name}.id").pluck(:id)
   end
 
   private

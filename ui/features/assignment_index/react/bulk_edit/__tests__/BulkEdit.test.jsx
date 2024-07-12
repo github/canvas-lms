@@ -19,11 +19,14 @@
 import React from 'react'
 import {render, fireEvent, act} from '@testing-library/react'
 import tz from 'timezone'
-import tzInTest from '@canvas/timezone/specHelpers'
+import tzInTest from '@instructure/moment-utils/specHelpers'
 import tokyo from 'timezone/Asia/Tokyo'
 import anchorage from 'timezone/America/Anchorage'
 import moment from 'moment-timezone'
 import BulkEdit from '../BulkEdit'
+import {enableFetchMocks} from 'jest-fetch-mock'
+
+enableFetchMocks()
 
 // grab this before fake timers replace it
 const realSetTimeout = setTimeout

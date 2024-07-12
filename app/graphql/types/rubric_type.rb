@@ -28,6 +28,15 @@ module Types
     field :criteria, [RubricCriterionType], <<~MD, null: false
       The different criteria that makes up this rubric
     MD
+    def criteria
+      context[:rubric_id] = object.id
+      object.criteria
+    end
+
+    field :criteria_count, Integer, null: false
+    def criteria_count
+      object.criteria&.count || 0
+    end
 
     field :free_form_criterion_comments, Boolean, null: false
     def free_form_criterion_comments
@@ -39,7 +48,25 @@ module Types
       !!object.hide_score_total
     end
 
+    field :unassessed, Boolean, null: false
+    def unassessed
+      if object.workflow_state == "draft"
+        return true
+      end
+
+      Rubric.active.unassessed.where(id: object.id).exists?
+    end
+
+    field :has_rubric_associations, Boolean, null: false, resolver_method: :rubric_assignment_associations?
+    def rubric_assignment_associations?
+      Loaders::RubricAssociationsLoader.for.load(object.id)
+    end
+
+    field :button_display, String, null: false
+    field :hide_points, Boolean, null: true
+    field :rating_order, String, null: false
     field :points_possible, Float, null: true
     field :title, String, null: true
+    field :workflow_state, String, null: false
   end
 end

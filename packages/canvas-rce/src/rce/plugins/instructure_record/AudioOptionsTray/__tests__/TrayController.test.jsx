@@ -18,6 +18,7 @@
 
 import ReactDOM from 'react-dom'
 
+import {waitFor} from '@testing-library/dom'
 import TrayController, {CONTAINER_ID} from '../TrayController'
 import FakeEditor from '../../../../__tests__/FakeEditor'
 import AudioOptionsTrayDriver from './AudioOptionsTrayDriver'
@@ -110,10 +111,10 @@ describe('RCE "Audios" Plugin > AudioOptionsTray > TrayController', () => {
   })
 
   describe('#hideTrayForEditor()', () => {
-    it('closes the tray when open for the given editor', () => {
+    it('closes the tray when open for the given editor', async () => {
       trayController.showTrayForEditor(editors[0])
       trayController.hideTrayForEditor(editors[0])
-      expect(getTray()).toBeNull()
+      await waitFor(() => expect(getTray()).toBeNull()) // the tray is closed after a transition
     })
 
     it('does not close the tray when open for a different editor', () => {
@@ -123,10 +124,10 @@ describe('RCE "Audios" Plugin > AudioOptionsTray > TrayController', () => {
       expect(getTray()).not.toBeNull()
     })
 
-    it('does nothing when the tray was not open', () => {
+    it('does nothing when the tray was not open', async () => {
       // In effect, it does not explode.
       trayController.hideTrayForEditor(editors[0])
-      expect(getTray()).toBeNull()
+      await waitFor(() => expect(getTray()).toBeNull()) // the tray is closed after a transition
     })
   })
 
@@ -143,10 +144,60 @@ describe('RCE "Audios" Plugin > AudioOptionsTray > TrayController', () => {
   })
 
   describe('#_dismissTray', () => {
-    it('closes the tray', () => {
+    it('closes the tray', async () => {
       trayController.showTrayForEditor(editors[0])
       trayController._dismissTray()
-      expect(getTray()).toBeNull() // the tray is closed
+      await waitFor(() => expect(getTray()).toBeNull()) // the tray is closed after a transition
+    })
+  })
+
+  describe.only('#requestSubtitlesFromIframe', () => {
+    let previousOrigin = ''
+
+    beforeAll(() => {
+      previousOrigin = bridge.canvasOrigin
+      bridge.canvasOrigin = 'http://localhost'
+    })
+
+    afterAll(() => {
+      bridge.canvasOrigin = previousOrigin
+    })
+
+    it('posts message to iframe onload', () => {
+      const postMessageMock = jest.fn()
+      const iframe = contentSelection.findMediaPlayerIframe(editors[0].selection.getNode())
+      iframe.contentWindow.postMessage = postMessageMock;
+      trayController.showTrayForEditor(editors[0])
+      expect(postMessageMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('cleans up event listener on tray close', () => {
+      const postMessageMock = jest.fn()
+      const iframe = contentSelection.findMediaPlayerIframe(editors[0].selection.getNode())
+      iframe.contentWindow.postMessage = postMessageMock;
+      trayController.showTrayForEditor(editors[0])
+      trayController.hideTrayForEditor(editors[0])
+      trayController.showTrayForEditor(editors[0])
+      expect(postMessageMock).toHaveBeenCalledTimes(2)
+    })
+
+    it('adds an event listener with a callback', () => {
+      const eventMock = jest.fn()
+      trayController.requestSubtitlesFromIframe(eventMock)
+      const msgEvent = new Event('message')
+      msgEvent.data = {subject: 'media_tracks_response', payload: [{locale: 'en'}]}
+      window.dispatchEvent(msgEvent)
+      expect(eventMock).toHaveBeenCalledTimes(1)
+      expect(eventMock).toHaveBeenCalledWith([{locale: 'en'}])
+    })
+
+    it('event listener ignores events with wrong subject', () => {
+      const eventMock = jest.fn()
+      trayController.requestSubtitlesFromIframe(eventMock)
+      const msgEvent = new Event('message')
+      msgEvent.data = {subject: 'wrong_response', payload: [{locale: 'en'}]}
+      window.dispatchEvent(msgEvent)
+      expect(eventMock).toHaveBeenCalledTimes(0)
     })
   })
 })

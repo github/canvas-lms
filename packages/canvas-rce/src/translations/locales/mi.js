@@ -194,6 +194,9 @@ const locale = {
   "congruent_5a244acd": { "message": "Te here kopere" },
   "contains_311f37b7": { "message": "Kei roto" },
   "content_1440204b": { "message": "Ihirangi" },
+  "content_in_the_editor_will_be_changed_press_cancel_d5bf3357": {
+    "message": "Ka hurihia te ihirangi o te ētita. Pēhia Whakakore kia mau tonu te ihirangi taketake."
+  },
   "content_is_still_being_uploaded_if_you_continue_it_8f06d0cb": {
     "message": "Kei te tikiake tonu te ihirangi, ki te haere tonu koe kaore e tika te whakauru."
   },
@@ -335,6 +338,8 @@ const locale = {
   "enter_at_least_3_characters_to_search_4f037ee0": {
     "message": "Pātō ki iti ake i te 3 pūāhua hei rapu"
   },
+  "enter_replacement_text_17631bbc": { "message": "tomo kupu whakakapi" },
+  "enter_search_text_26cb4459": { "message": "tomo kupu rapu" },
   "epsilon_54bb8afa": { "message": "Epsilon" },
   "epsilon_variant_d31f1e77": { "message": "Epsilon (Tauke)" },
   "equals_sign_c51bdc58": { "message": "Waitohu Ōrite" },
@@ -377,6 +382,8 @@ const locale = {
   },
   "files_c300e900": { "message": "Kōnae" },
   "files_index_af7c662b": { "message": "Taupū kōnae" },
+  "find_8d605019": { "message": "Kimihia" },
+  "find_and_replace_6e345933": { "message": "Kimihia me te Whakakapi" },
   "finish_bc343002": { "message": "Mutu" },
   "fix_heading_hierarchy_f60884c4": {
     "message": "Whakatikahia te hiranga o te pane"
@@ -501,6 +508,7 @@ const locale = {
   "in_element_of_19ca2f33": { "message": "Kei roto (Huahanga o)" },
   "increase_indent_6af90f7c": { "message": "Nuku Whakanui" },
   "indefinite_integral_6623307e": { "message": "Noa Tautoko" },
+  "index_of_max_80dcf7a5": { "message": "{ index } ō { max }" },
   "indigo_2035fc55": { "message": "Indigo" },
   "inference_fed5c960": { "message": "Whakataunga" },
   "infinity_7a10f206": { "message": "Mutunga" },
@@ -670,6 +678,7 @@ const locale = {
   "nested_less_than_27d17e58": { "message": "Kohanga Iti I Te" },
   "new_quiz_34aacba6": { "message": "Quiz Hou" },
   "next_40e12421": { "message": "E haere ake nei" },
+  "next_findtext_9d69f0fe": { "message": "Tō muri mai { findText }" },
   "no_accessibility_issues_were_detected_f8d3c875": {
     "message": "Kaore he whakaurunga take i kitea."
   },
@@ -705,6 +714,7 @@ const locale = {
   },
   "no_quizzes_found_c80c537a": { "message": "Karekau he patapatai i kitea." },
   "no_results_940393cf": { "message": "Kaore he hua." },
+  "no_results_found_58717065": { "message": "Kāore he hua i kitea" },
   "no_results_found_for_filterterm_ad1b04c8": {
     "message": "Kaore i kitea he hua mo { filterTerm }"
   },
@@ -793,11 +803,16 @@ const locale = {
   "precedes_196b9aef": { "message": "Kei mua" },
   "precedes_equal_20701e84": { "message": "Tuhinga o mua Ōrite" },
   "preformatted_d0670862": { "message": "Tuhinga o mua" },
+  "prepend_findtext_append_8e0e769a": {
+    "message": "{ prepend }{ findText }{ append }"
+  },
   "prev_f82cbc48": { "message": "Mua" },
   "preview_53003fd2": { "message": "Arokite" },
   "preview_a3f8f854": { "message": "AROKITE" },
   "preview_in_overlay_ed772c46": { "message": "Arokite i roto i paparua" },
   "preview_inline_9787330": { "message": "Arokite i roto i te raina" },
+  "previous_bd2ac015": { "message": "Ō muri" },
+  "previous_findtext_8dfbfd30": { "message": "Mua { findText }" },
   "prime_917ea60e": { "message": "Pirimia" },
   "prime_numbers_13464f61": { "message": "Nga Nama Pirimia" },
   "product_39cf144f": { "message": "Hua" },
@@ -826,10 +841,25 @@ const locale = {
   "religion_icon_246e0be1": { "message": "Whakapono Tohu" },
   "remove_heading_style_5fdc8855": { "message": "Tango pane kāhua" },
   "remove_link_d1f2f4d0": { "message": "Tango Hononga" },
+  "replace_all_d3d68b3": { "message": "Whakakapi Katoa" },
+  "replace_all_findtext_with_replacetext_da574b32": {
+    "message": "Whakakapi katoa { findText } me { replaceText }"
+  },
   "replace_e61834a7": { "message": "Whakakapi" },
+  "replace_findtext_with_replacetext_7b5c7fb3": {
+    "message": "Whakakapi { findText } me { replaceText }"
+  },
+  "replace_with_eeff01ad": { "message": "Whakakapi me" },
+  "replaced_alertfindtext_with_alertreplacetext_de5c1795": {
+    "message": "Kua whakakapia { alertFindText } me { alertReplaceText }"
+  },
+  "replaced_all_alertfindtext_with_alertreplacetext_83fdfe59": {
+    "message": "I whakakapi katoa { alertFindText } me { alertReplaceText }"
+  },
   "reset_95a81614": { "message": "Tautuhi anō" },
   "resize_ec83d538": { "message": "Rahi anō" },
   "restore_auto_save_deccd84b": { "message": "Whakaora tiaki aunoa?" },
+  "result_index_of_max_7db5ad8b": { "message": "Hua { index } o { max }." },
   "reverse_turnstile_does_not_yield_7558be06": {
     "message": "Hurihuri Whakamuri (Kare e Tuku)"
   },

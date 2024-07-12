@@ -16,42 +16,34 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-// @ts-ignore
 import React, {useEffect, useState} from 'react'
-// @ts-ignore
-import doFetchApi from '@canvas/do-fetch-api-effect'
 import {EnrollmentTreeGroup} from './EnrollmentTreeGroup'
 import {Spinner} from '@instructure/ui-spinner'
+import type {Course, Enrollment, NodeStructure, Role, RoleChoice, Section} from './types'
+import {Flex} from '@instructure/ui-flex'
+import {useScope as useI18nScope} from '@canvas/i18n'
+import cloneDeep from 'lodash/cloneDeep'
 
-interface Props {
-  list: {}[]
-  roles: {id: string; label: string; base_role_name: string}[]
-  selectRoleId: string
-}
+const I18n = useI18nScope('temporary_enrollment')
 
-export interface NodeStructure {
-  enrollId?: string
-  id: string
-  label: string
-  parent?: NodeStructure
-  children: NodeStructure[]
-  isCheck: boolean
-  isToggle?: boolean
-  isMixed: boolean
-  isMismatch?: boolean
-  workState?: string
+export interface Props {
+  enrollmentsByCourse: Course[]
+  roles: Role[]
+  selectedRole: RoleChoice
+  createEnroll?: Function
+  tempEnrollmentsPairing?: Enrollment[] | null
 }
 
 export function EnrollmentTree(props: Props) {
-  const [tree, setTree] = useState<NodeStructure[]>([])
+  const [tree, setTree] = useState([] as NodeStructure[])
   const [loading, setLoading] = useState(true)
 
   const sortByBase = (a: NodeStructure, b: NodeStructure) => {
     const aId = a.id.slice(1)
     const bId = b.id.slice(1)
 
-    const aBase = props.roles[props.roles.findIndex(r => r.id === aId)].base_role_name
-    const bBase = props.roles[props.roles.findIndex(r => r.id === bId)].base_role_name
+    const aBase = props.roles[props.roles.findIndex((r: Role) => r.id === aId)].base_role_name
+    const bBase = props.roles[props.roles.findIndex((r: Role) => r.id === bId)].base_role_name
 
     switch (aBase) {
       case 'TeacherEnrollment':
@@ -76,145 +68,134 @@ export function EnrollmentTree(props: Props) {
   }
 
   useEffect(() => {
-    if (!loading) {
-      if (props.selectRoleId !== '') {
-        for (const roles in tree) {
-          if (tree[roles].id.slice(1) === props.selectRoleId) {
-            tree[roles].isToggle = true
-            // set mismatch for all sections and courses with role
-            for (const course of tree[roles].children) {
-              course.isMismatch = false
-              for (const section of course.children) {
-                section.isMismatch = false
-              }
-            }
-          } else {
-            for (const course of tree[roles].children) {
-              course.isMismatch = course.isCheck
-              for (const section of course.children) {
-                section.isMismatch = section.isCheck
-              }
-            }
-          }
-        }
-      }
+    if (props.createEnroll) {
+      props.createEnroll(tree)
     }
-    setTree([...tree])
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.selectRoleId, loading])
+  }, [props.createEnroll])
 
-  // builds basic object tree
   useEffect(() => {
-    // populate a data structure with the information needed for each row
-    const enrollByRole = splitArrayByProperty(props.list, 'role_id')
-    const coursePromises = []
-    // ids are shared between role/course/section, so we need a prefix to distinguish type
-    for (const role in enrollByRole) {
-      const roleData = props.roles.find((r: any) => {
-        return r.id === role
-      })
-      if (roleData === undefined) {
-        return
-      }
-      const rId = 'r' + role
-      let roleCheck = false
-      if (roleData.base_role_name === 'TeacherEnrollment') {
-        roleCheck = true
-      }
-      const rNode = {
-        id: rId,
-        label: roleData?.label,
-        // eslint-disable-next-line no-array-constructor
-        children: new Array<NodeStructure>(),
-        isToggle: false,
-        isMixed: false,
-        isCheck: roleCheck,
-      }
-      tree.push(rNode)
-
-      const enrollByCourse = splitArrayByProperty(enrollByRole[role], 'course_id')
-      coursePromises.push(getRoles(enrollByCourse, rNode))
+    if (loading) return
+    // update `isMismatch` of a course based on the `isCheck` status of its sections
+    const updateCourseMismatch = (course: NodeStructure) => {
+      course.isMismatch = course.children.some(section => section.isCheck)
     }
-    Promise.all(coursePromises)
-      .then(() => {
-        tree.sort(sortByBase)
-        setTree([...tree])
-        setLoading(false)
-      })
-      .catch(() => {})
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  function splitArrayByProperty(arr: any[], property: string | number) {
-    return arr.reduce((result: {[x: string]: any[]}, obj: {[x: string]: any}) => {
-      const index = obj[property]
-      if (!result[index]) {
-        result[index] = []
+    // use a deep copy of `tree` to avoid direct state mutation and ensure proper React state updates
+    const treeCopy = cloneDeep(tree)
+    treeCopy.forEach((role: NodeStructure) => {
+      if (role.label.toLowerCase() === props.selectedRole.name.toLowerCase()) {
+        role.isToggle = true
+        role.children.forEach((course: NodeStructure) => {
+          course.isMismatch = false
+          course.children.forEach(section => (section.isMismatch = false))
+        })
+      } else {
+        role.children.forEach((course: NodeStructure) => {
+          course.children.forEach(section => (section.isMismatch = section.isCheck))
+          updateCourseMismatch(course)
+        })
       }
-      result[index].push(obj)
-      return result
-    }, {})
-  }
-
-  const getRoles = (role: any[], rNode: NodeStructure) => {
-    const coursePromises = []
-    let promise
-    for (const [, value] of Object.entries(role)) {
-      promise = getCourses(value, rNode)
-      coursePromises.push(promise)
-    }
-    return Promise.all(coursePromises)
-  }
-
-  const getCourses = async (course: any[], rNode: NodeStructure) => {
-    const courseId = course[0].course_id
-    const cId = 'c' + courseId
-    const childArray: NodeStructure[] = []
-    const cJson = await doFetchApi({path: `/api/v1/courses/${courseId}`})
-    const cNode = {
-      isMismatch: false,
-      id: cId,
-      label: cJson.json.name,
-      parent: rNode,
-      isCheck: rNode.isCheck,
-      children: childArray,
-      isToggle: false,
-      workState: cJson.json.workflow_state,
-      isMixed: false,
-    }
-    cNode.children = []
-    rNode.children.push(cNode)
-
-    const secPromises = []
-    let promise
-    secPromises.push(cJson)
-    for (const section of course) {
-      promise = getSections(section, cNode)
-      secPromises.push(promise)
-    }
-    return Promise.all(secPromises)
-  }
-
-  const getSections = async (
-    section: {course_section_id: string; course_id: string; id: string},
-    cNode: NodeStructure
-  ) => {
-    const sId = 's' + section.course_section_id
-    const sJson = await doFetchApi({
-      path: `/api/v1/courses/${section.course_id}/sections/${section.course_section_id}`,
     })
-    const sNode = {
-      isMismatch: false,
-      id: sId,
-      label: sJson.json.name,
-      parent: cNode,
-      isCheck: cNode.isCheck,
-      children: [],
-      enrollId: section.id,
-      isMixed: false,
+    setTree(treeCopy)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.selectedRole.name, loading])
+
+  // build the object tree
+  useEffect(() => {
+    let courseEnrollmentMap: Map<string | number, Enrollment> | undefined
+    if (props.tempEnrollmentsPairing) {
+      courseEnrollmentMap = new Map(
+        props.tempEnrollmentsPairing.map(enrollment => [enrollment.course_id, enrollment])
+      )
     }
-    cNode.children.push(sNode)
-    return sJson
+    // populate a data structure with the information needed for each row
+    // ids are shared between role/course/section, so we need a prefix to distinguish type
+    props.enrollmentsByCourse.forEach((course: Course) => {
+      course.enrollments.forEach((enrollment: Enrollment) => {
+        const roleData = props.roles.find((role: Role) => role.id === enrollment.role_id)
+        if (!roleData) {
+          return
+        }
+        const courseCheckedByDefault =
+          course.workflow_state === 'available' &&
+          enrollment.enrollment_state === 'active' &&
+          roleData.base_role_name === 'TeacherEnrollment'
+        // unique id for each role
+        const roleId = 'r' + enrollment.role_id
+        let roleCheck: boolean
+        if (courseEnrollmentMap) {
+          roleCheck = course.id === courseEnrollmentMap.get(course.id)?.course_id
+        } else {
+          roleCheck = false
+        }
+        let roleNode: NodeStructure = {
+          id: roleId,
+          label: roleData?.label,
+          // eslint-disable-next-line no-array-constructor
+          children: new Array<NodeStructure>(),
+          isToggle: false,
+          isMixed: false,
+          isCheck: roleCheck,
+        }
+        roleNode = findOrAppendNewNode(roleNode, tree)
+        const courseId = course.id
+        const cId = 'c' + courseId
+        const childArray: NodeStructure[] = []
+        let courseNode: NodeStructure = {
+          isMismatch: false,
+          id: cId,
+          label: course.name,
+          termName: course.term?.name,
+          parent: roleNode,
+          isCheck: props.tempEnrollmentsPairing ? roleCheck : courseCheckedByDefault,
+          children: childArray,
+          isToggle: false,
+          workflowState: course.workflow_state,
+          isMixed: false,
+        }
+        courseNode = findOrAppendNewNode(courseNode, roleNode.children)
+        course.sections.forEach((section: Section) => {
+          // skip if section role doesn't match role base
+          if (section.enrollment_role !== roleData.base_role_name) {
+            return
+          }
+          let sectionCheck: boolean
+          if (courseEnrollmentMap) {
+            const courseEnrollments = courseEnrollmentMap.get(course.id)
+            sectionCheck = section.id === courseEnrollments?.course_section_id
+          } else {
+            sectionCheck = courseNode.isCheck
+          }
+          const sectionNode = {
+            isMismatch: false,
+            id: `s${section.id}`,
+            label: section.name,
+            parent: courseNode,
+            isCheck: sectionCheck,
+            children: [],
+            enrollId: section.id,
+            isMixed: false,
+          }
+          findOrAppendNewNode(sectionNode, courseNode.children)
+        })
+        if (courseEnrollmentMap || courseCheckedByDefault) {
+          updateParentBasedOnChildren(courseNode)
+          updateParentBasedOnChildren(roleNode)
+        }
+      })
+    })
+    tree.sort(sortByBase)
+    setTree([...tree])
+    setLoading(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.tempEnrollmentsPairing, props.enrollmentsByCourse])
+
+  const findOrAppendNewNode = (currentNode: NodeStructure, parentNode: NodeStructure[]) => {
+    const matchingNode = parentNode.find((node: NodeStructure) => node.id === currentNode.id)
+    if (!matchingNode) {
+      parentNode.push(currentNode)
+    }
+    return matchingNode || currentNode
   }
 
   const locateNode = (node: NodeStructure) => {
@@ -236,10 +217,10 @@ export function EnrollmentTree(props: Props) {
     return {currNode, rId}
   }
 
-  const updateTreeCheck = (node: NodeStructure, newState: boolean) => {
+  const handleUpdateTreeCheck = (node: NodeStructure, newState: boolean) => {
     // change all children to match status of parent
     const {currNode, rId} = locateNode(node)
-    const isRole = rId.slice(1) === props.selectRoleId || props.selectRoleId === ''
+    const isRole = rId.slice(1) === props.selectedRole.id || props.selectedRole.id === ''
     if (currNode.children) {
       for (const c of currNode.children) {
         c.isMismatch = isRole ? false : newState
@@ -295,7 +276,25 @@ export function EnrollmentTree(props: Props) {
     }
   }
 
-  const updateTreeToggle = (node: NodeStructure, newState: boolean) => {
+  const updateParentBasedOnChildren = (parent: NodeStructure) => {
+    let allChecked = parent.children.length > 0
+    let anyChecked = false
+    let anyMixed = false
+    for (const child of parent.children) {
+      if (child.isCheck) {
+        anyChecked = true
+      } else {
+        allChecked = false
+      }
+      if (child.isMixed) {
+        anyMixed = true
+      }
+    }
+    parent.isCheck = allChecked && !anyMixed
+    parent.isMixed = (!allChecked && anyChecked) || anyMixed
+  }
+
+  const handleUpdateTreeToggle = (node: NodeStructure, newState: boolean) => {
     const {currNode} = locateNode(node)
     currNode.isToggle = newState
     setTree([...tree])
@@ -305,30 +304,35 @@ export function EnrollmentTree(props: Props) {
     const roleElements = []
     for (const role in tree) {
       roleElements.push(
-        <EnrollmentTreeGroup
-          key={tree[role].id}
-          id={tree[role].id}
-          label={tree[role].label}
-          indent="0"
-          updateCheck={(node: NodeStructure, state: boolean) => {
-            updateTreeCheck(node, state)
-          }}
-          updateToggle={(node: NodeStructure, state: boolean) => {
-            updateTreeToggle(node, state)
-          }}
-          isCheck={tree[role].isCheck}
-          isToggle={tree[role].isToggle}
-          isMixed={tree[role].isMixed}
-        >
-          {[...tree[role].children]}
-        </EnrollmentTreeGroup>
+        <Flex.Item key={tree[role].id} shouldGrow={true} overflowY="visible">
+          <EnrollmentTreeGroup
+            id={tree[role].id}
+            label={tree[role].label}
+            indent="0"
+            updateCheck={handleUpdateTreeCheck}
+            updateToggle={handleUpdateTreeToggle}
+            isCheck={tree[role].isCheck}
+            isToggle={tree[role].isToggle}
+            isMixed={tree[role].isMixed}
+          >
+            {[...tree[role].children]}
+          </EnrollmentTreeGroup>
+        </Flex.Item>
       )
     }
-    return <>{roleElements}</>
+    return (
+      <Flex gap="medium" direction="column">
+        {roleElements}
+      </Flex>
+    )
   }
 
   if (loading) {
-    return <Spinner size="medium" renderTitle="Loading enrollments" margin="auto" />
+    return (
+      <Flex justifyItems="center" alignItems="center">
+        <Spinner renderTitle={I18n.t('Loading enrollments')} />
+      </Flex>
+    )
   } else {
     return renderTree()
   }

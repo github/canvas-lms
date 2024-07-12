@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import 'date-js'
+import '@instructure/date-js'
 import i18nLolcalize from './i18nLolcalize'
 import I18n from 'i18n-js'
 import {
@@ -25,7 +25,7 @@ import {
   normalizeDefault,
 } from '@instructure/i18nliner-runtime'
 import logEagerLookupViolations from './logEagerLookupViolations'
-import htmlEscape from 'html-escape'
+import htmlEscape from '@instructure/html-escape'
 
 activateI18nliner(I18n, {
   // this is what we use elsewhere in canvas, so make i18nliner use it too

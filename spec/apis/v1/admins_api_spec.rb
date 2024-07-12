@@ -302,10 +302,10 @@ describe "Admins API", type: :request do
 
       it "returns the correct format" do
         json = api_call(:get, @path, @path_opts)
-        expect(json).to be_include({ "id" => @admin.account_users.first.id,
-                                     "role" => "AccountAdmin",
-                                     "role_id" => admin_role.id,
-                                     "user" =>
+        expect(json).to include({ "id" => @admin.account_users.first.id,
+                                  "role" => "AccountAdmin",
+                                  "role_id" => admin_role.id,
+                                  "user" =>
                                       { "id" => @admin.id,
                                         "created_at" => @admin.created_at.iso8601,
                                         "name" => @admin.name,
@@ -315,7 +315,7 @@ describe "Admins API", type: :request do
                                         "integration_id" => nil,
                                         "sis_import_id" => nil,
                                         "login_id" => @admin.pseudonym.unique_id },
-                                     "workflow_state" => "active" })
+                                  "workflow_state" => "active" })
       end
 
       it "scopes the results to the user_id if given" do
@@ -379,6 +379,24 @@ describe "Admins API", type: :request do
 
           expect(json.first["id"]).to eq au.id
         end
+
+        it "ignores dangling account users" do
+          @shard1.activate { @other_admin = user_factory }
+          au = Account.default.account_users.create!(user: @other_admin)
+
+          @shard1.activate do
+            @other_admin.user_account_associations.delete_all
+            @other_admin.user_shard_associations.delete_all
+
+            @other_admin.destroy_permanently!
+          end
+
+          @user = @admin
+          json = api_call(:get, @path, @path_opts)
+
+          expect(response).to be_successful
+          expect(json.pluck(:id.to_s)).not_to include au.id
+        end
       end
 
       it "paginates" do
@@ -393,6 +411,59 @@ describe "Admins API", type: :request do
         expect(json.map { |au| { user: au["user"]["name"], role: au["role"], role_id: au["role_id"] } }).to eq [
           { user: "User 1", role: "MT 1", role_id: @roles[1].id }
         ]
+      end
+    end
+  end
+
+  describe "self_roles" do
+    before :once do
+      @account = Account.default
+      @path = "/api/v1/accounts/#{@account.id}/admins/self"
+      @path_opts = { controller: "admins", action: "self_roles", format: "json", account_id: @account.to_param }
+    end
+
+    context "with user lacking any account roles" do
+      before :once do
+        @user = user_factory(account: @account)
+      end
+
+      it "returns unauthorized" do
+        api_call(:get, @path, @path_opts, {}, {}, expected_status: 401)
+      end
+    end
+
+    context "with user having account roles" do
+      before :once do
+        @user = user_factory(account: @account, name: "Bob")
+        @role1 = custom_account_role("role1", account: @account)
+        @role2 = custom_account_role("role2", account: @account)
+        @account.account_users.create!(user: @user, role: @role1)
+        @account.account_users.create!(user: @user, role: @role2)
+      end
+
+      it "returns a paginated list of the caller's account roles" do
+        json = api_call(:get, @path + "?per_page=1", @path_opts.merge(per_page: "1"))
+        json = json.map { |row| row.merge("user" => { "id" => row["user"]["id"] }) }
+        expect(json).to eq([{
+                             "id" => @user.account_users.first.id,
+                             "role" => "role1",
+                             "role_id" => @role1.id,
+                             "workflow_state" => "active",
+                             "user" => {
+                               "id" => @user.id
+                             }
+                           }])
+        json = api_call(:get, @path + "?per_page=1&page=2", @path_opts.merge(per_page: "1", page: "2"))
+        json = json.map { |row| row.merge("user" => { "id" => row["user"]["id"] }) }
+        expect(json).to eq([{
+                             "id" => @user.account_users.last.id,
+                             "role" => "role2",
+                             "role_id" => @role2.id,
+                             "workflow_state" => "active",
+                             "user" => {
+                               "id" => @user.id
+                             }
+                           }])
       end
     end
   end

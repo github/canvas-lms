@@ -25,7 +25,8 @@ class MissingPolicyApplicator
   def apply_missing_deductions
     GuardRail.activate(:secondary) do
       recently_missing_submissions.find_in_batches do |submissions|
-        filtered_submissions = submissions.reject { |s| s.grading_period&.closed? }
+        filtered_submissions = submissions.reject { |s| s.grading_period&.closed? || s.assignment&.has_sub_assignments? }
+
         filtered_submissions.group_by(&:assignment).each { |k, v| apply_missing_deduction(k, v) }
       end
     end
@@ -39,7 +40,7 @@ class MissingPolicyApplicator
               .joins(assignment: { course: [:late_policy, :enrollments] })
               .where("enrollments.user_id = submissions.user_id")
               .preload(:grading_period, assignment: :post_policy, course: [:late_policy, :default_post_policy])
-              .merge(Assignment.published)
+              .merge(AbstractAssignment.published)
               .merge(Enrollment.all_active_or_pending)
               .missing
               .where(score: nil,
@@ -55,7 +56,8 @@ class MissingPolicyApplicator
     now = Time.zone.now
 
     GuardRail.activate(:primary) do
-      submissions = Submission.active.where(id: submissions)
+      plucked_submissions = submissions.pluck(:user_id, :id, :course_id)
+      submissions = Submission.active.missing.where(id: submissions)
 
       submissions.update_all(
         score:,
@@ -70,6 +72,10 @@ class MissingPolicyApplicator
         workflow_state: "graded"
       )
 
+      if assignment.checkpoint?
+        submissions.each(&:aggregate_checkpoint_submissions)
+      end
+
       if assignment.course.root_account.feature_enabled?(:missing_policy_applicator_emits_live_events)
         Canvas::LiveEvents.delay_if_production.submissions_bulk_updated(submissions)
       end
@@ -77,8 +83,9 @@ class MissingPolicyApplicator
       if Account.site_admin.feature_enabled?(:fix_missing_policy_applicator_gradebook_history)
         Auditors::GradeChange.delay_if_production.bulk_record_submission_events(submissions.reload)
       end
-
-      assignment.course.recompute_student_scores(submissions.map(&:user_id).uniq)
+      unique_users = submissions.map(&:user_id).uniq
+      Auditors::GradeChange.delay_if_production(strand: "CreateParticipationsForMissingPolicy:#{assignment.root_account.global_id}").create_content_participations(plucked_submissions, assignment, unique_users)
+      assignment.course.recompute_student_scores(unique_users)
     end
   end
 end

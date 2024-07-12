@@ -18,18 +18,18 @@
 
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import _ from 'underscore'
+import {keys} from 'lodash'
 import contextList from '../util/contextList'
 import _TokenInput from './TokenInput'
 import avatarTemplate from '@canvas/avatar/jst/_avatar.handlebars'
-import _inherits from '@babel/runtime/helpers/esm/inheritsLoose'
+import {extend} from '@canvas/backbone/utils'
 import newless from 'newless'
 
 const I18n = useI18nScope('recipient_input')
 
 const TokenInput = newless(_TokenInput)
 
-_inherits(ContextSearch, TokenInput)
+extend(ContextSearch, TokenInput)
 
 export default function ContextSearch($node, options) {
   this.populator = this.populator.bind(this)
@@ -163,7 +163,7 @@ Object.assign(ContextSearch.prototype, {
   },
 
   contextList(contexts) {
-    contexts = {courses: _.keys(contexts.courses), groups: _.keys(contexts.groups)}
+    contexts = {courses: keys(contexts.courses), groups: keys(contexts.groups)}
     return contextList(contexts, this.contexts, {linkToContexts: false, hardCutoff: 2})
   },
 })

@@ -2,18 +2,16 @@
 
 exports[`RubricManagement renders the RubricManagement component 1`] = `
 <Tabs
-  elementRef={[Function]}
   onRequestTabChange={[Function]}
   shouldFocusOnRender={false}
   tabOverflow="stack"
   variant="default"
 >
   <Panel
-    elementRef={[Function]}
+    active={false}
     id="tab-panel-rubrics"
     isDisabled={false}
     isSelected={true}
-    labelledBy={null}
     padding="small"
     renderTitle="Account Rubrics"
     textAlign="start"
@@ -22,11 +20,11 @@ exports[`RubricManagement renders the RubricManagement component 1`] = `
     <RubricPanel />
   </Panel>
   <Panel
+    active={false}
     elementRef={[Function]}
     id="tab-panel-mastery"
     isDisabled={false}
     isSelected={false}
-    labelledBy={null}
     padding="small"
     renderTitle="Learning Mastery"
     textAlign="start"

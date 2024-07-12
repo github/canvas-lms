@@ -21,6 +21,7 @@ import $ from 'jquery'
 import fcUtil from '../fcUtil'
 import '@canvas/jquery/jquery.ajaxJSON'
 import 'jquery-tinypubsub'
+import {datetimeString, dateString} from '@canvas/datetime/date-functions'
 import splitAssetString from '@canvas/util/splitAssetString'
 import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
 
@@ -207,6 +208,8 @@ Object.assign(CommonEvent.prototype, {
       this.start.seconds(0)
       if (!this.end) {
         this.end = fcUtil.clone(this.start)
+      } else if (this.end.isBefore(this.start)) {
+        this.end.add(30, 'minutes')
       }
     } else {
       // minimum duration should only be enforced if not due at midnight
@@ -222,9 +225,9 @@ Object.assign(CommonEvent.prototype, {
     }
     datetime = fcUtil.unwrap(datetime)
     if (allDay) {
-      formattedHtml = $.dateString(datetime)
+      formattedHtml = dateString(datetime)
     } else {
-      formattedHtml = $.datetimeString(datetime)
+      formattedHtml = datetimeString(datetime)
     }
     return `<time datetime='${datetime.toISOString()}'>${formattedHtml}</time>`
   },

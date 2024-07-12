@@ -16,14 +16,17 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+import 'cross-fetch/polyfill'
+import {TextDecoder, TextEncoder} from 'util'
 import CoreTranslations from '../public/javascripts/translations/en.json'
 import Enzyme from 'enzyme'
 import Adapter from 'enzyme-adapter-react-16'
 import filterUselessConsoleMessages from '@instructure/filter-console-messages'
 import rceFormatMessage from '@instructure/canvas-rce/es/format-message'
-import {up as configureDateTime} from '../ui/boot/initializers/configureDateTime'
-import {up as configureDateTimeMomentParser} from '../ui/boot/initializers/configureDateTimeMomentParser'
+import {up as configureDateTime} from '@canvas/datetime/configureDateTime'
+import {up as configureDateTimeMomentParser} from '@canvas/datetime/configureDateTimeMomentParser'
 import {useTranslations} from '@canvas/i18n'
+import MockBroadcastChannel from './MockBroadcastChannel'
 
 useTranslations('en', CoreTranslations)
 
@@ -41,27 +44,31 @@ rceFormatMessage.setup({
 /* eslint-disable no-console */
 const globalError = global.console.error
 const ignoredErrors = [
-  /\[object Object\]/,
   /An update to %s inside a test was not wrapped in act/,
   /Can't perform a React state update on an unmounted component/,
-  /contextType was defined as an instance property on %s/,
   /Function components cannot be given refs/,
-  /Invalid prop `children` supplied to `(Option)`/,
   /Invalid prop `heading` of type `object` supplied to `Billboard`/, // https://instructure.atlassian.net/browse/QUIZ-8870
-  /Invariant Violation/,
+  /Invariant Violation/, // https://instructure.atlassian.net/browse/VICE-3968
   /Prop `children` should be supplied unless/, // https://instructure.atlassian.net/browse/FOO-3407
   /The above error occurred in the <.*> component/,
   /You seem to have overlapping act\(\) calls/,
+  /Warning: `value` prop on `%s` should not be null. Consider using an empty string to clear the component or `undefined` for uncontrolled components.%s/,
+  /Warning: This synthetic event is reused for performance reasons/,
+  /Invalid prop `value` supplied to `MenuItem`/, // https://instructure.atlassian.net/browse/INSTUI-4054
 ]
 const globalWarn = global.console.warn
 const ignoredWarnings = [
-  /Please update the following components: %s/, // https://instructure.atlassian.net/browse/LS-3906
-  /value provided is not in a recognized RFC2822 or ISO format/,
+  /JQMIGRATE:/, // ignore warnings about jquery migrate; these are muted globally when not in a jest test
+  /componentWillReceiveProps/, // ignore warnings about componentWillReceiveProps; this method is deprecated and will be removed with react upgrades
 ]
+
 global.console = {
   log: console.log,
-  error: error => {
-    if (ignoredErrors.some(regex => regex.test(error))) {
+  error: (error, ...rest) => {
+    if (
+      ignoredErrors.some(regex => regex.test(error)) ||
+      ignoredErrors.some(regex => regex.test(rest))
+    ) {
       return
     }
     globalError(error)
@@ -83,8 +90,6 @@ global.console = {
 }
 /* eslint-enable no-console */
 filterUselessConsoleMessages(global.console)
-
-require('jest-fetch-mock').enableFetchMocks()
 
 window.scroll = () => {}
 window.ENV = {
@@ -195,12 +200,23 @@ if (!('matchMedia' in window)) {
   window.matchMedia._mocked = true
 }
 
+global.BroadcastChannel = global.BroadcastChannel || MockBroadcastChannel
+
+global.DataTransferItem = global.DataTransferItem || class DataTransferItem {}
+
+global.performance = global.performance || {}
+global.performance.getEntriesByType = global.performance.getEntriesByType || (() => [])
+
 if (!('scrollIntoView' in window.HTMLElement.prototype)) {
   window.HTMLElement.prototype.scrollIntoView = () => {}
 }
 
 // Suppress errors for APIs that exist in JSDOM but aren't implemented
-Object.defineProperty(window, 'scrollTo', {configurable: true, writable: true, value: () => {}})
+Object.defineProperty(window, 'scrollTo', {
+  configurable: true,
+  writable: true,
+  value: () => {},
+})
 
 const locationProperties = Object.getOwnPropertyDescriptors(window.location)
 Object.defineProperty(window, 'location', {
@@ -241,4 +257,59 @@ if (typeof window.URL.createObjectURL === 'undefined') {
 
 if (typeof window.URL.revokeObjectURL === 'undefined') {
   Object.defineProperty(window.URL, 'revokeObjectURL', {value: () => undefined})
+}
+
+global.fetch =
+  global.fetch || jest.fn().mockImplementation(() => Promise.resolve({json: () => ({})}))
+
+Document.prototype.createRange =
+  Document.prototype.createRange ||
+  function () {
+    return {
+      setEnd() {},
+      setStart() {},
+      getBoundingClientRect() {
+        return {right: 0}
+      },
+      getClientRects() {
+        return {
+          length: 0,
+          left: 0,
+          right: 0,
+        }
+      },
+    }
+  }
+
+global.TextEncoder = TextEncoder
+global.TextDecoder = TextDecoder
+
+if (!('Worker' in window)) {
+  Object.defineProperty(window, 'Worker', {
+    value: class Worker {
+      constructor() {
+        this.postMessage = () => {}
+        this.terminate = () => {}
+        this.addEventListener = () => {}
+        this.removeEventListener = () => {}
+        this.dispatchEvent = () => {}
+      }
+    },
+  })
+}
+
+if (!Range.prototype.getBoundingClientRect) {
+  Range.prototype.getBoundingClientRect = () => ({
+    bottom: 0,
+    height: 0,
+    left: 0,
+    right: 0,
+    top: 0,
+    width: 0,
+  })
+  Range.prototype.getClientRects = () => ({
+    item: () => null,
+    length: 0,
+    [Symbol.iterator]: jest.fn(),
+  })
 }

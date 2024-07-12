@@ -73,6 +73,11 @@ module Lti::IMS
     describe "#create" do
       let(:content_type) { "application/vnd.ims.lis.v1.score+json" }
 
+      before do
+        # instantiate this so they get enrolled before anything else
+        user
+      end
+
       it_behaves_like "advantage services"
       it_behaves_like "lti services"
 
@@ -91,26 +96,12 @@ module Lti::IMS
           expect(json["resultUrl"]).to include "results"
         end
 
-        context "when the consistent_ags_ids_based_on_account_principal_domain feature flag is on" do
-          it "uses the Account#domain in the resultUrl" do
-            allow_any_instance_of(Account).to receive(:environment_specific_domain).and_return("canonical.host")
-            course.root_account.enable_feature!(:consistent_ags_ids_based_on_account_principal_domain)
-            send_request
-            expect(json["resultUrl"]).to start_with(
-              "http://canonical.host/api/lti/courses/#{course.id}/line_items/"
-            )
-          end
-        end
-
-        context "when the consistent_ags_ids_based_on_account_principal_domain feature flag is off" do
-          it "uses the host domain in the resultUrl" do
-            course.root_account.disable_feature!(:consistent_ags_ids_based_on_account_principal_domain)
-            allow_any_instance_of(Account).to receive(:environment_specific_domain).and_return("canonical.host")
-            send_request
-            expect(json["resultUrl"]).to start_with(
-              "http://test.host/api/lti/courses/#{course.id}/line_items/"
-            )
-          end
+        it "uses the Account#domain in the resultUrl" do
+          allow_any_instance_of(Account).to receive(:environment_specific_domain).and_return("canonical.host")
+          send_request
+          expect(json["resultUrl"]).to start_with(
+            "http://canonical.host/api/lti/courses/#{course.id}/line_items/"
+          )
         end
 
         context "with no existing result" do
@@ -190,6 +181,11 @@ module Lti::IMS
 
         context "when line_item is an assignment" do
           let(:result) { lti_result_model line_item:, user: }
+
+          before do
+            allow(CanvasHttp).to receive(:get).with("https://getsamplefiles.com/download/txt/sample-1.txt").and_return("sample data")
+            allow(CanvasHttp).to receive(:get).with("https://getsamplefiles.com/download/txt/sample-2.txt").and_return("moar sample data")
+          end
 
           shared_examples_for "creates a new submission" do
             it "increments attempt" do
@@ -348,7 +344,7 @@ module Lti::IMS
             end
 
             context "with comment in payload" do
-              let(:params_overrides) { super().merge(comment: "Test coment") }
+              let(:params_overrides) { super().merge(comment: "Test comment") }
 
               it "creates a new submission_comment" do
                 send_request
@@ -388,6 +384,28 @@ module Lti::IMS
               expect(result.needs_review?).to be true
               expect(result.submission.needs_review?).to be true
             end
+
+            context "with submission already graded and using preserve_score param" do
+              let(:result) do
+                lti_result_model line_item:,
+                                 user:,
+                                 result_score: 5,
+                                 result_maximum: 20
+              end
+              let(:params_overrides) do
+                super().merge(gradingProgress: "PendingManual",
+                              scoreGiven: 100,
+                              scoreMaximum: line_item.score_maximum,
+                              "https://canvas.instructure.com/lti/submission": { preserve_score: true })
+              end
+
+              it "does not update submission score" do
+                send_request
+                result.reload
+                expect(result.needs_review?).to be true
+                expect(result.submission.score).to eq 5
+              end
+            end
           end
 
           context "a submission that needs review already exists" do
@@ -395,7 +413,7 @@ module Lti::IMS
 
             before do
               result.grading_progress = "PendingManual"
-              result.submission.workflow_state = Submission.workflow_states.pending_review
+              result.submission.workflow_state = "pending_review"
               result.save!
             end
 
@@ -411,11 +429,7 @@ module Lti::IMS
             end
           end
 
-          context "with submitted_at extension" do
-            let(:params_overrides) do
-              super().merge(Lti::Result::AGS_EXT_SUBMISSION => { submitted_at: })
-            end
-
+          shared_examples_for "a request specifying when the submission occurred" do
             shared_examples_for "updates submission time" do
               it do
                 send_request
@@ -424,8 +438,6 @@ module Lti::IMS
             end
 
             context "when submitted_at is prior to submission due date" do
-              let(:submitted_at) { 5.minutes.ago.iso8601(3) }
-
               before { result.submission.update!(cached_due_date: 2.minutes.ago.iso8601(3)) }
 
               it_behaves_like "updates submission time"
@@ -433,6 +445,7 @@ module Lti::IMS
 
               it "does not mark submission late" do
                 send_request
+                expect(response).to be_ok
                 expect(Submission.late.count).to eq 0
               end
             end
@@ -465,17 +478,57 @@ module Lti::IMS
             end
           end
 
+          context "with submitted_at extension" do
+            let(:submitted_at) { 5.minutes.ago.iso8601(3) }
+            let(:params_overrides) do
+              super().merge(Lti::Result::AGS_EXT_SUBMISSION => { submitted_at: })
+            end
+
+            it_behaves_like "a request specifying when the submission occurred"
+          end
+
+          context "with submittedAt param present" do
+            let(:submitted_at) { 5.minutes.ago.iso8601(3) }
+            let(:params_overrides) { super().merge(submittedAt: submitted_at) }
+
+            context "when FF is off" do
+              before do
+                Account.site_admin.disable_feature!(:lti_ags_remove_top_submitted_at)
+              end
+
+              it_behaves_like "a request specifying when the submission occurred"
+            end
+
+            context "when FF is on" do
+              before do
+                Account.site_admin.enable_feature!(:lti_ags_remove_top_submitted_at)
+              end
+
+              it "ignores submittedAt" do
+                send_request
+                expect(result.submission.reload.submitted_at).not_to eq submitted_at
+              end
+            end
+          end
+
+          context "with submission.submittedAt param present" do
+            let(:submitted_at) { 5.minutes.ago.iso8601(3) }
+            let(:params_overrides) { super().merge(submission: { submittedAt: submitted_at }) }
+
+            it_behaves_like "a request specifying when the submission occurred"
+          end
+
           context "with content items in extension" do
             let(:content_items) do
               [
                 {
                   type: "file",
-                  url: "https://filesamples.com/samples/document/txt/sample1.txt",
+                  url: "https://getsamplefiles.com/download/txt/sample-1.txt",
                   title: "sample1.txt"
                 },
                 {
                   type: "not",
-                  url: "https://filesamples.com/samples/document/txt/sample1.txt",
+                  url: "https://getsamplefiles.com/download/txt/sample-1.txt",
                   title: "notAFile.txt"
                 }
               ]
@@ -485,7 +538,7 @@ module Lti::IMS
               super().merge(Lti::Result::AGS_EXT_SUBMISSION => { content_items:, new_submission: false, submitted_at: }, :scoreGiven => 10, :scoreMaximum => line_item.score_maximum)
             end
             let(:expected_progress_url) do
-              "http://test.host/api/lti/courses/#{context_id}/progress/"
+              "http://canonical.host/api/lti/courses/#{context_id}/progress/"
             end
 
             it "ignores content items that are not type file" do
@@ -560,24 +613,11 @@ module Lti::IMS
                 json[Lti::Result::AGS_EXT_SUBMISSION]["content_items"].first["progress"]
               end
 
-              context "when the consistent_ags_ids_based_on_account_principal_domain feature flag is on" do
-                it "returns a progress URL with the Account#domain" do
-                  course.root_account.enable_feature!(:consistent_ags_ids_based_on_account_principal_domain)
-                  allow_any_instance_of(Account).to receive(:environment_specific_domain).and_return("canonical.host")
-                  send_request
-                  expect(actual_progress_url)
-                    .to start_with("http://canonical.host/api/lti/courses/#{context_id}/progress/")
-                end
-              end
-
-              context "when the consistent_ags_ids_based_on_account_principal_domain feature flag is off" do
-                it "returns a progress URL with the Account#domain" do
-                  course.root_account.disable_feature!(:consistent_ags_ids_based_on_account_principal_domain)
-                  allow_any_instance_of(Account).to receive(:environment_specific_domain).and_return("canonical.host")
-                  send_request
-                  expect(actual_progress_url)
-                    .to start_with("http://test.host/api/lti/courses/#{context_id}/progress/")
-                end
+              it "returns a progress URL with the Account#domain" do
+                allow_any_instance_of(Account).to receive(:environment_specific_domain).and_return("canonical.host")
+                send_request
+                expect(actual_progress_url)
+                  .to start_with("http://canonical.host/api/lti/courses/#{context_id}/progress/")
               end
 
               it "calculates content_type from extension" do
@@ -604,12 +644,12 @@ module Lti::IMS
                     super().merge(Lti::Result::AGS_EXT_SUBMISSION => { content_items: [
                                                                          {
                                                                            type: "file",
-                                                                           url: "https://filesamples.com/samples/document/txt/sample1.txt",
+                                                                           url: "https://getsamplefiles.com/download/txt/sample-1.txt",
                                                                            title: "sample1.txt"
                                                                          },
                                                                          {
                                                                            type: "file",
-                                                                           url: "https://filesamples.com/samples/document/txt/sample2.txt",
+                                                                           url: "https://getsamplefiles.com/download/txt/sample-2.txt",
                                                                            title: "sample2.txt"
                                                                          },
                                                                        ],
@@ -687,6 +727,7 @@ module Lti::IMS
               # that doesn't work well in a controller spec for this controller
 
               it "returns a progress url" do
+                allow_any_instance_of(Account).to receive(:environment_specific_domain).and_return("canonical.host")
                 send_request
                 progress_url =
                   json[Lti::Result::AGS_EXT_SUBMISSION]["content_items"].first["progress"]
@@ -1176,6 +1217,28 @@ module Lti::IMS
 
       context "with valid params" do
         it_behaves_like "a successful scores request"
+      end
+
+      context "when activityProdress is set to Initialized" do
+        let(:params_overrides) { super().merge(activityProgress: "Initialized") }
+
+        shared_examples_for "an unsubmitted submission" do
+          it "does not update the submission" do
+            send_request
+            rslt = Lti::Result.find(json["resultUrl"].split("/").last)
+            expect(rslt.submission.workflow_state).to eq("unsubmitted")
+          end
+        end
+
+        it_behaves_like "an unsubmitted submission"
+
+        context "ags_scores_multiple_files FF is on" do
+          before do
+            Account.root_accounts.first.enable_feature! :ags_scores_multiple_files
+          end
+
+          it_behaves_like "an unsubmitted submission"
+        end
       end
 
       context "when user_id is a fake student in course" do

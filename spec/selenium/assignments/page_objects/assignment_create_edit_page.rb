@@ -22,8 +22,37 @@ class AssignmentCreateEditPage
     include SeleniumDependencies
 
     # CSS Selectors
+
+    def manage_assign_to_button_selector
+      "[data-testid='manage-assign-to']"
+    end
+
+    def pending_changes_pill_selector
+      "[data-testid='pending_changes_pill']"
+    end
+
     def submission_type_selector
       "#assignment_submission_type"
+    end
+
+    def text_entry_submission_type_toggle_selector
+      "#assignment_text_entry"
+    end
+
+    def group_category_checkbox_selector
+      "#has_group_category"
+    end
+
+    def group_categories_selector
+      "#assignment_group_category_id option"
+    end
+
+    def error_box_selector
+      ".error_text"
+    end
+
+    def post_to_sis_checkbox_selector
+      "#assignment_post_to_sis"
     end
 
     # Selectors
@@ -37,6 +66,10 @@ class AssignmentCreateEditPage
 
     def assignment_save_button
       find_button("Save")
+    end
+
+    def assignment_cancel_button
+      find_button("Cancel")
     end
 
     def save_publish_button
@@ -91,6 +124,18 @@ class AssignmentCreateEditPage
       f("input.datePickerDateField.DueDateInput")
     end
 
+    def group_category_checkbox
+      f(group_category_checkbox_selector)
+    end
+
+    def group_categories
+      ff(group_categories_selector)
+    end
+
+    def error_boxes
+      ff(error_box_selector)
+    end
+
     # Moderated Grading Options
     def select_grader_dropdown
       f("select[name='final_grader_id']")
@@ -116,8 +161,24 @@ class AssignmentCreateEditPage
       f("#assignment_hide_in_gradebook")
     end
 
+    def manage_assign_to_button
+      f(manage_assign_to_button_selector)
+    end
+
     def omit_from_final_grade_checkbox
       f("#assignment_omit_from_final_grade")
+    end
+
+    def text_entry_submission_type_toggle
+      f(text_entry_submission_type_toggle_selector)
+    end
+
+    def pending_changes_pill
+      f(pending_changes_pill_selector)
+    end
+
+    def post_to_sis_checkbox
+      f(post_to_sis_checkbox_selector)
     end
 
     # Methods & Actions
@@ -133,8 +194,16 @@ class AssignmentCreateEditPage
       assignment_name_textfield.send_keys(text)
     end
 
+    def replace_assignment_name(text)
+      assignment_name_textfield.send_keys([:control, "a"], :backspace, text)
+    end
+
     def add_number_of_graders(number)
       replace_content(grader_count_input, number, tab_out: true)
+    end
+
+    def click_manage_assign_to_button
+      manage_assign_to_button.click
     end
 
     def select_moderate_checkbox
@@ -153,8 +222,16 @@ class AssignmentCreateEditPage
       wait_for_new_page_load { save_publish_button.click }
     end
 
+    def cancel_assignment
+      wait_for_new_page_load { assignment_cancel_button.click }
+    end
+
     def select_grading_type(type, select_by = :text)
       click_option(display_grade_as, type, select_by)
+    end
+
+    def select_text_entry_submission_type
+      text_entry_submission_type_toggle.click
     end
 
     def enter_points_possible(points)
@@ -163,6 +240,24 @@ class AssignmentCreateEditPage
 
     def select_submission_type(type, select_by = :text)
       click_option(submission_type, type, select_by)
+    end
+
+    def pending_changes_pill_exists?
+      element_exists?(pending_changes_pill_selector)
+    end
+
+    def click_group_category_assignment_check
+      group_category_checkbox.click
+    end
+
+    def select_assignment_group_category(id)
+      options = group_categories
+      option_element = id.blank? ? options.first : options[id]
+      option_element.click
+    end
+
+    def select_post_to_sis_checkbox
+      post_to_sis_checkbox.click
     end
   end
 end

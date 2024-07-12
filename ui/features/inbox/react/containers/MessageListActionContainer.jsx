@@ -40,12 +40,9 @@ const MessageListActionContainer = props => {
   const userID = ENV.current_user_id?.toString()
 
   const selectedReadStates = () => {
-    const selectedStates =
-      props.selectedConversations
-        .map(cp =>
-          cp.participants?.find(participant => participant?.user?._id === ENV.current_user?.id)
-        )
-        .map(node => node?.workflowState) || []
+    const selectedStates = props.selectedConversations.map(
+      conversation => conversation?.workflowState
+    )
     return selectedStates
   }
 
@@ -213,6 +210,7 @@ const MessageListActionContainer = props => {
                 onUserFilterSelect={props.onUserFilterSelect}
                 width={responsiveProps.addressBookContainer.width}
                 limitTagCount={LIMIT_TAG_COUNT}
+                addressBookLabel="Search"
               />
             </Flex.Item>
             <Flex.Item padding={responsiveProps.messageActionButtons.padding}>
@@ -236,6 +234,7 @@ const MessageListActionContainer = props => {
                 shouldRenderMarkAsRead={shouldRenderMarkAsRead()}
                 shouldRenderMarkAsUnread={shouldRenderMarkAsUnread()}
                 hasMultipleSelectedMessages={hasMultipleSelectedMessages()}
+                showComposeButton={props.showComposeButton}
               />
             </Flex.Item>
           </Flex>
@@ -269,6 +268,7 @@ MessageListActionContainer.propTypes = {
   onReadStateChange: PropTypes.func,
   activeCourseFilter: PropTypes.string,
   canReply: PropTypes.bool,
+  showComposeButton: PropTypes.bool,
 }
 
 MessageListActionContainer.defaultProps = {

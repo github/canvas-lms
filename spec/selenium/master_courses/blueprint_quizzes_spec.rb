@@ -18,11 +18,13 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 require_relative "../helpers/blueprint_common"
+require_relative "../../helpers/selective_release_common"
 
 describe "blueprint courses quizzes" do
   include_context "in-process server selenium tests"
   include_context "blueprint courses files context"
   include BlueprintCourseCommon
+  include SelectiveReleaseCommon
 
   def quiz_panel
     f(".quiz")
@@ -59,6 +61,8 @@ describe "blueprint courses quizzes" do
       end
 
       it "locks down the associated course's quizzes fields", priority: 2 do
+        differentiated_modules_off
+
         change_blueprint_settings(@master, points: true, due_dates: true, availability_dates: true)
         get "/courses/#{@master.id}/quizzes/#{@original_quiz.id}"
         f(".bpc-lock-toggle button").click
@@ -136,6 +140,8 @@ describe "blueprint courses quizzes" do
     end
 
     it "does not allow editing of restricted items" do
+      differentiated_modules_off
+
       @tag.update(restrictions: { content: true, points: true, due_dates: true, availability_dates: true })
 
       get "/courses/#{@copy_to.id}/quizzes/#{@quiz_copy.id}/edit"
@@ -151,7 +157,7 @@ describe "blueprint courses quizzes" do
       get "/courses/#{@copy_to.id}/quizzes/#{@quiz_copy.id}/edit"
 
       # open the questions tab
-      hover_and_click('#quiz_tabs_tab_list li[aria-controls="questions_tab"]')
+      hover_and_click('#quiz_tabs_tab_list li[aria-controls="questions_tab"] .ui-tabs-anchor')
       expect(f("#quiz_edit_wrapper #questions_tab").displayed?).to be true
 
       # hover the question description and the edit/pencil link should not appear
@@ -175,7 +181,7 @@ describe "blueprint courses quizzes" do
       get "/courses/#{@copy_to.id}/quizzes/#{@quiz_copy.id}/edit"
 
       # open the questions tab
-      hover_and_click('#quiz_tabs_tab_list li[aria-controls="questions_tab"]')
+      hover_and_click('#quiz_tabs_tab_list li[aria-controls="questions_tab"] .ui-tabs-anchor')
       expect(f("#quiz_edit_wrapper #questions_tab").displayed?).to be true
 
       # hover the question description and the edit/pencil link should not appear
@@ -195,7 +201,7 @@ describe "blueprint courses quizzes" do
 
       get "/courses/#{@copy_to.id}/quizzes/#{@quiz_copy.id}/edit"
 
-      hover_and_click('#quiz_tabs_tab_list li[aria-controls="questions_tab"]')
+      hover_and_click('#quiz_tabs_tab_list li[aria-controls="questions_tab"] .ui-tabs-anchor')
       expect(f("#quiz_edit_wrapper #questions_tab").displayed?).to be true
 
       # questions can be edited but not deleted
@@ -235,7 +241,7 @@ describe "blueprint courses quizzes" do
 
     it "allows editing/deleting the quiz group when nothing is locked" do
       get "/courses/#{@copy_to.id}/quizzes/#{@quiz_copy.id}/edit"
-      hover_and_click('#quiz_tabs_tab_list li[aria-controls="questions_tab"]')
+      hover_and_click('#quiz_tabs_tab_list li[aria-controls="questions_tab"] .ui-tabs-anchor')
       expect(f("#quiz_edit_wrapper #questions_tab").displayed?).to be true
 
       expect(f(".group_top")).to contain_css(".delete_group_link")
@@ -248,7 +254,7 @@ describe "blueprint courses quizzes" do
       @tag.update(restrictions: { content: false, points: true, due_dates: true, availability_dates: true })
 
       get "/courses/#{@copy_to.id}/quizzes/#{@quiz_copy.id}/edit"
-      hover_and_click('#quiz_tabs_tab_list li[aria-controls="questions_tab"]')
+      hover_and_click('#quiz_tabs_tab_list li[aria-controls="questions_tab"] .ui-tabs-anchor')
       expect(f("#quiz_edit_wrapper #questions_tab").displayed?).to be true
 
       expect(f(".group_top")).not_to contain_css(".delete_group_link")
@@ -261,7 +267,7 @@ describe "blueprint courses quizzes" do
       @tag.update(restrictions: { content: true, points: true, due_dates: true, availability_dates: true })
 
       get "/courses/#{@copy_to.id}/quizzes/#{@quiz_copy.id}/edit"
-      hover_and_click('#quiz_tabs_tab_list li[aria-controls="questions_tab"]')
+      hover_and_click('#quiz_tabs_tab_list li[aria-controls="questions_tab"] .ui-tabs-anchor')
       expect(f("#quiz_edit_wrapper #questions_tab").displayed?).to be true
 
       expect(f(".group_top")).not_to contain_css(".edit_group_link")

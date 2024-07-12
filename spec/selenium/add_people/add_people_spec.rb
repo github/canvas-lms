@@ -45,7 +45,7 @@ describe "add_people" do
       # open the add people modal dialog
       f("a#addUsers").click
       expect(f(".addpeople")).to be_displayed
-      expect(f("#application")).to have_attribute("aria-hidden", "true")
+      expect(f("#drawer-layout-mount-point")).to have_attribute("aria-hidden", "true")
 
       # can't click the 'login id' radio button directly, since it's covered
       # with inst-ui prettiness and selenium won't allow it.
@@ -231,7 +231,6 @@ describe "add_people" do
 
     it "includes invite users without names" do
       get "/courses/#{@course.id}/users"
-
       # open the add people modal dialog
       f("a#addUsers").click
       expect(f(".addpeople")).to be_displayed
@@ -239,7 +238,7 @@ describe "add_people" do
       # search for some emails
       replace_content(f(".addpeople__peoplesearch textarea"),
                       'Z User <zuser@example.com>, yuser@example.com, "User, X" <xuser@example.com>')
-
+      # sleep 1 - works with this
       # click next button
       f("#addpeople_next").click
 

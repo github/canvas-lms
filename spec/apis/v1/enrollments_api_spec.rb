@@ -229,6 +229,7 @@ describe EnrollmentsApiController, type: :request do
           teacher_in_course(active_all: true)
           @account = Account.default
           @account.enable_feature!(:temporary_enrollments)
+          @temporary_enrollment_pairing = TemporaryEnrollmentPairing.create!(root_account: @account, created_by: account_admin_user)
         end
 
         context "when feature flag is enabled" do
@@ -245,12 +246,14 @@ describe EnrollmentsApiController, type: :request do
                                         user_id: @unenrolled_user.id,
                                         role_id:,
                                         course_section_id: @section.id,
-                                        temporary_enrollment_source_user_id: @teacher.id
+                                        temporary_enrollment_source_user_id: @teacher.id,
+                                        temporary_enrollment_pairing_id: @temporary_enrollment_pairing.id
                                       }
                                     }
             enrollment = Enrollment.find(json["id"])
             expect(enrollment).to be_an_instance_of TeacherEnrollment
             expect(enrollment.temporary_enrollment_source_user_id).to eq @teacher.id
+            expect(enrollment.temporary_enrollment_pairing_id).to be_present
           end
 
           it "creates a new temporary enrollment association in a sub account context" do
@@ -275,12 +278,14 @@ describe EnrollmentsApiController, type: :request do
                                         user_id: @unenrolled_user.id,
                                         role_id:,
                                         course_section_id: @section.id,
-                                        temporary_enrollment_source_user_id: @teacher.id
+                                        temporary_enrollment_source_user_id: @teacher.id,
+                                        temporary_enrollment_pairing_id: @temporary_enrollment_pairing.id
                                       }
                                     }
             enrollment = Enrollment.find(json["id"])
             expect(enrollment).to be_an_instance_of TeacherEnrollment
             expect(enrollment.temporary_enrollment_source_user_id).to eq @teacher.id
+            expect(enrollment.temporary_enrollment_pairing_id).to be_present
           end
         end
 
@@ -302,12 +307,14 @@ describe EnrollmentsApiController, type: :request do
                                         user_id: @unenrolled_user.id,
                                         role_id:,
                                         course_section_id: @section.id,
-                                        temporary_enrollment_source_user_id: @teacher.id
+                                        temporary_enrollment_source_user_id: @teacher.id,
+                                        temporary_enrollment_pairing_id: @temporary_enrollment_pairing.id
                                       }
                                     }
             enrollment = Enrollment.find(json["id"])
             expect(enrollment).to be_an_instance_of TeacherEnrollment
             expect(enrollment.temporary_enrollment_source_user_id).to be_nil
+            expect(enrollment.temporary_enrollment_pairing_id).to be_nil
           end
         end
       end
@@ -929,8 +936,8 @@ describe EnrollmentsApiController, type: :request do
                      }
         expect(response).to have_http_status :bad_request
         json = JSON.parse(response.body)
-        expect(json["message"]).to be_include "enrollment[self_enrollment_code] is invalid"
-        expect(json["message"]).to be_include "enrollment[user_id] must be 'self' when self-enrolling"
+        expect(json["message"]).to include "enrollment[self_enrollment_code] is invalid"
+        expect(json["message"]).to include "enrollment[user_id] must be 'self' when self-enrolling"
       end
 
       it "requires the course to be in a valid state" do
@@ -941,7 +948,7 @@ describe EnrollmentsApiController, type: :request do
                      { enrollment: { user_id: "self", self_enrollment_code: @course.self_enrollment_code } }
         expect(response).to have_http_status :bad_request
         json = JSON.parse(response.body)
-        expect(json["message"]).to be_include "course is not open for self-enrollment"
+        expect(json["message"]).to include "course is not open for self-enrollment"
       end
 
       it "lets anyone self-enroll" do
@@ -1134,39 +1141,62 @@ describe EnrollmentsApiController, type: :request do
     end
 
     describe "temporary enrollments" do
+      let_once(:start_at) { 1.day.ago }
+      let_once(:start_at_future) { 1.day.from_now }
+      let_once(:end_at) { 1.month.from_now }
+
       before(:once) do
         Account.default.enable_feature!(:temporary_enrollments)
         @provider = user_factory(active_all: true)
         @recipient = user_factory(active_all: true)
-        @course = course_with_teacher(active_all: true, user: @provider).course
-        @recipient_temp_enrollment = @course.enroll_user(
+        course1 = course_with_teacher(active_all: true, user: @provider).course
+        course2 = course_with_teacher(active_all: true, user: @provider).course
+        temporary_enrollment_pairing = TemporaryEnrollmentPairing.create!(root_account: Account.default, created_by: account_admin_user)
+        course1.enroll_user(
           @recipient,
           "TeacherEnrollment",
-          { role: teacher_role, temporary_enrollment_source_user_id: @provider.id }
+          {
+            role: teacher_role,
+            temporary_enrollment_source_user_id: @provider.id,
+            temporary_enrollment_pairing_id: temporary_enrollment_pairing.id,
+            start_at:,
+            end_at:
+          }
+        )
+        course2.enroll_user(
+          @recipient,
+          "TeacherEnrollment",
+          {
+            role: teacher_role,
+            temporary_enrollment_source_user_id: @provider.id,
+            temporary_enrollment_pairing_id: temporary_enrollment_pairing.id,
+            start_at: start_at_future,
+            end_at:
+          }
         )
       end
 
       context "when feature flag is enabled" do
-        it "returns only recipient temporary enrollments" do
-          user_path = "/api/v1/users/#{@provider.id}/enrollments"
-          json = api_call_as_user(account_admin_user,
-                                  :get,
-                                  user_path,
-                                  @user_params.merge(temporary_enrollment_recipients: true,
-                                                     user_id: @provider.id))
-          expect(json.length).to eq(1)
-          expect(json.first["user_id"]).to eq(@recipient.id)
-        end
-
-        it "returns only provider temporary enrollments" do
+        it "returns recipient temporary enrollments" do
           user_path = "/api/v1/users/#{@recipient.id}/enrollments"
           json = api_call_as_user(account_admin_user,
                                   :get,
                                   user_path,
-                                  @user_params.merge(temporary_enrollment_providers: true,
+                                  @user_params.merge(temporary_enrollments_for_recipient: true,
                                                      user_id: @recipient.id))
-          expect(json.length).to eq(1)
-          expect(json.first["user_id"]).to eq(@provider.id)
+          expect(json.length).to eq(2)
+          expect(json.first["user_id"]).to eq(@recipient.id)
+        end
+
+        it "returns recipient enrollments for a provider" do
+          user_path = "/api/v1/users/#{@provider.id}/enrollments"
+          json = api_call_as_user(account_admin_user,
+                                  :get,
+                                  user_path,
+                                  @user_params.merge(temporary_enrollment_recipients_for_provider: true,
+                                                     user_id: @provider.id))
+          expect(json.length).to eq(2)
+          expect(json.first["user_id"]).to eq(@recipient.id)
         end
 
         it "returns default behavior if temporary enrollment args are not provided" do
@@ -1175,6 +1205,34 @@ describe EnrollmentsApiController, type: :request do
                                   :get,
                                   user_path,
                                   @user_params.merge(user_id: @recipient.id))
+          expect(json.length).to eq(2)
+          expect(json.first["user_id"]).to eq(@recipient.id)
+        end
+
+        it "returns temporary enrollments with included providers" do
+          user_path = "/api/v1/users/#{@recipient.id}/enrollments"
+          json = api_call_as_user(account_admin_user,
+                                  :get,
+                                  user_path,
+                                  @user_params.merge(temporary_enrollments_for_recipient: true,
+                                                     user_id: @recipient.id,
+                                                     include: ["temporary_enrollment_providers"]))
+          expect(json.length).to eq(2)
+          expect(json.first["user_id"]).to eq(@recipient.id)
+          expect(json.first["temporary_enrollment_provider"]["id"]).to eq(@provider.id)
+        end
+
+        it "respects enrollment state when a state arg is provided" do
+          start_at, end_at = "2023-10-01T18:53:53Z", "2023-10-21T18:53:53Z"
+          @recipient.enrollments.last.update!(start_at:, end_at:)
+          user_path = "/api/v1/users/#{@recipient.id}/enrollments"
+          json = api_call_as_user(account_admin_user,
+                                  :get,
+                                  user_path,
+                                  @user_params.merge(temporary_enrollments_for_recipient: true,
+                                                     user_id: @recipient.id,
+                                                     state: "current_and_future",
+                                                     include: ["temporary_enrollment_providers"]))
           expect(json.length).to eq(1)
           expect(json.first["user_id"]).to eq(@recipient.id)
         end
@@ -1184,7 +1242,7 @@ describe EnrollmentsApiController, type: :request do
           api_call_as_user(@provider,
                            :get,
                            user_path,
-                           @user_params.merge(temporary_enrollment_providers: true,
+                           @user_params.merge(temporary_enrollments_for_recipient: true,
                                               user_id: @recipient.id))
           expect(response).to have_http_status(:unauthorized)
         end
@@ -1200,12 +1258,24 @@ describe EnrollmentsApiController, type: :request do
           json = api_call_as_user(account_admin_user,
                                   :get,
                                   user_path,
-                                  @user_params.merge(temporary_enrollment_providers: true,
+                                  @user_params.merge(temporary_enrollments_for_recipient: true,
                                                      user_id: @recipient.id))
-          expect(json.length).to eq(1)
+          expect(json.length).to eq(2)
           expect(json.first["user_id"]).to eq(@recipient.id)
         end
       end
+    end
+
+    it "supports course SIS IDs with slashes, question marks, and periods" do
+      @course.update! sis_source_id: "some_sis_id/with?slashes.andstuff"
+      @path = "/api/v1/courses/sis_course_id:some_sis_id%2Fwith%3Fslashes.andstuff/enrollments"
+      # Can't use api_call(), as that checks whether the course's (numeric) id matches
+      # up with the param (in this case, "sis_source:with...")
+      headers = { HTTP_AUTHORIZATION: "Bearer #{access_token_for_user(@user)}" }
+      get @path, headers:, params: @params
+      expect(response).to have_http_status(:ok)
+      results = JSON.parse(response.body)
+      expect(results.pluck("course_id").uniq).to eq([@course.id])
     end
 
     context "filtering by SIS IDs" do
@@ -1567,7 +1637,7 @@ describe EnrollmentsApiController, type: :request do
             section = @course.course_sections.create!(name: "other_section")
             e = section.enroll_user(@teacher, "TeacherEnrollment")
             # generally these are populated from a sis_import
-            Enrollment.where(id: e).update_all(sis_pseudonym_id: @teacher.pseudonyms.where(sis_user_id: "1234").take.id)
+            Enrollment.where(id: e).update_all(sis_pseudonym_id: @teacher.pseudonyms.find_by(sis_user_id: "1234").id)
             @params[:sis_user_id] = "1234"
             @params[:created_for_sis_id] = true
             json = api_call(:get, @path, @params)
@@ -1848,6 +1918,31 @@ describe EnrollmentsApiController, type: :request do
         expect(json.first["enrollment_state"]).to eql "deleted"
       end
 
+      describe "no associated accounts" do
+        before :once do
+          @student.pseudonyms.destroy_all
+          @student.user_account_associations.destroy_all
+        end
+
+        it "returns an empty array when caller has read roster rights but target user has no associated accounts" do
+          path = "/api/v1/users/#{@student.id}/enrollments"
+          params = { controller: "enrollments_api", action: "index", user_id: @student.id.to_param, format: "json" }
+          json = api_call(:get, path, params)
+
+          expect(json).to be_empty
+        end
+
+        it "returns unauthorized when caller doesn't have read roster rights and target user has no associated accounts" do
+          @observer = user_factory
+
+          path = "/api/v1/users/#{@student.id}/enrollments"
+          params = { controller: "enrollments_api", action: "index", user_id: @student.id.to_param, format: "json" }
+          api_call_as_user(@observer, :get, path, params)
+
+          expect(response).to have_http_status :unauthorized
+        end
+      end
+
       describe "custom roles" do
         context "user context" do
           before :once do
@@ -1950,7 +2045,7 @@ describe EnrollmentsApiController, type: :request do
         @user = current_user
         json = api_call(:get, @path, @params)
         enrollments = %w[observer student ta teacher].inject([]) do |res, type|
-          res + @course.send("#{type}_enrollments").eager_load(:user).order(User.sortable_name_order_by_clause("users"))
+          res + @course.send(:"#{type}_enrollments").eager_load(:user).order(User.sortable_name_order_by_clause("users"))
         end
         expect(json).to match_array(enrollments.map do |e|
           h = {
@@ -2320,7 +2415,7 @@ describe EnrollmentsApiController, type: :request do
       it "includes users' sis and login ids" do
         json = api_call(:get, @path, @params)
         enrollments = %w[observer student ta teacher].inject([]) do |res, type|
-          res + @course.send("#{type}_enrollments").preload(:user)
+          res + @course.send(:"#{type}_enrollments").preload(:user)
         end
         enrollments = enrollments.sort_by { |e| [e.type, e.user.sortable_name] }
         expect(json).to eq(enrollments.map do |e|
@@ -2696,7 +2791,7 @@ describe EnrollmentsApiController, type: :request do
         it "properly paginates" do
           json = api_call(:get, "#{@path}?page=1&per_page=1", @params.merge(page: 1.to_param, per_page: 1.to_param))
           enrollments = %w[observer student ta teacher].inject([]) do |res, type|
-            res + @course.send("#{type}_enrollments").preload(:user)
+            res + @course.send(:"#{type}_enrollments").preload(:user)
           end.map do |e|
             h = {
               "root_account_id" => e.root_account_id,
@@ -2763,7 +2858,7 @@ describe EnrollmentsApiController, type: :request do
         it "properly paginates" do
           json = api_call(:get, "#{@path}?page=1&per_page=1", @params.merge(page: 1.to_param, per_page: 1.to_param))
           enrollments = %w[observer student ta teacher].inject([]) do |res, type|
-            res + @course.send("#{type}_enrollments").preload(:user)
+            res + @course.send(:"#{type}_enrollments").preload(:user)
           end.map do |e|
             h = {
               "root_account_id" => e.root_account_id,
@@ -3167,6 +3262,11 @@ describe EnrollmentsApiController, type: :request do
         end)
       end
 
+      it "400s when a bad role name is passed" do
+        api_call(:get, "#{@path}?role[]=garbage", @params.merge(role: %w[garbage]))
+        expect(response).to have_http_status :bad_request
+      end
+
       it "properly filters by multiple enrollment types" do
         # set up some enrollments that shouldn't be returned by the api
         request_user = @user
@@ -3423,6 +3523,92 @@ describe EnrollmentsApiController, type: :request do
                                 format: :json })
       expect(response).to have_http_status :bad_request
       expect(json["error"]).to eq "membership not activated"
+    end
+  end
+
+  describe "#show_temporary_enrollment_status" do
+    let_once(:start_at) { 1.day.ago }
+    let_once(:end_at) { 1.day.from_now }
+
+    before(:once) do
+      Account.default.enable_feature!(:temporary_enrollments)
+      @provider = user_factory(active_all: true)
+      @recipient = user_factory(active_all: true)
+      @user = user_factory(active_all: true)
+      course1 = course_with_teacher(active_all: true, user: @provider).course
+      course2 = course_with_teacher(active_all: true, user: @provider).course
+      temporary_enrollment_pairing = TemporaryEnrollmentPairing.create!(root_account: Account.default, created_by: account_admin_user)
+      course1.enroll_user(
+        @recipient,
+        "TeacherEnrollment",
+        {
+          role: teacher_role,
+          temporary_enrollment_source_user_id: @provider.id,
+          temporary_enrollment_pairing_id: temporary_enrollment_pairing.id,
+          start_at:,
+          end_at:
+        }
+      )
+      course2.enroll_user(
+        @recipient,
+        "TeacherEnrollment",
+        {
+          role: teacher_role,
+          temporary_enrollment_source_user_id: @provider.id,
+          temporary_enrollment_pairing_id: temporary_enrollment_pairing.id,
+          start_at:,
+          end_at:
+        }
+      )
+      enrollment = course1.enroll_user(
+        @user,
+        "TeacherEnrollment",
+        {
+          role: teacher_role,
+          start_at:,
+          end_at:
+        }
+      )
+      enrollment.accept
+    end
+
+    it "returns appropriate status for a provider" do
+      user_path = "/api/v1/users/#{@provider.id}/temporary_enrollment_status"
+      user_params = { controller: "enrollments_api",
+                      action: "show_temporary_enrollment_status",
+                      user_id: @provider.id,
+                      format: "json" }
+      json = api_call_as_user(account_admin_user, :get, user_path, user_params)
+      expect(json.length).to eq(3)
+      expect(json["is_provider"]).to be_truthy
+      expect(json["is_recipient"]).to be_falsey
+      expect(json["can_provide"]).to be_truthy
+    end
+
+    it "returns appropriate status for a recipient" do
+      user_path = "/api/v1/users/#{@recipient.id}/temporary_enrollment_status"
+      user_params = { controller: "enrollments_api",
+                      action: "show_temporary_enrollment_status",
+                      user_id: @recipient.id,
+                      format: "json" }
+      json = api_call_as_user(account_admin_user, :get, user_path, user_params)
+      expect(json.length).to eq(3)
+      expect(json["is_provider"]).to be_falsey
+      expect(json["is_recipient"]).to be_truthy
+      expect(json["can_provide"]).to be_truthy
+    end
+
+    it "returns appropriate status for a user that can provide" do
+      user_path = "/api/v1/users/#{@user.id}/temporary_enrollment_status"
+      user_params = { controller: "enrollments_api",
+                      action: "show_temporary_enrollment_status",
+                      user_id: @user.id,
+                      format: "json" }
+      json = api_call_as_user(account_admin_user, :get, user_path, user_params)
+      expect(json.length).to eq(3)
+      expect(json["is_provider"]).to be_falsey
+      expect(json["is_recipient"]).to be_falsey
+      expect(json["can_provide"]).to be_truthy
     end
   end
 end

@@ -18,13 +18,10 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "atom"
-
 class ConversationMessage < ActiveRecord::Base
-  self.ignored_columns += %i[root_account_id]
-
   include HtmlTextHelper
   include ConversationHelper
+  include ConversationsHelper
   include Rails.application.routes.url_helpers
   include SendToStream
   include SimpleTags::ReaderInstanceMethods
@@ -43,6 +40,7 @@ class ConversationMessage < ActiveRecord::Base
   before_create :set_root_account_ids
   after_create :generate_user_note!
   after_create :log_conversation_message_metrics
+  after_create :check_for_out_of_office_participants, unless: :automated_message?
   after_save :update_attachment_associations
 
   scope :human, -> { where("NOT generated") }
@@ -190,7 +188,8 @@ class ConversationMessage < ActiveRecord::Base
   def recipients
     return [] unless conversation
 
-    subscribed = subscribed_participants.reject { |u| u.id == author_id }.map { |x| x.becomes(User) }
+    subscribed_ids = subscribed_participants.reject { |u| u.id == author_id }.map(&:id)
+    subscribed = User.where(id: subscribed_ids)
     ActiveRecord::Associations.preload(conversation_message_participants, :user)
     participants = conversation_message_participants.map(&:user)
     subscribed & participants
@@ -254,8 +253,24 @@ class ConversationMessage < ActiveRecord::Base
   end
 
   def log_conversation_message_metrics
-    stat = (context || Account.site_admin).root_account.feature_enabled?(:react_inbox) ? "inbox.message.created.react" : "inbox.message.created.legacy"
+    stat = "inbox.message.created.react"
     InstStatsd::Statsd.increment(stat)
+  end
+
+  def check_for_out_of_office_participants
+    if Account.site_admin.feature_enabled?(:inbox_settings) && context.enable_inbox_auto_response?
+      delay_if_production(
+        priority: Delayed::LOW_PRIORITY,
+        n_strand: ["inbox_auto_response", id]
+      ).trigger_out_of_office_auto_responses(
+        participants.map(&:id),
+        created_at,
+        author,
+        context_id,
+        context_type,
+        root_account_id
+      )
+    end
   end
 
   attr_accessor :cc_author
@@ -320,6 +335,10 @@ class ConversationMessage < ActiveRecord::Base
     submission.nil?
   end
 
+  def automated_message?
+    automated
+  end
+
   def as_json(*)
     super(only: %i[id created_at body generated author_id])["conversation_message"]
       .merge("forwarded_messages" => forwarded_messages,
@@ -354,24 +373,24 @@ class ConversationMessage < ActiveRecord::Base
 
     content += opts[:additional_content] if opts[:additional_content]
 
-    Atom::Entry.new do |entry|
-      entry.title = title
-      entry.authors << Atom::Person.new(name: author.name)
-      entry.updated   = created_at.utc
-      entry.published = created_at.utc
-      entry.id        = "tag:#{HostUrl.context_host(context)},#{created_at.strftime("%Y-%m-%d")}:/conversations/#{feed_code}"
-      entry.links << Atom::Link.new(rel: "alternate",
-                                    href: "http://#{HostUrl.context_host(context)}/conversations/#{conversation.id}")
-      attachments.each do |attachment|
-        entry.links << Atom::Link.new(rel: "enclosure",
-                                      href: file_download_url(attachment,
-                                                              verifier: attachment.uuid,
-                                                              download: "1",
-                                                              download_frd: "1",
-                                                              host: HostUrl.context_host(context)))
-      end
-      entry.content = Atom::Content::Html.new(content)
+    attachment_links = attachments.map do |attachment|
+      file_download_url(attachment,
+                        verifier: attachment.uuid,
+                        download: "1",
+                        download_frd: "1",
+                        host: HostUrl.context_host(context))
     end
+
+    {
+      title:,
+      author: author.name,
+      updated: created_at.utc,
+      published: created_at.utc,
+      id: "tag:#{HostUrl.context_host(context)},#{created_at.strftime("%Y-%m-%d")}:/conversations/#{feed_code}",
+      link: "http://#{HostUrl.context_host(context)}/conversations/#{conversation.id}",
+      attachment_links:,
+      content:
+    }
   end
 
   class EventFormatter

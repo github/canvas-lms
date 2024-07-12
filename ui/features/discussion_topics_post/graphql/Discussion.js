@@ -25,7 +25,6 @@ import {DiscussionPermissions} from './DiscussionPermissions'
 import gql from 'graphql-tag'
 import {User} from './User'
 import {DiscussionEntry} from './DiscussionEntry'
-import {DiscussionEntryDraft} from './DiscussionEntryDraft'
 import {PageInfo} from './PageInfo'
 import {ChildTopic} from './ChildTopic'
 import {RootTopic} from './RootTopic'
@@ -57,6 +56,15 @@ export const Discussion = {
       lockAt
       availableForUser
       userCount
+      replyToEntryRequiredCount
+      contextType
+      lockInformation
+      editor {
+        ...User
+      }
+      author {
+        ...User
+      }
       entryCounts {
         unreadCount
         repliesCount
@@ -83,6 +91,7 @@ export const Discussion = {
         ...RootTopic
       }
     }
+    ${User.fragment}
     ${Attachment.fragment}
     ${Assignment.fragment}
     ${DiscussionPermissions.fragment}
@@ -117,6 +126,9 @@ export const Discussion = {
     searchEntryCount: number,
     availableForUser: bool,
     userCount: number,
+    replyToEntryRequiredCount: number,
+    contextType: string,
+    lockInformation: string,
     entryCounts: shape({
       unreadCount: number,
       repliesCount: number,
@@ -160,6 +172,9 @@ export const Discussion = {
     searchEntryCount = 3,
     availableForUser = true,
     userCount = 4,
+    replyToEntryRequiredCount = 2,
+    contextType = 'Course',
+    lockInformation = 'This topic is locked.',
     entryCounts = {
       unreadCount: 2,
       repliesCount: 56,
@@ -180,11 +195,6 @@ export const Discussion = {
       nodes: [DiscussionEntry.mock()],
       pageInfo: PageInfo.mock(),
       __typename: 'DiscussionEntriesConnection',
-    },
-    discussionEntryDraftsConnection = {
-      nodes: [DiscussionEntryDraft.mock()],
-      pageInfo: PageInfo.mock(),
-      __typename: 'DiscussionEntryDraftsConnection',
     },
   } = {}) => ({
     id,
@@ -211,6 +221,9 @@ export const Discussion = {
     entryCounts,
     availableForUser,
     userCount,
+    replyToEntryRequiredCount,
+    contextType,
+    lockInformation,
     author,
     anonymousAuthor,
     editor,
@@ -224,7 +237,6 @@ export const Discussion = {
     searchEntryCount,
     entriesTotalPages,
     discussionEntriesConnection,
-    discussionEntryDraftsConnection,
     __typename: 'Discussion',
   }),
 }

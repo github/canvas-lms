@@ -133,11 +133,7 @@ export default class TrayController {
       // If the video just edited came from a file uploaded to canvas
       // and not notorious, we probably don't have a media_object_id.
       // If not, we can't update the MediaObject in the canvas db.
-      if (
-        videoOptions.media_object_id &&
-        videoOptions.media_object_id !== 'undefined' &&
-        !videoOptions.isLocked
-      ) {
+      if (videoOptions.media_object_id && videoOptions.media_object_id !== 'undefined' && !videoOptions.editLocked) {
         videoOptions
           .updateMediaObject(data)
           .then(_r => {
@@ -165,14 +161,34 @@ export default class TrayController {
     this._editor = null
   }
 
+  requestSubtitlesFromIframe(cb) {
+    if (!bridge.canvasOrigin) return
+
+    this._subtitleListener = new AbortController()
+    window.addEventListener('message', (event) => {
+      if (event?.data?.subject === "media_tracks_response") {
+        cb(event?.data?.payload)
+      }
+    }, {signal: this._subtitleListener.signal})
+
+    this.$videoContainer?.contentWindow?.postMessage(
+      {subject: 'media_tracks_request'},
+      bridge.canvasOrigin
+    )
+  }
+
   _renderTray(trayProps) {
     let vo = {}
 
     if (this._shouldOpen) {
+      /*
+       * When the tray is being opened again, it should be rendered fresh
+       * (clearing the internal state) so that the currently-selected video can
+       * be used for initial video options.
+       */
       this._renderId++
+      vo = asVideoElement(this.$videoContainer) || {}
     }
-
-    vo = asVideoElement(this.$videoContainer) || {}
 
     const element = (
       <VideoOptionsTray
@@ -185,6 +201,7 @@ export default class TrayController {
         onExited={() => {
           bridge.focusActiveEditor(false)
           this._isOpen = false
+          this._subtitleListener?.abort()
         }}
         onSave={videoOptions => {
           this._applyVideoOptions(videoOptions)
@@ -197,6 +214,7 @@ export default class TrayController {
             ? parseStudioOptions(this.$videoContainer)
             : null
         }
+        requestSubtitlesFromIframe={(cb) => this.requestSubtitlesFromIframe(cb)}
       />
     )
     ReactDOM.render(element, this.$container)

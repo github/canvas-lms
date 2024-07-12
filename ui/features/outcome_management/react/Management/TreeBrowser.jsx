@@ -78,7 +78,7 @@ const contentItem = ({
     focus()
   }
 
-  const themeOverrides = {
+  const componentOverrides = {
     hoverBackgroundColor: 'white',
     hoverTextColor: 'brand',
   }
@@ -96,7 +96,7 @@ const contentItem = ({
         )
       }
       variant="indent"
-      theme={expanded ? themeOverrides : null}
+      themeOverride={expanded ? componentOverrides : undefined}
     >
       {expanded ? (
         <AddContentItem
@@ -156,16 +156,18 @@ const TreeBrowser = ({
       ...col,
       renderAfterItems:
         loadedGroups.includes(col.id) &&
-        contentItem({
-          id: col.id,
-          hideAddContent,
-          showAddContent,
-          expanded: expandedContentId === col.id,
-          containerRefs,
-          onRefChange,
-          onCreateGroup,
-          iconMargin,
-        }),
+        (!ENV.current_user || (!ENV.current_user_is_student && !ENV.current_user.fake_student))
+          ? contentItem({
+              id: col.id,
+              hideAddContent,
+              showAddContent,
+              expanded: expandedContentId === col.id,
+              containerRefs,
+              onRefChange,
+              onCreateGroup,
+              iconMargin,
+            })
+          : null,
     }))
     .reduce((dict, collection) => {
       dict[collection.id] = collection

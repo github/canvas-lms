@@ -293,7 +293,7 @@ declared user type from the user.</td>
 <td></td>
 <td></td>
 <td>Defaults to false. When true, user is notified for password setup if
-the authentication_provider_id is canvas</td>
+the authentication_provider_id is "canvas"</td>
 </tr>
 <tr>
 <td>home_account</td>
@@ -534,7 +534,7 @@ specified the default term for the account will be used</td>
 <td>enum</td>
 <td>✓</td>
 <td>✓</td>
-<td>active, deleted, completed, published</td>
+<td>The status of the course, also known as the workflow_state.  Allowed values are active, deleted, completed, or published.</td>
 </tr>
 <tr>
 <td>integration_id</td>
@@ -604,6 +604,8 @@ To remove the Blueprint Course link you can pass 'dissociate' in place of the id
 
 <p>If the start_date is set, it will override the term start date. If the end_date is set, it will
 override the term end date.</p>
+<p>To view the current status of a course that has already been imported into Canvas, please fetch the course data using the
+<a href="/doc/api/courses.html#method.courses.show" target="_blank">get a single course</a> API endpoint and refer to the workflow_state value returned in the <a href="/doc/api/courses.html#Course" target="_blank">Course</a> object.</p>
 
 Sample:
 
@@ -796,6 +798,15 @@ Ignored for any role other than observer</td>
 <td></td>
 <td>If true, a notification will be sent to the enrolled user. Notifications are
  not sent by default. </td>
+</tr>
+<tr>
+<td>temporary_enrollment_source_user_id</td>
+<td>text</td>
+<td></td>
+<td></td>
+<td>The User identifier from users.csv of a provider in a temporary enrollment.
+ If included, the created enrollment is a temporary enrollment.
+ <em>Requires Temporary Enrollments feature option.</em></td>
 </tr>
 </table>
 
@@ -1119,7 +1130,7 @@ admins.csv
 <td>text</td>
 <td>✓</td>
 <td></td>
-<td>The account identifier from accounts.csv. Uses the root_account if left blank. The collumn is required even when importing for the root_account and the value is blank.</td>
+<td>The account identifier from accounts.csv. Uses the root_account if left blank. The column is required even when importing for the root_account and the value is blank.</td>
 </tr>
 <tr>
 <td>role_id</td>

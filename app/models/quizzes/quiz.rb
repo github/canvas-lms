@@ -47,7 +47,7 @@ class Quizzes::Quiz < ActiveRecord::Base
   has_many :quiz_regrades, class_name: "Quizzes::QuizRegrade"
   has_many :quiz_student_visibilities
   belongs_to :context, polymorphic: [:course]
-  belongs_to :assignment
+  belongs_to :assignment, inverse_of: :quiz, class_name: "AbstractAssignment"
   belongs_to :assignment_group
   belongs_to :root_account, class_name: "Account"
   has_many :ignores, as: :asset
@@ -84,8 +84,6 @@ class Quizzes::Quiz < ActiveRecord::Base
   serialize :quiz_data
 
   simply_versioned
-
-  has_many :context_module_tags, -> { where("content_tags.tag_type='context_module' AND content_tags.workflow_state<>'deleted'") }, as: :content, inverse_of: :content, class_name: "ContentTag"
 
   # This callback is listed here in order for the :link_assignment_overrides
   # method to be called after the simply_versioned callbacks. We want the
@@ -351,7 +349,7 @@ class Quizzes::Quiz < ActiveRecord::Base
       super(Time.zone.parse(val))
       self.lock_at = CanvasTime.fancy_midnight(lock_at) unless val.include?(":")
     else
-      super(val)
+      super
     end
   end
 
@@ -361,7 +359,7 @@ class Quizzes::Quiz < ActiveRecord::Base
       super(Time.zone.parse(val))
       infer_times unless val.include?(":")
     else
-      super(val)
+      super
     end
   end
 
@@ -1042,7 +1040,7 @@ class Quizzes::Quiz < ActiveRecord::Base
 
     last_quiz_activity = [
       published_at || created_at,
-      quiz_submissions.completed.order("updated_at DESC").limit(1).pluck(:updated_at).first
+      quiz_submissions.completed.order("updated_at DESC").limit(1).pick(:updated_at)
     ].compact.max
 
     candidate_stats = quiz_statistics.report_type(report_type).where(quiz_stats_opts).last
@@ -1186,6 +1184,9 @@ class Quizzes::Quiz < ActiveRecord::Base
 
     given { |user| context.grants_right?(user, :view_quiz_answer_audits) }
     can :view_answer_audits
+
+    given { |user, session| user && context.grants_any_right?(user, session, :manage_assignments, :manage_assignments_edit) }
+    can :manage_assign_to
   end
 
   scope :include_assignment, -> { preload(:assignment) }
@@ -1196,9 +1197,18 @@ class Quizzes::Quiz < ActiveRecord::Base
   scope :for_course, ->(course_id) { where(context_type: "Course", context_id: course_id) }
 
   # NOTE: only use for courses with differentiated assignments on
-  scope :visible_to_students_in_course_with_da, lambda { |student_ids, course_ids|
-    joins(:quiz_student_visibilities)
-      .where(quiz_student_visibilities: { user_id: student_ids, course_id: course_ids })
+  scope :visible_to_students_in_course_with_da, lambda { |user_ids, course_ids|
+    if Account.site_admin.feature_enabled?(:selective_release_backend)
+      visible_quiz_ids = QuizVisibility::QuizVisibilityService.quizzes_visible_to_students_in_courses(course_ids:, user_ids:).map(&:quiz_id)
+      if visible_quiz_ids.any?
+        where(id: visible_quiz_ids)
+      else
+        none
+      end
+    else
+      joins(:quiz_student_visibilities)
+        .where(quiz_student_visibilities: { user_id: user_ids, course_id: course_ids })
+    end
   }
 
   # Return all quizzes and their active overrides where either the
@@ -1248,7 +1258,7 @@ class Quizzes::Quiz < ActiveRecord::Base
         SELECT CASE WHEN overrides.due_at_overridden THEN overrides.due_at ELSE q.due_at END as user_due_date, q.*
         FROM #{Quizzes::Quiz.quoted_table_name} q
         INNER JOIN overrides ON overrides.quiz_id = q.id) as quizzes")
-      .not_for_assignment
+      .select(arel.projections, "user_due_date").not_for_assignment
   }
 
   scope :ungraded_due_between_for_user, lambda { |start, ending, user|
@@ -1567,8 +1577,19 @@ class Quizzes::Quiz < ActiveRecord::Base
 
   # returns visible students for differentiated assignments
   def visible_students_with_da(context_students)
-    quiz_students = context_students.joins(:quiz_student_visibilities)
-                                    .where(quiz_student_visibilities: { quiz_id: id })
+    if Account.site_admin.feature_enabled?(:selective_release_backend)
+      user_ids = context_students.pluck(:id)
+      visible_user_ids = QuizVisibility::QuizVisibilityService.quiz_visible_to_students(quiz_id: id, user_ids:).map(&:user_id)
+
+      quiz_students = if visible_user_ids.any?
+                        context_students.where(id: visible_user_ids)
+                      else
+                        none
+                      end
+    else
+      quiz_students = context_students.joins(:quiz_student_visibilities)
+                                      .where(quiz_student_visibilities: { quiz_id: id })
+    end
 
     # empty quiz_students means the quiz is for everyone
     return quiz_students if quiz_students.present?

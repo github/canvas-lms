@@ -69,6 +69,11 @@ module CoursesHelper
     icon_data
   end
 
+  def format_course_section_date(date = nil)
+    # date ? date_string(date, :long) : t("(no date)")
+    date ? date_string(date, :long) : t("#courses.sections.no_date", "(no date)")
+  end
+
   def recent_event_url(recent_event)
     context = recent_event.context
     if recent_event.is_a?(Assignment)
@@ -175,5 +180,25 @@ module CoursesHelper
         !tab_is?(tab, :TAB_SETTINGS)
       end
     end
+  end
+
+  def get_sorting_order(curr_col, sorted_col, order)
+    "desc" if (sorted_col.nil? && curr_col == "published") || (curr_col == sorted_col && order != "desc")
+  end
+
+  def get_sorting_icon(curr_col, sorted_col, order)
+    if (curr_col == sorted_col) || (curr_col == "published" && sorted_col.nil?)
+      "icon-mini-arrow-#{(order == "desc") ? "down" : "up"}"
+    else
+      "icon-mini-arrow-double"
+    end
+  end
+
+  def get_courses_params(table, col, params)
+    params.permit(:cc_sort, :cc_order, :pc_sort, :pc_order, :fc_sort, :fc_order).merge({
+                                                                                         "#{table}_sort": col,
+                                                                                         "#{table}_order": get_sorting_order(col, params[:cc_sort], params[:cc_order]),
+                                                                                         focus: table
+                                                                                       })
   end
 end

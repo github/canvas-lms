@@ -25,8 +25,8 @@ import isNumber from 'lodash/isNumber'
 import GradeFormatHelper from '@canvas/grading/GradeFormatHelper'
 import {EmojiPicker, EmojiQuickPicker} from '@canvas/emoji'
 import '@canvas/jquery/jquery.ajaxJSON'
-import '@canvas/forms/jquery/jquery.instructure_forms' /* ajaxJSONFiles */
-import '@canvas/datetime' /* datetimeString */
+import '@canvas/jquery/jquery.instructure_forms' /* ajaxJSONFiles */
+import {datetimeString} from '@canvas/datetime/date-functions'
 import '@canvas/jquery/jquery.instructure_misc_plugins' /* fragmentChange, showIf */
 import '@canvas/loading-image'
 import '@canvas/util/templateData'
@@ -63,7 +63,7 @@ function submissionLoaded(data) {
         continue
       }
       const $comment = $('#comment_blank').clone(true).removeAttr('id')
-      comment.posted_at = $.datetimeString(comment.created_at)
+      comment.posted_at = datetimeString(comment.created_at)
       $comment.fillTemplateData({
         data: comment,
         id: 'submission_comment_' + comment.id,
@@ -92,7 +92,7 @@ function submissionLoaded(data) {
       }
     }
     $('.comments .comment_list .play_comment_link').mediaCommentThumbnail('small')
-    $('.save_comment_button').attr('disabled', null)
+    $('.save_comment_button').prop('disabled', false)
     if (submission) {
       showGrade(submission)
       $('.submission_details').fillTemplateData({
@@ -103,17 +103,26 @@ function submissionLoaded(data) {
   }
   $('.submission_header').loadingImage('remove')
 }
-function callIfSet(value, fn) {
-  return value == null ? '' : fn.call(this, value)
+function callIfSet(value, fn, ...additionalArgs) {
+  return value == null ? '' : fn.call(this, value, ...additionalArgs)
 }
 function roundAndFormat(value) {
   return I18n.n(round(value, round.DEFAULT))
+}
+function formatGradeOptions() {
+  if (ENV.GRADING_TYPE === 'letter_grade') {
+    return {gradingType: ENV.GRADING_TYPE}
+  }
+
+  return {}
 }
 function showGrade(submission) {
   if (['pass', 'fail', 'complete', 'incomplete'].indexOf(submission.entered_grade) > -1) {
     $('.grading_box').val(submission.entered_grade)
   } else {
-    $('.grading_box').val(callIfSet(submission.entered_grade, GradeFormatHelper.formatGrade))
+    $('.grading_box').val(
+      callIfSet(submission.entered_grade, GradeFormatHelper.formatGrade, formatGradeOptions())
+    )
   }
   $('.late_penalty').text(callIfSet(-submission.points_deducted, roundAndFormat))
   $('.published_grade').text(callIfSet(submission.published_grade, GradeFormatHelper.formatGrade))
@@ -122,7 +131,12 @@ function showGrade(submission) {
   if (submission.excused) {
     $('.entered_grade').text(I18n.t('Excused'))
   } else {
-    $('.entered_grade').text(callIfSet(submission.entered_grade, GradeFormatHelper.formatGrade))
+    const formattedGrade = callIfSet(
+      submission.entered_grade,
+      GradeFormatHelper.formatGrade,
+      formatGradeOptions()
+    )
+    $('.entered_grade').text(formattedGrade)
   }
 
   if (!submission.excused && submission.points_deducted) {
@@ -253,13 +267,13 @@ export function setup() {
     })
     // post new comment but no grade
     $(document).bind('comment_change', _event => {
-      $('.save_comment_button').attr('disabled', 'disabled')
+      $('.save_comment_button').prop('disabled', true)
       $('.submission_header').loadingImage()
       const url = $('.update_submission_url').attr('href')
       const method = $('.update_submission_url').attr('title')
       const formData = {
         'submission[assignment_id]': ENV.SUBMISSION.assignment_id,
-        'submission[group_comment]': $('#submission_group_comment').attr('checked') ? '1' : '0',
+        'submission[group_comment]': $('#submission_group_comment').prop('checked') ? '1' : '0',
       }
 
       const anonymizableIdKey = ENV.SUBMISSION.user_id ? 'user_id' : 'anonymous_id'
@@ -279,12 +293,15 @@ export function setup() {
           !formData['submission[comment]'] &&
           $("#add_comment_form input[type='file']").length > 0
         ) {
-          formData['submission[comment]'] = I18n.t('see_attached_files', 'Please see attached files')
+          formData['submission[comment]'] = I18n.t(
+            'see_attached_files',
+            'Please see attached files'
+          )
         }
       }
       if (!formData['submission[comment]'] && !formData['submission[media_comment_id]']) {
         $('.submission_header').loadingImage('remove')
-        $('.save_comment_button').attr('disabled', null)
+        $('.save_comment_button').prop('disabled', false)
         return
       }
       if ($("#add_comment_form input[type='file']").length > 0) {
@@ -308,21 +325,21 @@ export function setup() {
     })
     // post new grade but no comments
     $(document).bind('grading_change', _event => {
-      $('.save_comment_button').attr('disabled', 'disabled')
+      $('.save_comment_button').prop('disabled', true)
       $('.submission_header').loadingImage()
       const url = $('.update_submission_url').attr('href')
       const method = $('.update_submission_url').attr('title')
       const formData = {
         'submission[assignment_id]': ENV.SUBMISSION.assignment_id,
         'submission[user_id]': ENV.SUBMISSION.user_id,
-        'submission[group_comment]': $('#submission_group_comment').attr('checked') ? '1' : '0',
+        'submission[group_comment]': $('#submission_group_comment').prop('checked') ? '1' : '0',
       }
       if ($('.grading_value:visible').length > 0) {
         formData['submission[grade]'] = GradeFormatHelper.delocalizeGrade($('.grading_value').val())
         $.ajaxJSON(url, method, formData, submissionLoaded)
       } else {
         $('.submission_header').loadingImage('remove')
-        $('.save_comment_button').attr('disabled', null)
+        $('.save_comment_button').prop('disabled', false)
       }
     })
     $('.attach_comment_file_link').click(event => {

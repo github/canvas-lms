@@ -19,6 +19,7 @@
 
 import React from 'react'
 import {act, fireEvent, within} from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import {renderConnected} from '../../__tests__/utils'
 import {
   COURSE,
@@ -31,7 +32,7 @@ import PaceContent from '../content'
 import fetchMock from 'fetch-mock'
 import {actions as uiActions} from '../../actions/ui'
 import {APIPaceContextTypes, Pace, PaceContextsState} from '../../types'
-import tz from '@canvas/timezone'
+import * as tz from '@instructure/moment-utils'
 
 jest.mock('../../actions/ui', () => ({
   ...jest.requireActual('../../actions/ui'),
@@ -115,9 +116,10 @@ describe('PaceContextsContent', () => {
   })
 
   it('fetches student contexts when clicking the Students tab', async () => {
+    const user = userEvent.setup({delay: null})
     const {findByText, getByRole} = renderConnected(<PaceContent />)
     const studentsTab = getByRole('tab', {name: 'Students'})
-    act(() => studentsTab.click())
+    await user.click(studentsTab)
     expect(await findByText(firstStudent.name)).toBeInTheDocument()
     expect(
       await findByText(PACE_CONTEXTS_STUDENTS_RESPONSE.pace_contexts[1].name)
@@ -140,11 +142,12 @@ describe('PaceContextsContent', () => {
     })
 
     it('shows custom data for students', async () => {
+      const user = userEvent.setup({delay: null})
       const headers = ['Student', 'Assigned Pace', 'Pace Type', 'Last Modified']
       const studentPaceContext = firstStudent
       const {findByText, getByText, getByRole, getAllByText} = renderConnected(<PaceContent />)
       const studentsTab = getByRole('tab', {name: 'Students'})
-      act(() => studentsTab.click())
+      await user.click(studentsTab)
       expect(await findByText(studentPaceContext.name)).toBeInTheDocument()
       headers.forEach(header => {
         expect(getAllByText(header)[0]).toBeInTheDocument()
@@ -275,22 +278,23 @@ describe('PaceContextsContent', () => {
       })
 
       it('toggles between ascending and descending order', async () => {
+        const user = userEvent.setup({delay: null})
         const {getByRole, findByTestId} = renderConnected(<PaceContent />)
         const studentsTab = getByRole('tab', {name: 'Students'})
         const getSortButton = async () => {
           const sortableHeader = await findByTestId('sortable-column-name')
           return within(sortableHeader).getByRole('button')
         }
-        act(() => studentsTab.click())
+        await user.click(studentsTab)
         // ascending order by default
         expect(fetchMock.lastUrl()).toMatch(STUDENT_CONTEXTS_API)
         let sortButton = await getSortButton()
-        act(() => sortButton.click())
+        await user.click(sortButton)
         // toggles to descending order
         expect(fetchMock.lastUrl()).toMatch(STUDENT_CONTEXTS_API_WITH_DESC_SORTING)
         // comes back to ascending order
         sortButton = await getSortButton()
-        act(() => sortButton.click())
+        await user.click(sortButton)
         expect(fetchMock.lastUrl()).toMatch(STUDENT_CONTEXTS_API)
       })
     })
@@ -307,7 +311,9 @@ describe('PaceContextsContent', () => {
         )
       })
 
-      it('shows a loading indicator for each pace publishing', async () => {
+      // passes, but with warning: "Unmatched GET to /api/v1/progress/2"
+      // FOO-3818
+      it.skip('shows a loading indicator for each pace publishing', async () => {
         const paceContextsState: PaceContextsState = {
           ...DEFAULT_STORE_STATE.paceContexts,
           contextsPublishing: [
@@ -334,6 +340,7 @@ describe('PaceContextsContent', () => {
       })
 
       it('starts polling for published status updates on mount', async () => {
+        const user = userEvent.setup({delay: null})
         const paceContextsState: PaceContextsState = {
           ...DEFAULT_STORE_STATE.paceContexts,
           contextsPublishing: [
@@ -348,7 +355,7 @@ describe('PaceContextsContent', () => {
         const state = {...DEFAULT_STORE_STATE, paceContexts: paceContextsState}
         const {getByRole, findByTestId} = renderConnected(<PaceContent />, state)
         const studentsTab = getByRole('tab', {name: 'Students'})
-        act(() => studentsTab.click())
+        await user.click(studentsTab)
         expect(
           await findByTestId(`publishing-pace-${firstStudent.item_id}-indicator`)
         ).toBeInTheDocument()

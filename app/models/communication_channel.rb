@@ -49,6 +49,7 @@ class CommunicationChannel < ActiveRecord::Base
   after_commit :check_if_bouncing_changed
   after_save :clear_user_email_cache, if: -> { workflow_state_before_last_save != workflow_state }
   after_save :after_save_flag_old_microsoft_sync_user_mappings
+  after_save :consider_building_notification_policies, if: -> { workflow_state_before_last_save != "active" && workflow_state == "active" }
 
   acts_as_list scope: :user
 
@@ -69,6 +70,20 @@ class CommunicationChannel < ActiveRecord::Base
 
   RETIRE_THRESHOLD = 1
 
+  MAX_CCS_PER_USER = 100
+
+  RESEND_PASSWORD_RESET_TIME = 30.minutes
+  MAX_SHARDS_FOR_BOUNCES = 50
+  MERGE_CANDIDATE_SEARCH_LIMIT = 10
+
+  # Notification polcies are required for a user to start recieving notifications from an
+  # active communication channel. This code will create these policies if they don't already exist.
+  def consider_building_notification_policies
+    if notification_policies.empty?
+      NotificationPolicy.build_policies_for_channel(self)
+    end
+  end
+
   # Generally, "TYPE_PERSONAL_EMAIL" should be treated exactly the same
   # as TYPE_EMAIL.  It is just kept distinct for the purposes of customers
   # querying records in Canvas Data.
@@ -80,110 +95,13 @@ class CommunicationChannel < ActiveRecord::Base
   end
 
   def under_user_cc_limit
-    max_ccs = Setting.get("max_ccs_per_user", "100").to_i
-    if user.communication_channels.limit(max_ccs + 1).count > max_ccs
+    if user.communication_channels.limit(MAX_CCS_PER_USER + 1).count > MAX_CCS_PER_USER
       errors.add(:user_id, "user communication_channels limit exceeded")
     end
   end
 
   def clear_user_email_cache
     user.clear_email_cache! if path_type == TYPE_EMAIL
-  end
-
-  def self.country_codes
-    # [country code, name, true if email should be used instead of Twilio]
-    [
-      ["93",   I18n.t("Afghanistan (+93)"),            false],
-      ["54",   I18n.t("Argentina (+54)"),              false],
-      ["61",   I18n.t("Australia (+61)"),              false],
-      ["43",   I18n.t("Austria (+43)"),                false],
-      ["32",   I18n.t("Belgium (+32)"),                false],
-      ["591",  I18n.t("Bolivia (+591)"),               false],
-      ["55",   I18n.t("Brazil (+55)"),                 false],
-      ["1",    I18n.t("Canada (+1)"),                  false],
-      ["56",   I18n.t("Chile (+56)"),                  false],
-      ["86",   I18n.t("China (+86)"),                  false],
-      ["57",   I18n.t("Colombia (+57)"),               false],
-      ["506",  I18n.t("Costa Rica (+506)"),            false],
-      ["45",   I18n.t("Denmark (+45)"),                false],
-      ["1",    I18n.t("Dominican Republic (+1)"),      false],
-      # ['593',  I18n.t('Ecuador (+593)'),               false],
-      ["503",  I18n.t("El Salvador (+503)"),           false],
-      ["358",  I18n.t("Finland (+358)"),               false],
-      ["33",   I18n.t("France (+33)"),                 false],
-      ["49",   I18n.t("Germany (+49)"),                false],
-      ["502",  I18n.t("Guatemala (+502)"),             false],
-      ["504",  I18n.t("Honduras (+504)"),              false],
-      ["852",  I18n.t("Hong Kong (+852)"),             false],
-      ["36",   I18n.t("Hungary (+36)"),                false],
-      ["354",  I18n.t("Iceland (+354)"),               false],
-      ["91",   I18n.t("India (+91)"),                  false],
-      ["62",   I18n.t("Indonesia (+62)"),              false],
-      ["353",  I18n.t("Ireland (+353)"),               false],
-      ["972",  I18n.t("Israel (+972)"),                false],
-      ["39",   I18n.t("Italy (+39)"),                  false],
-      ["81",   I18n.t("Japan (+81)"),                  false],
-      ["7",    I18n.t("Kazakhstan (+7)"),              false],
-      ["254",  I18n.t("Kenya (+254)"),                 false],
-      ["352",  I18n.t("Luxembourg (+352)"),            false],
-      ["60",   I18n.t("Malaysia (+60)"),               false],
-      ["52",   I18n.t("Mexico (+52)"),                 false],
-      ["31",   I18n.t("Netherlands (+31)"),            false],
-      ["64",   I18n.t("New Zealand (+64)"),            false],
-      ["47",   I18n.t("Norway (+47)"),                 false],
-      ["968",  I18n.t("Oman (+968)"),                  false],
-      ["507",  I18n.t("Panama (+507)"),                false],
-      ["92",   I18n.t("Pakistan (+92)"),               false],
-      ["595",  I18n.t("Paraguay (+595)"),              false],
-      # ['51',   I18n.t('Peru (+51)'),                   false],
-      ["63",   I18n.t("Philippines (+63)"),            false],
-      ["48",   I18n.t("Poland (+48)"),                 false],
-      ["974",  I18n.t("Qatar (+974)"),                 false],
-      ["7",    I18n.t("Russia (+7)"),                  false],
-      ["250",  I18n.t("Rwanda (+250)"),                false],
-      ["966",  I18n.t("Saudi Arabia (+966)"),          false],
-      ["65",   I18n.t("Singapore (+65)"),              false],
-      ["27",   I18n.t("South Africa (+27)"),           false],
-      ["82",   I18n.t("South Korea (+82)"),            false],
-      ["34",   I18n.t("Spain (+34)"),                  false],
-      ["46",   I18n.t("Sweden (+46)"),                 false],
-      ["41",   I18n.t("Switzerland (+41)"),            false],
-      ["886",  I18n.t("Taiwan (+886)"),                false],
-      ["66",   I18n.t("Thailand (+66)"),               false],
-      ["1",    I18n.t("Trinidad and Tobago (+1)"),     false],
-      ["971",  I18n.t("United Arab Emirates (+971)"),  false],
-      ["44",   I18n.t("United Kingdom (+44)"),         false],
-      ["1",    I18n.t("United States (+1)"),           true],
-      ["598",  I18n.t("Uruguay (+598)"),               false],
-      ["58",   I18n.t("Venezuela (+58)"),              false],
-      ["84",   I18n.t("Vietnam (+84)"),                false]
-    ].sort_by { |a| Canvas::ICU.collation_key(a[1]) }
-  end
-
-  DEFAULT_SMS_CARRIERS = {
-    "txt.att.net" => { name: "AT&T", country_code: 1 }.with_indifferent_access.freeze,
-    "message.alltel.com" => { name: "Alltel", country_code: 1 }.with_indifferent_access.freeze,
-    "myboostmobile.com" => { name: "Boost", country_code: 1 }.with_indifferent_access.freeze,
-    "cspire1.com" => { name: "C Spire", country_code: 1 }.with_indifferent_access.freeze,
-    "cingularme.com" => { name: "Cingular", country_code: 1 }.with_indifferent_access.freeze,
-    "mobile.celloneusa.com" => { name: "CellularOne", country_code: 1 }.with_indifferent_access.freeze,
-    "mms.cricketwireless.net" => { name: "Cricket", country_code: 1 }.with_indifferent_access.freeze,
-    "messaging.nextel.com" => { name: "Nextel", country_code: 1 }.with_indifferent_access.freeze,
-    "messaging.sprintpcs.com" => { name: "Sprint PCS", country_code: 1 }.with_indifferent_access.freeze,
-    "tmomail.net" => { name: "T-Mobile", country_code: 1 }.with_indifferent_access.freeze,
-    "vtext.com" => { name: "Verizon", country_code: 1 }.with_indifferent_access.freeze,
-    "vmobl.com" => { name: "Virgin Mobile", country_code: 1 }.with_indifferent_access.freeze,
-  }.freeze
-
-  def self.sms_carriers
-    @sms_carriers ||= ConfigFile.load("sms", false) || DEFAULT_SMS_CARRIERS
-  end
-
-  def self.sms_carriers_by_name
-    carriers = sms_carriers.map do |domain, carrier|
-      [carrier["name"], domain]
-    end
-    Canvas::ICU.collate_by(carriers, &:first)
   end
 
   set_policy do
@@ -269,21 +187,33 @@ class CommunicationChannel < ActiveRecord::Base
   def validate_email
     # this is not perfect and will allow for invalid emails, but it mostly works.
     # This pretty much allows anything with an "@"
-    errors.add(:email, :invalid, value: path) unless EmailAddressValidator.valid?(path)
+    if EmailAddressValidator.valid?(path)
+      domain = Mail::Address.new(path).domain
+      accounts = user.new_record? ? user.pseudonyms.map(&:account) : user.associated_root_accounts
+      errors.add(:email, :forbidden, value: path) if accounts.any? { |a| a.banned_email_domains.include?(domain.downcase) }
+    else
+      errors.add(:email, :invalid, value: path)
+    end
   end
 
   def not_otp_communication_channel
     errors.add(:workflow_state, "Can't remove a user's SMS that is used for one time passwords") if id == user.otp_communication_channel_id
   end
 
-  # Public: Build the url where this record can be confirmed.
+  # Public: Provides base components for an email confirmation URL.
   #
+  # Constructs and returns a hash of components necessary to build a
+  # confirmation URL for email type communication channels.
   #
-  # Returns a string.
-  def confirmation_url
-    return "" unless path_type == TYPE_EMAIL
+  # Returns a hash with :context, and :confirmation_code if the path type is
+  # email; returns nil otherwise.
+  def confirmation_url_data
+    return nil unless path_type == TYPE_EMAIL
 
-    "#{HostUrl.protocol}://#{HostUrl.context_host(context)}/register/#{confirmation_code}"
+    {
+      context:,
+      confirmation_code:
+    }
   end
 
   def context
@@ -304,7 +234,7 @@ class CommunicationChannel < ActiveRecord::Base
     case path_type
     when TYPE_TWITTER
       res = user.user_services.for_service(TYPE_TWITTER).first.service_user_name rescue nil
-      res ||= t :default_twitter_handle, "Twitter Handle"
+      res ||= t :default_twitter_handle, "X.com Handle"
       res
     when TYPE_PUSH
       t "For All Devices"
@@ -317,8 +247,8 @@ class CommunicationChannel < ActiveRecord::Base
     return if Rails.cache.read(["recent_password_reset", global_id].cache_key) == true
 
     @request_password = true
-    Rails.cache.write(["recent_password_reset", global_id].cache_key, true, expires_in: Setting.get("resend_password_reset_time", 5).to_f.minutes)
-    set_confirmation_code(true, Setting.get("password_reset_token_expiration_minutes", "120").to_i.minutes.from_now)
+    Rails.cache.write(["recent_password_reset", global_id].cache_key, true, expires_in: RESEND_PASSWORD_RESET_TIME)
+    set_confirmation_code(true, 2.hours.from_now)
     save!
     @request_password = false
   end
@@ -356,14 +286,12 @@ class CommunicationChannel < ActiveRecord::Base
   def otp_impaired?
     return false unless path_type == TYPE_SMS
 
-    # strip off the leading +
-    raw_number = e164_path[1...]
-    # Imperfect
-    country = CommunicationChannel.country_codes.find do |code, _, _|
-      raw_number.start_with?(code)
-    end || ["unknown"]
+    return false unless e164_path
 
-    Setting.get("otp_impaired_country_codes", "").split(",").include?(country.first)
+    # remove leading + if present
+    raw_number = e164_path.sub(/^\+/, "")
+    # return true if the number is not us-based
+    !raw_number.start_with?(Login::OtpHelper::DEFAULT_US_COUNTRY_CODE)
   end
 
   def send_otp!(code, account = nil)
@@ -461,7 +389,7 @@ class CommunicationChannel < ActiveRecord::Base
     if build_pseudonym_on_confirm && active?
       self.build_pseudonym_on_confirm = false
       pseudonym = Account.default.pseudonyms.build(unique_id: path, user:)
-      existing_pseudonym = Account.default.pseudonyms.active.where(user_id: user).take
+      existing_pseudonym = Account.default.pseudonyms.active.find_by(user_id: user)
       if existing_pseudonym
         pseudonym.password_salt = existing_pseudonym.password_salt
         pseudonym.crypted_password = existing_pseudonym.crypted_password
@@ -532,9 +460,8 @@ class CommunicationChannel < ActiveRecord::Base
     Shard.with_each_shard(shards) do
       scope = scope.shard(Shard.current).where("user_id<>?", user_id)
 
-      limit = Setting.get("merge_candidate_search_limit", "100").to_i
-      ccs = scope.preload(:user).limit(limit + 1).to_a
-      return [] if ccs.count > limit # just bail if things are getting out of hand
+      ccs = scope.preload(:user).limit(MERGE_CANDIDATE_SEARCH_LIMIT + 1).to_a
+      return [] if ccs.count > MERGE_CANDIDATE_SEARCH_LIMIT # just bail if things are getting out of hand
 
       ccs.map(&:user).select do |u|
         result = merge_candidates.fetch(u.global_id) do
@@ -585,7 +512,7 @@ class CommunicationChannel < ActiveRecord::Base
     # if there is a bounce on a channel that is associated to more than a few
     # shards there is no reason to bother updating the channel with the bounce
     # information, because its not a real user.
-    return if !permanent_bounce && CommunicationChannel.associated_shards(path).count > Setting.get("comm_channel_shard_count_too_high", "50").to_i
+    return if !permanent_bounce && CommunicationChannel.associated_shards(path).count > MAX_SHARDS_FOR_BOUNCES
 
     Shard.with_each_shard(CommunicationChannel.associated_shards(path)) do
       cc_scope = CommunicationChannel.unretired.email.by_path(path).where("bounce_count<?", RETIRE_THRESHOLD)
@@ -594,7 +521,7 @@ class CommunicationChannel < ActiveRecord::Base
       # try to capture only the newly created communication channels for this path,
       # or the ones that have NOT been bounced in the last hour, to make sure
       # we aren't doing un-helpful overwork.
-      debounce_window = Setting.get("comm_channel_bounce_debounce_window_in_min", "60").to_i
+      debounce_window = 1.hour
       bounce_field = if suppression_bounce
                        "last_suppression_bounce_at"
                      elsif permanent_bounce
@@ -602,7 +529,7 @@ class CommunicationChannel < ActiveRecord::Base
                      else
                        "last_transient_bounce_at"
                      end
-      bouncable_scope = cc_scope.where("#{bounce_field} IS NULL OR updated_at < ?", debounce_window.minutes.ago)
+      bouncable_scope = cc_scope.where("#{bounce_field} IS NULL OR updated_at < ?", debounce_window.ago)
       bouncable_scope.find_in_batches do |batch|
         update = if suppression_bounce
                    { last_suppression_bounce_at: timestamp, updated_at: Time.zone.now }
@@ -649,11 +576,17 @@ class CommunicationChannel < ActiveRecord::Base
   end
 
   def e164_path
+    # return if already in e.164 format
     return path if /^\+\d+$/.match?(path)
-    return nil unless (match = path.match(/^(?<number>\d+)@(?<domain>.+)$/))
-    return nil unless (carrier = CommunicationChannel.sms_carriers[match[:domain]])
 
-    "+#{carrier["country_code"]}#{match[:number]}"
+    is_plain_number = /^\d+$/.match?(path)
+    domain_match = path.match(/^(?<number>\d+)@(?<domain>.+)$/)
+    number = domain_match ? domain_match[:number] : (path if is_plain_number)
+
+    # return number in e.164 format with default US country code if number is present
+    return "+#{Login::OtpHelper::DEFAULT_US_COUNTRY_CODE}#{number}" if number
+
+    nil
   end
 
   def after_save_flag_old_microsoft_sync_user_mappings

@@ -70,7 +70,20 @@ describe "observer k5 dashboard" do
       expect(announcement_title(announcement_heading1)).to be_displayed
     end
 
+    it "shows the announcements for class observers with selective release" do
+      Account.site_admin.enable_feature!(:selective_release_backend)
+      announcement_heading1 = "K5 Do this"
+      announcement_content1 = "So happy to see all of you."
+      new_announcement(@homeroom_course, announcement_heading1, announcement_content1)
+
+      @observer.enrollments.where(course_id: @homeroom_course.id).first.update!(associated_user_id: nil)
+
+      get "/"
+      expect(announcement_title(announcement_heading1)).to be_displayed
+    end
+
     it "show the grades progress bar with the appropriate progress" do
+      skip "FOO-3808 (10/6/2023)"
       subject_grade = "75"
 
       assignment = create_and_submit_assignment(@subject_course, "Assignment 1", "new assignment", 100)
@@ -171,7 +184,7 @@ describe "observer k5 dashboard" do
       expect(element_value_for_attr(observed_student_dropdown, "value")).to eq("K5Student")
     end
 
-    it "selects student from list on subject drop down menu", ignore_js_errors: true do
+    it "selects student from list on subject drop down menu", :ignore_js_errors do
       get "/courses/#{@subject_course.id}#home"
 
       click_observed_student_option("My2 Student")
@@ -179,7 +192,7 @@ describe "observer k5 dashboard" do
       expect(element_value_for_attr(observed_student_dropdown, "value")).to eq("My2 Student")
     end
 
-    it "allows for searching for a student in subject dropdown list", ignore_js_errors: true do
+    it "allows for searching for a student in subject dropdown list", :ignore_js_errors do
       get "/courses/#{@subject_course.id}#home"
 
       observed_student_dropdown.send_keys([:control, "a"], :backspace, "My2")

@@ -245,7 +245,7 @@ class ContentZipper
     # 2. we're doing this inside a course context export, and are bypassing
     # the user check (@check_user == false)
     attachments =
-      if !@check_user || folder.context.grants_any_right?(@user, *RoleOverride::GRANULAR_FILE_PERMISSIONS)
+      if !@check_user || folder.context.grants_any_right?(@user, :read_as_admin, :manage_contents, *RoleOverride::GRANULAR_FILE_PERMISSIONS)
         folder.active_file_attachments
       else
         folder.visible_file_attachments
@@ -352,7 +352,7 @@ class ContentZipper
   def complete_attachment!(zip_attachment, zip_name)
     if zipped_successfully?
       @logger.debug("data zipped! uploading to external store...")
-      uploaded_data = Rack::Test::UploadedFile.new(zip_name, "application/zip")
+      uploaded_data = Canvas::UploadedFile.new(zip_name, "application/zip")
       Attachments::Storage.store_for_attachment(zip_attachment, uploaded_data)
       zip_attachment.workflow_state = "zipped"
       zip_attachment.file_state = "available"

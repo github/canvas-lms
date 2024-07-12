@@ -205,7 +205,7 @@ class GradingPeriodsController < ApplicationController
   def batch_update
     if authorized_action(@context, @current_user, :manage_grades)
       SubmissionLifecycleManager.with_executing_user(@current_user) do
-        method("#{@context.class.to_s.downcase}_batch_update").call
+        method(:"#{@context.class.to_s.downcase}_batch_update").call
       end
     end
   end
@@ -281,7 +281,7 @@ class GradingPeriodsController < ApplicationController
     return super unless params[:set_id].present?
 
     set_subquery = GradingPeriodGroup.active.select(:account_id).where(id: params[:set_id])
-    @context = Account.active.where(id: set_subquery).take
+    @context = Account.active.find_by(id: set_subquery)
     render json: { message: t("Page not found") }, status: :not_found unless @context
   end
 

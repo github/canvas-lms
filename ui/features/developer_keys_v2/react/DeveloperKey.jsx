@@ -16,8 +16,6 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import $ from 'jquery'
-import '@canvas/datetime'
 import 'jqueryui/dialog'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import React from 'react'
@@ -33,6 +31,7 @@ import {Link} from '@instructure/ui-link'
 import {Img} from '@instructure/ui-img'
 import {Table} from '@instructure/ui-table'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
+import {datetimeString} from '@canvas/datetime/date-functions'
 
 import DeveloperKeyActionButtons from './ActionButtons'
 import DeveloperKeyStateControl from './InheritanceStateControl'
@@ -168,7 +167,7 @@ class DeveloperKey extends React.Component {
                   onHideContent={this.handleShowKey}
                   screenReaderLabel={I18n.t('Key')}
                   renderTrigger={
-                    <Button onClick={this.handleShowKey} size="small">
+                    <Button data-testid="show-key" onClick={this.handleShowKey} size="small">
                       {this.state.showKey ? I18n.t('Hide Key') : I18n.t('Show Key')}
                       <ScreenReaderContent>{this.getToolName()}</ScreenReaderContent>
                     </Button>
@@ -201,7 +200,7 @@ class DeveloperKey extends React.Component {
             </div>
             <div>
               {I18n.t('Created: %{created_at}', {
-                created_at: $.datetimeString(developerKey.created_at),
+                created_at: datetimeString(developerKey.created_at),
               })}
             </div>
             <div>{this.lastUsed(developerKey)}</div>
@@ -235,6 +234,7 @@ class DeveloperKey extends React.Component {
           <Table.Cell>
             <DeveloperKeyActionButtons
               ref={this.refActionButtons}
+              contextId={this.props.ctx.params.contextId}
               dispatch={this.props.store.dispatch}
               {...this.props.actions}
               developerKey={this.props.developerKey}

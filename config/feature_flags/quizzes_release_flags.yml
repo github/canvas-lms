@@ -40,8 +40,8 @@ new_quizzes_account_course_level_item_banks:
   state: hidden
 new_quizzes_by_default:
   state: allowed
-  display_name: Default to New Quizzes
-  description: Use New Quizzes as the default quizzing engine. Removes the ability to create classic quizzes.
+  display_name: Disable Classic Quiz Creation
+  description: Use New Quizzes as the default quizzing engine when creating a quiz. Removes the ability to create classic quizzes.
   applies_to: Course
   visible_on: quizzes_next_visible_on_hook
 new_quizzes_allow_service_jwt_refresh:
@@ -65,3 +65,18 @@ new_quizzes_migrate_without_content_rewrite:
   environments:
     development:
       state: allowed_on
+new_quizzes_common_cartridge:
+  state: hidden
+  display_name: New Quizzes Common Cartridge Support
+  description: If enabled, Canvas will be able to export New Quizzes as a part of Common Cartridge Export Packages.
+  applies_to: SiteAdmin
+new_quizzes_subaccount_sharing_permission:
+  state: hidden
+  display_name: New Quizzes Subaccount Sharing Permission
+  description: Allow the "Item Banks - share with subaccounts" permission
+  applies_to: SiteAdmin
+common_cartridge_qti_new_quizzes_import:
+  state: hidden
+  display_name: Common Cartridge QTI New Quizzes Import
+  description: If enabled, users will be able to import a Common Cartridge with New Quizzes in QTI format, users will be able to select the option to import existing quizzes as New Quizzes or import as the current quiz type.
+  applies_to: SiteAdmin

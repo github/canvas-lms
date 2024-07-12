@@ -49,6 +49,10 @@ module CourseIndexPage
     ".course-list-course-title-column"
   end
 
+  def favorite_icon_selector(course_name)
+    "span[data-course-name='#{course_name}'] .course-list-favorite-icon"
+  end
+
   #------------------------- Elements ---------------------------
   def current_enrollments
     f(current_enrollments_selector)
@@ -68,5 +72,41 @@ module CourseIndexPage
 
   def row_with_text(text)
     fj(row_with_text_selector(text))
+  end
+
+  def favorite_icon(course_name)
+    f(favorite_icon_selector(course_name))
+  end
+
+  def favorites_column_header(table)
+    table_header_row(table)[0]
+  end
+
+  def title_column_header(table)
+    table_header_row(table)[1]
+  end
+
+  def nickname_column_header(table)
+    table_header_row(table)[2]
+  end
+
+  def term_column_header(table)
+    table_header_row(table)[3]
+  end
+
+  def enrolled_as_column_header(table)
+    table_header_row(table)[4]
+  end
+
+  def published_column_header(table)
+    table_header_row(table)[5]
+  end
+
+  def table_rows(table)
+    ff("#{table} tr")
+  end
+
+  def table_header_row(table)
+    ff("#{table} tr th")
   end
 end

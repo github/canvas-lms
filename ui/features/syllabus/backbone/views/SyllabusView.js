@@ -24,10 +24,10 @@
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 //
 
-import $ from 'jquery'
-import _ from 'underscore'
+import {reduce, each} from 'lodash'
 import Backbone from '@canvas/backbone'
 import template from '../../jst/Syllabus.handlebars'
+import {fudgeDateForProfileTimezone} from '@instructure/moment-utils'
 
 function assignmentSubType(json) {
   if (/discussion/.test(json.submission_types)) return 'discussion_topic'
@@ -132,19 +132,19 @@ export default class SyllabusView extends Backbone.View {
 
       const title = json.title
       if (json.start_at) {
-        start_at = $.fudgeDateForProfileTimezone(json.start_at)
+        start_at = fudgeDateForProfileTimezone(json.start_at)
       }
       if (json.end_at) {
-        end_at = $.fudgeDateForProfileTimezone(json.end_at)
+        end_at = fudgeDateForProfileTimezone(json.end_at)
       }
       if (json.type === 'assignment') {
         due_at = start_at
       } else if (json.type === 'wiki_page' || json.type === 'discussion_topic') {
-        todo_at = $.fudgeDateForProfileTimezone(json.todo_at)
+        todo_at = fudgeDateForProfileTimezone(json.todo_at)
       }
 
       let override = null
-      _.each(json.assignment_overrides != null ? json.assignment_overrides : [], ov => {
+      each(json.assignment_overrides != null ? json.assignment_overrides : [], ov => {
         if (override == null) {
           override = {}
         }
@@ -221,7 +221,7 @@ export default class SyllabusView extends Backbone.View {
     }
 
     // Get the dates and events
-    const dates = _.reduce(super.toJSON(...arguments), dateCollator, [])
+    const dates = reduce(super.toJSON(...arguments), dateCollator, [])
 
     // Remove extraneous override information for single events
     let overrides_present = false

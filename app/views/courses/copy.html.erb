@@ -18,6 +18,9 @@
 
 <% provide :page_title, t('titles.copy_course', 'Copy Course') %>
 <% add_crumb t('#crumbs.copy_course', 'Copy Course') %>
+<div id="warning_messages_modal_container"></div>
+<% js_bundle :copy_warnings_modal %>
+
 
 <h1><%= t'headings.copy_course', 'Copy %{course}', :course => @context.name %></h1>
 <p>
@@ -94,6 +97,8 @@
         <label>
           <input type="radio" name="selective_import" checked value=false>
           <%= t('select_all_content', 'All content') %>
+          <br />
+          <%= t('select_all_content_subtext', 'Note the following content types will be imported: Course Settings, Syllabus Body, Modules, Assignments, Quizzes, Question Banks, Discussion Topics, Pages, Announcements, Rubrics, Files, and Calendar Events.') %>
         </label>
       </div>
 

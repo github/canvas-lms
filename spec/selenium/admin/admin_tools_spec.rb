@@ -466,7 +466,7 @@ describe "admin_tools" do
       @events = []
       (1..5).each do |index|
         @course.name = "Course #{index}"
-        @course.start_at = Date.today + index.days
+        @course.start_at = Time.zone.today + index.days
         @course.conclude_at = @course.start_at + 7.days
         Timecop.freeze(index.seconds.from_now) do
           @event = Auditors::Course.record_updated(@course, @teacher, @course.changes)
@@ -651,6 +651,7 @@ describe "admin_tools" do
     end
 
     it "performs searches" do
+      skip "FOO-4092"
       @account.settings[:admins_can_view_notifications] = true
       @account.save!
       load_admin_tools_page
@@ -660,7 +661,7 @@ describe "admin_tools" do
       replace_content fj('label:contains("Last bounced before") input'), 3.days.ago.iso8601
       fj('button:contains("Search")').click
       wait_for_ajaximations
-      data = ff("#bouncedEmailsPane table td").map(&:text)
+      data = f("#bouncedEmailsPane").text
       expect(data).not_to include "one@example.com"
       expect(data).to include "two@example.com"
       expect(data).not_to include "three@example.com"

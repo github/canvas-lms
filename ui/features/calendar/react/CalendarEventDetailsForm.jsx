@@ -16,8 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import $ from 'jquery'
-import React, {useState, useEffect, useLayoutEffect, useCallback} from 'react'
+import React, {useState, useEffect, useLayoutEffect, useCallback, useRef} from 'react'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import {TextInput} from '@instructure/ui-text-input'
 import {Flex} from '@instructure/ui-flex'
@@ -33,7 +32,7 @@ import {Button, IconButton} from '@instructure/ui-buttons'
 import CalendarConferenceWidget from '@canvas/calendar-conferences/react/CalendarConferenceWidget'
 import filterConferenceTypes from '@canvas/calendar-conferences/filterConferenceTypes'
 import getConferenceType from '@canvas/calendar-conferences/getConferenceType'
-import tz from '@canvas/timezone'
+import * as tz from '@instructure/moment-utils'
 import moment from 'moment'
 import commonEventFactory from '@canvas/calendar/jquery/CommonEvent/index'
 import fcUtil from '@canvas/calendar/jquery/fcUtil'
@@ -41,29 +40,34 @@ import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
 import useDateTimeFormat from '@canvas/use-date-time-format-hook'
 import {DateTime} from '@instructure/ui-i18n'
 import {View} from '@instructure/ui-view'
+import {Text} from '@instructure/ui-text'
 import {
   updateRRuleForNewDate,
   RRULEToFrequencyOptionValue,
 } from '@canvas/calendar/react/RecurringEvents/FrequencyPicker/utils'
 import {renderUpdateCalendarEventDialog} from '@canvas/calendar/react/RecurringEvents/UpdateCalendarEventDialog'
 import FrequencyPicker from '@canvas/calendar/react/RecurringEvents/FrequencyPicker/FrequencyPicker'
+import {encodeQueryString} from '@canvas/query-string-encoding'
 
 const I18n = useI18nScope('calendar.edit_calendar_event')
 
 const screenReaderMessageCallback = msg => {
-  return () => showFlashAlert({message: msg, type: 'info', srOnly: true})
+  showFlashAlert({message: msg, type: 'info', srOnly: true})
 }
+
+const hasFormErrors = errors => Object.keys(errors).some(key => errors[key])
 
 const CalendarEventDetailsForm = ({event, closeCB, contextChangeCB, setSetContextCB, timezone}) => {
   timezone = timezone || ENV?.TIMEZONE || DateTime.browserTimeZone()
   const locale = ENV?.MOMENT_LOCALE || ENV?.LOCALE || 'en'
 
   const initTime = time => (!time || event.allDay ? '' : time)
+  const today = moment().tz(timezone)
 
   const [title, setTitle] = useState(event.title || '')
   const [context, setContext] = useState(event.contextInfo || event.allPossibleContexts[0])
   const [location, setLocation] = useState(event.location_name || '')
-  const [date, setDate] = useState(tz.parse(event.startDate().format('ll'), timezone))
+  const [date, setDate] = useState(tz.parse(event.startDate().format('YYYY-MM-DD'), timezone))
   const [startTime, setStartTime] = useState(initTime(event.calendarEvent?.start_at))
   const [endTime, setEndTime] = useState(initTime(event.calendarEvent?.end_at))
   const [rrule, setRRule] = useState(event.object.rrule ? event.object.rrule : null)
@@ -78,13 +82,18 @@ const CalendarEventDetailsForm = ({event, closeCB, contextChangeCB, setSetContex
   const [endMessages, setEndMessages] = useState([])
   const [firstRender, setFirstRender] = useState(true)
   const [isWorking, setIsWorking] = useState(false)
+  const [formErrors, setFormErrors] = useState(() => ({
+    title: title.trim().length === 0,
+    date: !moment.tz(date, timezone).isValid(),
+  }))
+
+  const hasChanged = useRef(false)
 
   const allContexts = event.allPossibleContexts
 
   const shouldEnableTimeFields = () => !isBlackout
   // Right now we don't have a way to edit event series and backend doesn't support to change
   // the rrule of an event. Also we don't save frequency in database.
-  const shouldShowFrequencyPicker = () => ENV?.FEATURES?.calendar_series
   const shouldShowLocationField = () => event.calendarEvent?.parent_event_id == null
   const shouldEnableLocationField = () => !isBlackout
   const shouldShowConferenceField = () => shouldShowConferences
@@ -220,6 +229,7 @@ const CalendarEventDetailsForm = ({event, closeCB, contextChangeCB, setSetContex
     params.blackout_date = isBlackout
     params.context_type = context.type
     params.course_pacing_enabled = context.course_pacing_enabled
+    params.calendar_event_context_code = event.calendarEvent?.context_code
     if (typeof rrule === 'string') {
       params.rrule = rrule
     }
@@ -236,7 +246,7 @@ const CalendarEventDetailsForm = ({event, closeCB, contextChangeCB, setSetContex
 
   const buildEditEventUrl = extraParams => {
     const moreOptionsUrl = new URL(getMoreOptionsHref(), window.location.origin)
-    const queryString = $.param({...getEventUrlParams(), ...extraParams})
+    const queryString = encodeQueryString({...getEventUrlParams(), ...extraParams})
     if (moreOptionsUrl.search) {
       moreOptionsUrl.search += `&${queryString}`
     } else {
@@ -259,13 +269,14 @@ const CalendarEventDetailsForm = ({event, closeCB, contextChangeCB, setSetContex
   }, [])
 
   const handleDateChange = useCallback(
-    d => {
+    (d, dateInputType) => {
       setDate(d)
+      setFormErrors({...formErrors, date: dateInputType === 'error'})
       if (rrule === null || frequency === 'saved-custom') return
       const newRRule = updateRRuleForNewDate(moment.tz(d, timezone), rrule)
       setRRule(newRRule)
     },
-    [frequency, rrule, timezone]
+    [frequency, rrule, timezone, formErrors]
   )
 
   const addTimeToDate = time => {
@@ -300,7 +311,7 @@ const CalendarEventDetailsForm = ({event, closeCB, contextChangeCB, setSetContex
       'calendar_event[blackout_date]': isBlackout,
     }
 
-    if (ENV?.FEATURES?.calendar_series && rrule) params['calendar_event[rrule]'] = rrule
+    params['calendar_event[rrule]'] = rrule
 
     if (canUpdateConference()) {
       if (webConference && shouldEnableConferenceField()) {
@@ -316,7 +327,7 @@ const CalendarEventDetailsForm = ({event, closeCB, contextChangeCB, setSetContex
           },
         }
         const conferenceParams = new URLSearchParams(
-          $.param({
+          encodeQueryString({
             calendar_event: {
               web_conference: webConf,
             },
@@ -332,7 +343,7 @@ const CalendarEventDetailsForm = ({event, closeCB, contextChangeCB, setSetContex
 
     if (event.isNewEvent()) {
       params['calendar_event[context_code]'] = context.asset_string
-      if (ENV?.FEATURES?.calendar_series && rrule) params['calendar_event[rrule]'] = rrule
+      if (rrule) params['calendar_event[rrule]'] = rrule
       const objectData = {
         calendar_event: {
           title: params['calendar_event[title]'],
@@ -374,7 +385,7 @@ const CalendarEventDetailsForm = ({event, closeCB, contextChangeCB, setSetContex
         params['calendar_event[context_code]'] = context.asset_string
       }
 
-      if (ENV?.FEATURES?.calendar_series && event.calendarEvent?.series_uuid) {
+      if (event.calendarEvent?.series_uuid && rrule) {
         const which = await renderUpdateCalendarEventDialog(event)
         if (which === undefined) return
         params.which = which
@@ -398,28 +409,61 @@ const CalendarEventDetailsForm = ({event, closeCB, contextChangeCB, setSetContex
       <FormFieldGroup description="" rowSpacing="small" vAlign="middle">
         <TextInput
           data-testid="edit-calendar-event-form-title"
-          renderLabel={I18n.t('Title:')}
+          renderLabel={I18n.t('Title')}
           value={title}
           placeholder={I18n.t('Input Event Title...')}
           interaction={event.lockedTitle ? 'disabled' : 'enabled'}
-          onChange={(e, value) => setTitle(value)}
+          onChange={(e, value) => {
+            hasChanged.current = true
+            setTitle(value)
+            setFormErrors({...formErrors, title: value.trim().length === 0})
+          }}
+          messages={
+            hasChanged.current && formErrors.title
+              ? [{text: I18n.t('errors.title_required', 'You must enter a title.'), type: 'error'}]
+              : []
+          }
         />
         <CanvasDateInput
           dataTestid="edit-calendar-event-form-date"
-          renderLabel={I18n.t('Date:')}
+          renderLabel={
+            <Flex>
+              <Flex.Item>
+                <Text weight="bold">{I18n.t('Date')}</Text>
+              </Flex.Item>
+              <Flex.Item>
+                <Tooltip
+                  renderTip={I18n.t("Default date will be today's date")}
+                  placement="top"
+                  on={['hover', 'focus']}
+                >
+                  <IconButton
+                    renderIcon={IconInfoLine}
+                    withBackground={false}
+                    withBorder={false}
+                    size="small"
+                    shape="circle"
+                    screenReaderLabel={I18n.t("Default date will be today's date")}
+                  />
+                </Tooltip>
+              </Flex.Item>
+            </Flex>
+          }
           selectedDate={date?.toISOString()}
           formatDate={dateFormatter}
           onSelectedDateChange={handleDateChange}
           width="100%"
           display="block"
           timezone={timezone}
+          defaultToToday={true}
+          invalidDateMessage={I18n.t('This date is invalid.')}
         />
         <Flex justifyItems="space-between" alignItems="start">
           <Flex.Item padding="none small none none" shouldShrink={true}>
             <TimeSelect
               disabled={!shouldEnableTimeFields()}
               data-testid="event-form-start-time"
-              renderLabel={I18n.t('From:')}
+              renderLabel={I18n.t('From')}
               value={shouldEnableTimeFields() ? startTime : ''}
               placeholder={I18n.t('Start Time')}
               onChange={(e, {value}) => trySetStartTime(value)}
@@ -427,14 +471,15 @@ const CalendarEventDetailsForm = ({event, closeCB, contextChangeCB, setSetContex
               messages={startMessages}
               format="LT"
               timezone={timezone}
-              step={5}
+              step={15}
+              allowNonStepInput={true}
             />
           </Flex.Item>
           <Flex.Item padding="none none none small" shouldShrink={true}>
             <TimeSelect
               disabled={!shouldEnableTimeFields()}
               data-testid="event-form-end-time"
-              renderLabel={I18n.t('To:')}
+              renderLabel={I18n.t('To')}
               value={shouldEnableTimeFields() ? endTime : ''}
               placeholder={I18n.t('End Time')}
               onChange={(e, {value}) => trySetEndTime(value)}
@@ -442,35 +487,34 @@ const CalendarEventDetailsForm = ({event, closeCB, contextChangeCB, setSetContex
               messages={endMessages}
               format="LT"
               timezone={timezone}
-              step={5}
+              step={15}
+              allowNonStepInput={true}
             />
           </Flex.Item>
         </Flex>
-        {shouldShowFrequencyPicker() && (
-          <FrequencyPicker
-            key={date}
-            date={date}
-            locale={locale}
-            timezone={timezone}
-            width="auto"
-            initialFrequency={frequency}
-            rrule={rrule}
-            onChange={(newFrequency, newRRule) => handleFrequencyChange(newFrequency, newRRule)}
-            courseEndAt={context.course_conclude_at || undefined}
-          />
-        )}
+        <FrequencyPicker
+          key={date || today}
+          date={date || today}
+          locale={locale}
+          timezone={timezone}
+          width="auto"
+          initialFrequency={frequency}
+          rrule={rrule}
+          onChange={(newFrequency, newRRule) => handleFrequencyChange(newFrequency, newRRule)}
+          courseEndAt={context.course_conclude_at || undefined}
+        />
         {shouldShowLocationField() && (
           <TextInput
             data-testid="edit-calendar-event-form-location"
             disabled={!shouldEnableLocationField()}
-            renderLabel={I18n.t('Location:')}
+            renderLabel={I18n.t('Location')}
             value={shouldEnableLocationField() ? location : ''}
             placeholder={I18n.t('Input Event Location...')}
             onChange={(e, value) => setLocation(value)}
           />
         )}
         {shouldShowConferenceField() && (
-          <FormField id="edit-calendar-event-form-conferencing" label={I18n.t('Conferencing:')}>
+          <FormField id="edit-calendar-event-form-conferencing" label={I18n.t('Conferencing')}>
             <CalendarConferenceWidget
               disabled={!shouldEnableConferenceField()}
               context={context.asset_string}
@@ -483,7 +527,7 @@ const CalendarEventDetailsForm = ({event, closeCB, contextChangeCB, setSetContex
         {shouldShowContextField() && (
           <SimpleSelect
             data-testid="edit-calendar-event-form-context"
-            renderLabel={I18n.t('Calendar:')}
+            renderLabel={I18n.t('Calendar')}
             assistiveText={I18n.t('Use arrow keys to navigate options.')}
             value={context.asset_string}
             onChange={(e, {value}) => changeContext(value)}
@@ -579,6 +623,7 @@ const CalendarEventDetailsForm = ({event, closeCB, contextChangeCB, setSetContex
                   isWorking ? e.preventDefault() : formSubmit(e)
                 }}
                 type="submit"
+                interaction={hasFormErrors(formErrors) ? 'disabled' : 'enabled'}
               >
                 {isWorking ? (
                   <Spinner renderTitle={I18n.t('Saving')} size="x-small" />

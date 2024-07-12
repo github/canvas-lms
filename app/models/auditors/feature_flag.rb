@@ -46,7 +46,7 @@ class Auditors::FeatureFlag
     end
 
     def initialize(*args)
-      super(*args)
+      super
 
       if attributes["feature_flag"]
         self.feature_flag = attributes.delete("feature_flag")
@@ -76,12 +76,13 @@ class Auditors::FeatureFlag
       attributes["feature_name"] = @feature_flag.feature
       # this should be safe because we don't care about auditing feature
       # flags that are for specific users.
-      attributes["root_account_id"] = Shard.global_id_for(@feature_flag.context.root_account_id)
-      if attributes["root_account_id"].nil? && @feature_flag.context.is_a?(Account)
-        # if the context IS a root account, we still need to tie it to this
-        # record, and it's root_account_id will be nil.
-        attributes["root_account_id"] = @feature_flag.context.global_id
-      end
+      attributes["root_account_id"] =
+        if @feature_flag.context.is_a?(Account) && @feature_flag.context.root_account?
+          # if the context IS a root account, we still need to tie it to this record
+          @feature_flag.context.global_id
+        else
+          Shard.global_id_for(@feature_flag.context.root_account_id)
+        end
     end
 
     def user
@@ -97,14 +98,10 @@ class Auditors::FeatureFlag
 
   Stream = Auditors.stream do
     ff_ar_type = Auditors::ActiveRecord::FeatureFlagRecord
-    active_record_type ff_ar_type
-    record_type Auditors::FeatureFlag::Record
+    record_type ff_ar_type
     self.raise_on_error = true
 
     add_index :feature_flag do
-      table :feature_flag_changes_by_feature_flag
-      entry_proc ->(record) { record.feature_flag }
-      key_proc ->(feature_flag) { feature_flag.global_id }
       ar_scope_proc ->(feature_flag) { ff_ar_type.where(feature_flag_id: feature_flag.id) }
     end
   end

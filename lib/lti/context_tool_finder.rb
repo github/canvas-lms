@@ -54,8 +54,8 @@ module Lti
     # parameter
     def single_shard_scope
       scopes(include_federated_parent: false).first
-            &.order(ContextExternalTool.best_unicode_collation_key("context_external_tools.name"))
-            &.order(Arel.sql("context_external_tools.id"))
+                                             &.order(ContextExternalTool.best_unicode_collation_key("context_external_tools.name"))
+                                             &.order(Arel.sql("context_external_tools.id"))
     end
 
     # If exclude_admin_visibility is true, does not return any tools where the options[:type]
@@ -92,7 +92,7 @@ module Lti
 
       return [] if contexts.empty?
 
-      Shard.partition_by_shard(contexts) do |contexts_by_shard|
+      Shard.partition_by_shard(contexts, ->(c) { c.shard }) do |contexts_by_shard|
         # Important to use .shard() here to get a scope on the current shard but translate any ids
         scope = options[:base_scope]&.shard(Shard.current) || ContextExternalTool
         scope = scope.where(context: contexts_by_shard).active

@@ -91,7 +91,7 @@ class Lti::ToolConfigurationsApiController < ApplicationController
     developer_key_redirect_uris
     tool_config = Lti::ToolConfiguration.create_tool_config_and_key!(account, tool_configuration_params)
     update_developer_key!(tool_config, developer_key_redirect_uris)
-    render json: Lti::ToolConfigurationSerializer.new(tool_config)
+    render json: Lti::ToolConfigurationSerializer.new(tool_config, include_warnings: true)
   end
 
   # @API Update Tool configuration
@@ -135,7 +135,7 @@ class Lti::ToolConfigurationsApiController < ApplicationController
     )
     update_developer_key!(tool_config)
 
-    render json: Lti::ToolConfigurationSerializer.new(tool_config)
+    render json: Lti::ToolConfigurationSerializer.new(tool_config, include_warnings: true)
   end
 
   # @API Show Tool configuration
@@ -143,7 +143,15 @@ class Lti::ToolConfigurationsApiController < ApplicationController
   #
   # @returns ToolConfiguration
   def show
-    render json: Lti::ToolConfigurationSerializer.new(developer_key.tool_configuration)
+    if developer_key.ims_registration.present?
+      render json: ({
+        tool_configuration: {
+          settings: developer_key.ims_registration.canvas_configuration
+        }
+      })
+    else
+      render json: Lti::ToolConfigurationSerializer.new(developer_key.tool_configuration)
+    end
   end
 
   # @API Show Tool configuration
@@ -176,6 +184,7 @@ class Lti::ToolConfigurationsApiController < ApplicationController
     developer_key.public_jwk_url = tool_config.settings["public_jwk_url"]
     developer_key.oidc_initiation_url = tool_config.settings["oidc_initiation_url"]
     developer_key.is_lti_key = true
+    developer_key.current_user = @current_user
     developer_key.update!(developer_key_params)
   end
 

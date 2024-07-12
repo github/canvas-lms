@@ -41,7 +41,7 @@ class Quizzes::QuizSubmissionsController < ApplicationController
   def create
     delete_session_access_key!
     if @quiz.ip_filter && !@quiz.valid_ip?(request.remote_ip)
-      flash[:error] = t("errors.protected_quiz", "This quiz is protected and is only available from certain locations.  The computer you are currently using does not appear to be at a valid location for taking this quiz.")
+      flash[:error] = t("errors.protected_quiz", "This quiz is protected and is only available from certain locations.  The computer you are currently using does not appear to be at a valid location for taking this quiz.") # rubocop:disable Rails/ActionControllerFlashBeforeRender
     elsif @quiz.grants_right?(@current_user, :submit)
       # If the submission is a preview, we don't add it to the user's submission history,
       # and it actually gets keyed by the temporary_user_code column instead of
@@ -75,6 +75,8 @@ class Quizzes::QuizSubmissionsController < ApplicationController
     if session.delete("lockdown_browser_popup")
       return render(action: "close_quiz_popup_window")
     end
+
+    flash[:notice] = t("Quiz submitted")
 
     redirect_to course_quiz_url(@context, @quiz, previewing_params)
   end
@@ -144,7 +146,7 @@ class Quizzes::QuizSubmissionsController < ApplicationController
   end
 
   def extensions
-    @student = @context.users_visible_to(@current_user, false, include_inactive: true).find_by!(id: params[:user_id])
+    @student = @context.users_visible_to(@current_user, false, include_inactive: true).find(params[:user_id])
     @submission = Quizzes::SubmissionManager.new(@quiz).find_or_create_submission(@student, nil, "settings_only")
     if authorized_action(@submission, @current_user, :add_attempts)
       @submission.extra_attempts ||= 0
@@ -176,9 +178,9 @@ class Quizzes::QuizSubmissionsController < ApplicationController
 
       @submission.update_scores(params.to_unsafe_h.merge(grader_id: @current_user.id))
       if params[:headless]
-        redirect_to named_context_url(@context, :context_quiz_history_url, @quiz, user_id: @submission.user_id, version: (params[:submission_version_number] || @submission.version_number), headless: 1, score_updated: 1, hide_student_name: params[:hide_student_name])
+        redirect_to named_context_url(@context, :context_quiz_history_url, @quiz, user_id: @submission.user_id, version: params[:submission_version_number] || @submission.version_number, headless: 1, score_updated: 1, hide_student_name: params[:hide_student_name])
       else
-        redirect_to named_context_url(@context, :context_quiz_history_url, @quiz, user_id: @submission.user_id, version: (params[:submission_version_number] || @submission.version_number))
+        redirect_to named_context_url(@context, :context_quiz_history_url, @quiz, user_id: @submission.user_id, version: params[:submission_version_number] || @submission.version_number)
       end
     end
   end

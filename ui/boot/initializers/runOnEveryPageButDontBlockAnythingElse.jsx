@@ -23,33 +23,22 @@
 // the critical code to display a page will be executed sooner
 
 import $ from 'jquery'
-import {isolate} from '@canvas/sentry'
-import ReactDOM from 'react-dom'
-import React from 'react'
-import {GroupNavigationSelector} from '../../shared/group-navigation-selector'
-
+import 'jquery-migrate'
 // modules that do their own thing on every page that simply need to be required
 import './addBrowserClasses'
 import '@canvas/media-comments'
-import './activateReminderControls'
+import '@canvas/common/activateReminderControls'
 import './expandAdminLinkMenusOnClick'
-import './activateElementToggler'
+import '@canvas/common/activateElementToggler'
 import './toggleICSuperToggleWidgetsOnEnterKeyEvent'
-import './loadInlineMediaComments'
+import '@canvas/common/loadInlineMediaComments'
 import './ping'
-import './markBrokenImages'
-import './activateLtiThumbnailLauncher'
+import '@canvas/common/markBrokenImages'
+import '@canvas/common/activateLtiThumbnailLauncher'
 import './sanitizeCSSOverflow'
 
 if (ENV.page_view_update_url) {
-  isolate(() => import(/* webpackChunkName: "[request]" */ './trackPageViews'))()
-}
-
-if (document.querySelector('#group-switch-mount-point')) {
-  ReactDOM.render(
-    <GroupNavigationSelector options={ENV.group_information} />,
-    document.querySelector('#group-switch-mount-point')
-  )
+  import(/* webpackChunkName: "[request]" */ './trackPageViews')
 }
 
 // preventDefault so we dont change the hash

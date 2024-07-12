@@ -160,6 +160,27 @@ describe BasicLTI::QuizzesNextVersionedSubmission do
       end
     end
 
+    context "with a version for each url on manual posting" do
+      let(:url_grades) do
+        [
+          { url: "https://abcdef.com/uuurrrlll00?p1=9&p2=11", grade: 0.11 },
+          { url: "https://abcdef.com/uuurrrlll01?p1=10&p2=12", grade: 0.22 }
+        ]
+      end
+
+      it "outputs all versions with hidden scores" do
+        expect(
+          subject.grade_history(hide_history_scores_on_manual_posting: true).map do |submission|
+            [submission[:url], submission[:score], submission[:grade]]
+          end
+        ).to eq(
+          url_grades.map do |x|
+            [x[:url], nil, nil]
+          end
+        )
+      end
+    end
+
     context "with multiple versions for each url" do
       let(:urls) do
         %w[
@@ -345,7 +366,6 @@ describe BasicLTI::QuizzesNextVersionedSubmission do
     let!(:notification) do
       Notification.create!(
         name: "Assignment Submitted",
-        workflow_state: "active",
         subject: "No Subject",
         category: "TestImmediately"
       )
@@ -354,7 +374,6 @@ describe BasicLTI::QuizzesNextVersionedSubmission do
     let!(:resubmission_notification) do
       Notification.create!(
         name: "Assignment Resubmitted",
-        workflow_state: "active",
         subject: "No Subject",
         category: "TestImmediately"
       )
@@ -456,7 +475,6 @@ describe BasicLTI::QuizzesNextVersionedSubmission do
     it "sends a 'Submission Graded' notification when a submission is regraded" do
       graded_notification = Notification.create!(
         name: "Submission Graded",
-        workflow_state: "active",
         subject: "No Subject",
         category: "TestImmediately"
       )
@@ -481,7 +499,7 @@ describe BasicLTI::QuizzesNextVersionedSubmission do
       it "sets the submission's workflow_state to 'pending_review'" do
         assignment.grade_student(@user, grader: @teacher, score: 1337)
         subject.commit_history("http://url", "80", -1)
-        expect(submission.reload.workflow_state).to eq(Submission.workflow_states.pending_review)
+        expect(submission.reload).to be_pending_review
       end
 
       context "and then manual grading is completed" do
@@ -499,7 +517,7 @@ describe BasicLTI::QuizzesNextVersionedSubmission do
 
         shared_examples_for "contexts that grade a submission" do
           it "sets workflow_state to graded" do
-            expect(subject.workflow_state).to eq Submission.workflow_states.graded
+            expect(subject.state).to be :graded
           end
 
           it "gives the correct score to the submission" do

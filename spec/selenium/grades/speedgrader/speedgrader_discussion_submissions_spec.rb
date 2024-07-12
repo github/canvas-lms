@@ -20,7 +20,7 @@
 require_relative "../../common"
 require_relative "../pages/speedgrader_page"
 
-describe "speed grader - discussion submissions" do
+describe "SpeedGrader - discussion submissions" do
   include_context "in-process server selenium tests"
 
   before do
@@ -66,7 +66,7 @@ describe "speed grader - discussion submissions" do
   it "displays discussion entries for only one student", priority: "1" do
     Speedgrader.visit(@course.id, @assignment.id)
 
-    # check for correct submissions in speed grader iframe
+    # check for correct submissions in SpeedGrader iframe
     in_frame "speedgrader_iframe", "#discussion_view_link" do
       expect(f("#main")).to include_text(@first_message)
       expect(f("#main")).not_to include_text(@second_message)
@@ -77,8 +77,8 @@ describe "speed grader - discussion submissions" do
       expect(f("#main")).not_to include_text(@first_message)
       expect(f("#main")).to include_text(@second_message)
       url = f("#main div.attachment_data a")["href"]
-      expect(url).to be_include "/files/#{@attachment_thing.id}/download?verifier=#{@attachment_thing.uuid}"
-      expect(url).not_to be_include "/courses/#{@course}"
+      expect(url).to include "/files/#{@attachment_thing.id}/download?verifier=#{@attachment_thing.uuid}"
+      expect(url).not_to include "/courses/#{@course}"
     end
   end
 
@@ -91,7 +91,7 @@ describe "speed grader - discussion submissions" do
       Speedgrader.select_hide_student_names
       expect_new_page_load { fj(".ui-dialog-buttonset .ui-button:visible:last").click }
 
-      # check for correct submissions in speed grader iframe
+      # check for correct submissions in SpeedGrader iframe
       in_frame "speedgrader_iframe", "#discussion_view_link" do
         expect(f("#main")).to include_text("This Student")
       end
@@ -115,7 +115,7 @@ describe "speed grader - discussion submissions" do
       Speedgrader.select_hide_student_names
       expect_new_page_load { fj(".ui-dialog-buttonset .ui-button:visible:last").click }
 
-      # check for correct submissions in speed grader iframe
+      # check for correct submissions in SpeedGrader iframe
       in_frame "speedgrader_iframe", "#discussion_view_link" do
         f("#discussion_view_link").click
         wait_for_ajaximations
@@ -136,7 +136,7 @@ describe "speed grader - discussion submissions" do
       Speedgrader.select_hide_student_names
       expect_new_page_load { fj(".ui-dialog-buttonset .ui-button:visible:last").click }
 
-      # check for correct submissions in speed grader iframe
+      # check for correct submissions in SpeedGrader iframe
       in_frame "speedgrader_iframe", "#discussion_view_link" do
         f("#discussion_view_link").click
         expect(f("body")).not_to contain_css(".avatar")

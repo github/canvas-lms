@@ -16,11 +16,12 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 import React from 'react'
-
 import * as uploadFileModule from '@canvas/upload-file'
 import {render, fireEvent} from '@testing-library/react'
 
 import {FileAttachmentUpload} from '../FileAttachmentUpload'
+
+jest.mock('@canvas/upload-file')
 
 const setup = (onAddItem = jest.fn()) => {
   return render(<FileAttachmentUpload onAddItem={onAddItem} />)

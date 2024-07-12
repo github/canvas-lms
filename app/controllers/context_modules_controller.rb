@@ -47,7 +47,7 @@ class ContextModulesController < ApplicationController
 
     def modules_cache_key
       @modules_cache_key ||= begin
-        visible_assignments = @current_user.try(:assignment_and_quiz_visibilities, @context)
+        visible_assignments = @current_user.try(:learning_object_visibilities, @context)
         cache_key_items = [@context.cache_key,
                            @can_view,
                            @can_add,
@@ -59,7 +59,7 @@ class ContextModulesController < ApplicationController
                            "all_context_modules_draft_10",
                            collection_cache_key(@modules),
                            Time.zone,
-                           Digest::SHA256.hexdigest([visible_assignments, @section_visibility].join("/"))]
+                           Digest::SHA256.hexdigest([visible_assignments, @section_visibility, @module_ids_with_overrides].join("/"))]
         cache_key = cache_key_items.join("/")
         cache_key = add_menu_tools_to_cache_key(cache_key)
         add_mastery_paths_to_cache_key(cache_key, @context, @current_user)
@@ -67,7 +67,7 @@ class ContextModulesController < ApplicationController
     end
 
     def load_modules
-      @modules = @context.modules_visible_to(@current_user).limit(Setting.get("course_module_limit", "1000").to_i)
+      @modules = @context.modules_visible_to(@current_user).limit(1000)
       @modules.each(&:check_for_stale_cache_after_unlocking!)
       @collapsed_modules = ContextModuleProgression.for_user(@current_user)
                                                    .for_modules(@modules)
@@ -83,6 +83,10 @@ class ContextModulesController < ApplicationController
       @can_view_grades = can_do(@context, @current_user, :view_all_grades)
       @is_student = @context.grants_right?(@current_user, session, :participate_as_student)
       @can_view_unpublished = @context.grants_right?(@current_user, session, :read_as_admin)
+
+      if Account.site_admin.feature_enabled?(:selective_release_backend)
+        @module_ids_with_overrides = AssignmentOverride.where(context_module_id: @modules).active.distinct.pluck(:context_module_id)
+      end
 
       modules_cache_key
 
@@ -121,27 +125,37 @@ class ContextModulesController < ApplicationController
       if @context.grants_any_right?(@current_user, session, :manage_content, *RoleOverride::GRANULAR_MANAGE_COURSE_CONTENT_PERMISSIONS)
         module_file_details = load_module_file_details
       end
-      js_env course_id: @context.id,
-             CONTEXT_URL_ROOT: polymorphic_path([@context]),
-             FILES_CONTEXTS: [{ asset_string: @context.asset_string }],
-             MODULE_FILE_DETAILS: module_file_details,
-             MODULE_FILE_PERMISSIONS: {
-               usage_rights_required: @context.usage_rights_required?,
-               manage_files_edit: @context.grants_right?(@current_user, session, :manage_files_edit)
-             },
-             MODULE_TOOLS: module_tool_definitions,
-             DEFAULT_POST_TO_SIS: @context.account.sis_default_grade_export[:value] && !AssignmentUtil.due_date_required_for_account?(@context.account)
+
+      @allow_menu_tools = @context.grants_any_right?(@current_user, session, :manage_content, :manage_course_content_add) &&
+                          (@menu_tools[:module_index_menu].present? || @menu_tools[:module_index_menu_modal].present?)
+
+      hash = {
+        course_id: @context.id,
+        CONTEXT_URL_ROOT: polymorphic_path([@context]),
+        FILES_CONTEXTS: [{ asset_string: @context.asset_string }],
+        MODULE_FILE_DETAILS: module_file_details,
+        MODULE_FILE_PERMISSIONS: {
+          usage_rights_required: @context.usage_rights_required?,
+          manage_files_edit: @context.grants_right?(@current_user, session, :manage_files_edit)
+        },
+        MODULE_TOOLS: module_tool_definitions,
+        DEFAULT_POST_TO_SIS: @context.account.sis_default_grade_export[:value] && !AssignmentUtil.due_date_required_for_account?(@context.account),
+        PUBLISH_FINAL_GRADE: Canvas::Plugin.find!("grade_export").enabled?
+      }
 
       is_master_course = MasterCourses::MasterTemplate.is_master_course?(@context)
       is_child_course = MasterCourses::ChildSubscription.is_child_course?(@context)
       if is_master_course || is_child_course
-        js_env(MASTER_COURSE_SETTINGS: {
-                 IS_MASTER_COURSE: is_master_course,
-                 IS_CHILD_COURSE: is_child_course,
-                 MASTER_COURSE_DATA_URL: context_url(@context, :context_context_modules_master_course_info_url)
-               })
+        hash[:MASTER_COURSE_SETTINGS] = {
+          IS_MASTER_COURSE: is_master_course,
+          IS_CHILD_COURSE: is_child_course,
+          MASTER_COURSE_DATA_URL: context_url(@context, :context_context_modules_master_course_info_url)
+        }
       end
 
+      append_default_due_time_js_env(@context, hash)
+      js_env(hash)
+      set_js_module_data
       conditional_release_js_env(includes: :active_rules)
     end
 
@@ -187,13 +201,11 @@ class ContextModulesController < ApplicationController
 
       set_tutorial_js_env
 
-      if Account.site_admin.feature_enabled?(:module_publish_menu)
-        @progress = Progress.find_by(
-          context: @context,
-          tag: "context_module_batch_update",
-          workflow_state: ["queued", "running"]
-        )
-      end
+      @progress = Progress.find_by(
+        context: @context,
+        tag: "context_module_batch_update",
+        workflow_state: ["queued", "running"]
+      )
 
       if @is_student
         return unless tab_enabled?(@context.class::TAB_MODULES)
@@ -670,7 +682,8 @@ class ContextModulesController < ApplicationController
   include ContextModulesHelper
   def add_item
     @module = @context.context_modules.not_deleted.find(params[:context_module_id])
-    if authorized_action(@module, @current_user, :update)
+
+    if authorized_action(@context, @current_user, %i[manage_content manage_course_content_add manage_course_content_edit])
       params[:item][:link_settings] = launch_dimensions
       @tag = @module.add_item(params[:item])
       unless @tag&.valid?
@@ -689,7 +702,8 @@ class ContextModulesController < ApplicationController
         content_details: content_details(@tag, @current_user),
         assignment_id: @tag.assignment.try(:id),
         is_cyoe_able: cyoe_able?(@tag),
-        is_duplicate_able: @tag.duplicate_able?
+        is_duplicate_able: @tag.duplicate_able?,
+        can_manage_assign_to: @tag.content&.grants_right?(@current_user, session, :manage_assign_to)
       )
       @context.touch
       render json:
@@ -709,7 +723,10 @@ class ContextModulesController < ApplicationController
     @tag = @context.context_module_tags.not_deleted.find(params[:id])
     if authorized_action(@tag.context_module, @current_user, :update)
       @tag.title = params[:content_tag][:title] if params[:content_tag] && params[:content_tag][:title]
-      @tag.url = params[:content_tag][:url] if LINK_ITEM_TYPES.include?(@tag.content_type) && params[:content_tag] && params[:content_tag][:url]
+      if LINK_ITEM_TYPES.include?(@tag.content_type) && params[:content_tag] && params[:content_tag][:url]
+        @tag.url = params[:content_tag][:url]
+        @tag.reassociate_external_tool = true
+      end
       @tag.indent = params[:content_tag][:indent] if params[:content_tag] && params[:content_tag][:indent]
       @tag.new_tab = params[:content_tag][:new_tab] if params[:content_tag] && params[:content_tag][:new_tab]
 
@@ -796,6 +813,8 @@ class ContextModulesController < ApplicationController
     content_with_assignments = assignment_tags
                                .select { |ct| ct.content_type != "Assignment" && ct.content.assignment_id }.map(&:content)
     ActiveRecord::Associations.preload(content_with_assignments, :assignment) if content_with_assignments.any?
+    DatesOverridable.preload_override_data_for_objects(content_with_assignments.map(&:assignment))
+    DatesOverridable.preload_override_data_for_objects(tags.select { |ct| %w[Assignment Quizzes::Quiz WikiPage DiscussionTopic].include?(ct.content_type) }.map(&:content))
 
     if user_is_admin && should_preload_override_data?
       assignments = assignment_tags.filter_map(&:assignment)
@@ -827,7 +846,7 @@ class ContextModulesController < ApplicationController
     # find the assignments/quizzes with too many active overrides and mark them as such
     if assignments_or_quizzes.any?
       ids = AssignmentOverride.active.where(override_column => assignments_or_quizzes)
-                              .group(override_column).having("COUNT(*) > ?", Setting.get("assignment_all_dates_too_many_threshold", "25").to_i)
+                              .group(override_column).having("COUNT(*) > ?", Api::V1::Assignment::ALL_DATES_LIMIT)
                               .active.pluck(override_column)
 
       if ids.any?

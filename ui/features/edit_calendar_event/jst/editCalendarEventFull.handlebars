@@ -1,7 +1,4 @@
-<h1 class="screenreader-only">
-  {{#if newRecord}}{{#t "new_calendar_event_header"}}New Calendar Event{{/t}}
-  {{else}}{{#t "edit_calendar_event_header"}}Edit Calendar Event{{/t}}{{/if}}
-</h1>
+<div id="header_component_root"></div>
 <form id="editCalendarEventFull" class="{{#if use_section_dates}}use_section_dates{{/if}}">
     <fieldset>
       <label for="calendar_event_title"><strong>{{#t}}Event Title{{/t}}</strong></label>
@@ -139,19 +136,17 @@
     </div>
   </div>
 
-  {{#if ENV.FEATURES.calendar_series}}
-    <fieldset>
-      <div id="recurring_event_frequency_picker">frequency picker</div>
-    </fieldset>
-  {{/if}}
+  <fieldset>
+    <div id="recurring_event_frequency_picker"></div>
+  </fieldset>
 
   <fieldset>
-    <label class="location_label" for="calendar_event_location_name">{{#t "location_name"}}Location:{{/t}}</label>
+    <label class="location_label" for="calendar_event_location_name">{{#t "location_name"}}Location{{/t}}</label>
     <input id="calendar_event_location_name" data-testid="calendar_event_location_name" name="location_name" size="30" maxlength="255" type="text" value="{{location_name}}"/>
   </fieldset>
 
   <fieldset>
-    <label class="location_label" for="calendar_event_location_address">{{#t "location_address"}}Address:{{/t}}</label>
+    <label class="location_label" for="calendar_event_location_address">{{#t "location_address"}}Address{{/t}}</label>
     <input id="calendar_event_location_address" data-testid="calendar_event_location_address" name="location_address" size="30" maxlength="255" type="text" value="{{location_address}}"/>
   </fieldset>
 
@@ -180,8 +175,8 @@
     </fieldset>
   {{/if}}
 
-  {{#unless ENV.FEATURES.calendar_series}}
-    {{#if newRecord}}
+  {{!-- Only show duplicate form if is new record; this is only enabled for section dates. --}}
+  {{#if newRecord}}
     <label class="label_with_checkbox" for="duplicate_event">
       <input type="checkbox" id="duplicate_event" name="duplicate" value="true"/>
       {{#t "repeat"}}Duplicate{{/t}}
@@ -213,8 +208,7 @@
         {{#t}}Number each event{{/t}}
       </label>
     </div>
-    {{/if}}
-  {{/unless}}
+  {{/if}}
 
   <div class="form-actions">
     {{#if url}}

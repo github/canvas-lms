@@ -17,8 +17,6 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require "atom"
-
 # @API Discussion Topics
 #
 # API for accessing and participating in discussion topics in groups and courses.
@@ -253,6 +251,9 @@ class DiscussionTopicsController < ApplicationController
   include KalturaHelper
   include SubmittableHelper
   include K5Mode
+  include DiscussionTopicsHelper
+
+  ANONYMOUS_STATES = ["full_anonymity", "partial_anonymity"].freeze
 
   # @API List discussion topics
   #
@@ -352,12 +353,14 @@ class DiscussionTopicsController < ApplicationController
     end
 
     if params[:only_announcements] && !@context.grants_any_right?(@current_user, :manage, :read_course_content)
-      scope = scope.active.where("delayed_post_at IS NULL OR delayed_post_at<?", Time.now.utc)
+      scope = scope.active.where("((unlock_at IS NULL AND delayed_post_at IS NULL) OR (unlock_at<? OR delayed_post_at<?)) AND ( lock_at IS NULL OR lock_at>?)", Time.now.utc, Time.now.utc, Time.now.utc)
     end
+
+    per_page = params[:per_page] || 100
 
     @topics = []
     if @context.is_a?(Group) || request.format.json?
-      @topics = Api.paginate(scope, self, topic_pagination_url)
+      @topics = Api.paginate(scope, self, topic_pagination_url, per_page:)
       if params[:exclude_context_module_locked_topics]
         ActiveRecord::Associations.preload(@topics, context_module_tags: :context_module)
         @topics = DiscussionTopic.reject_context_module_locked_topics(@topics, @current_user)
@@ -388,7 +391,7 @@ class DiscussionTopicsController < ApplicationController
         end
 
         fetch_params = {
-          per_page: 50,
+          per_page:,
           plain_messages: true,
           include_assignment: true,
           exclude_assignment_descriptions: true,
@@ -397,7 +400,7 @@ class DiscussionTopicsController < ApplicationController
         }
         fetch_params[:include] = ["sections_user_count", "sections"] if @context.is_a?(Course)
 
-        discussion_topics_fetch_url = send("api_v1_#{@context.class.to_s.downcase}_discussion_topics_path", fetch_params)
+        discussion_topics_fetch_url = send(:"api_v1_#{@context.class.to_s.downcase}_discussion_topics_path", fetch_params)
         (scope.count / fetch_params[:per_page].to_f).ceil.times do |i|
           url = discussion_topics_fetch_url.gsub(fetch_params[:page], (i + 1).to_s)
           prefetch_xhr(url, id: "prefetched_discussion_topic_page_#{i}")
@@ -425,10 +428,11 @@ class DiscussionTopicsController < ApplicationController
             read_as_admin: @context.grants_right?(@current_user, session, :read_as_admin),
           },
           discussion_topic_menu_tools: external_tools_display_hashes(:discussion_topic_menu),
-          student_reporting_enabled: @context.feature_enabled?(:react_discussions_post),
+          student_reporting_enabled: @domain_root_account.feature_enabled?(:discussions_reporting),
           discussion_anonymity_enabled: @context.feature_enabled?(:react_discussions_post),
           discussion_topic_index_menu_tools: external_tools_display_hashes(:discussion_topic_index_menu),
           show_additional_speed_grader_links: Account.site_admin.feature_enabled?(:additional_speedgrader_links),
+          PER_PAGE: per_page,
         }
         if @context.is_a?(Course) && @context.grants_right?(@current_user, session, :read) && @js_env&.dig(:COURSE_ID).blank?
           hash[:COURSE_ID] = @context.id.to_s
@@ -442,7 +446,6 @@ class DiscussionTopicsController < ApplicationController
           js_env(SETTINGS_URL: named_context_url(@context, :api_v1_context_settings_url))
         end
 
-        add_body_class "hide-content-while-scripts-not-loaded"
         @page_title = join_title(t("#titles.discussions", "Discussions"), @context.name)
 
         content_for_head helpers.auto_discovery_link_tag(:atom, feeds_forum_format_path(@context.feed_code, :atom), { title: t(:course_discussions_atom_feed_title, "Course Discussions Atom Feed") })
@@ -454,9 +457,9 @@ class DiscussionTopicsController < ApplicationController
       end
 
       InstStatsd::Statsd.increment("discussion_topic.index.visit")
-      InstStatsd::Statsd.count("discussion_topic.index.visit.pinned", @topics&.select(&:pinned)&.count)
+      InstStatsd::Statsd.count("discussion_topic.index.visit.pinned", @topics&.count(&:pinned))
       InstStatsd::Statsd.count("discussion_topic.index.visit.discussions", @topics&.length)
-      InstStatsd::Statsd.count("discussion_topic.index.visit.closed_for_comments", @topics&.select(&:locked)&.count)
+      InstStatsd::Statsd.count("discussion_topic.index.visit.closed_for_comments", @topics&.count(&:locked))
 
       format.json do
         log_api_asset_access(["topics", @context], "topics", "other")
@@ -499,25 +502,6 @@ class DiscussionTopicsController < ApplicationController
     add_discussion_or_announcement_crumb
     add_crumb t :create_new_crumb, "Create new"
 
-    if @context.root_account.feature_enabled?(:discussion_create)
-      @page_title = params[:is_announcement] ? t("#titles.new_announcement", "New Announcement") : t("#titles.new_discussion", "New Discussion Topic")
-      hash = { is_announcement: params[:is_announcement] || "false" }
-      if @context.grants_right?(@current_user, session, :read)
-        hash[:context_id] = @context.id
-        if @context.is_a?(Course)
-          hash[:context_type] = "Course"
-        elsif @context.is_a?(Group)
-          hash[:context_type] = "Group"
-        end
-      end
-      hash[:is_student] = context.user_is_student?(@current_user, include_fake_student: true)
-      js_env(hash)
-      js_bundle :discussion_topic_edit_v2
-      css_bundle :discussions_index, :learning_outcomes
-      render html: "", layout: (params[:embed] == "true") ? "mobile_embed" : true
-      return
-    end
-
     edit
   end
 
@@ -532,7 +516,7 @@ class DiscussionTopicsController < ApplicationController
     return render_unauthorized_action unless @topic.visible_for?(@current_user)
 
     @context.try(:require_assignment_group) unless @topic.is_announcement
-    can_set_group_category = @context.respond_to?(:group_categories) && @context.grants_right?(@current_user, session, :manage) # i.e. not a student
+    can_set_group_category = ANONYMOUS_STATES.exclude?(@topic.anonymous_state) && @context.respond_to?(:group_categories) && @context.grants_right?(@current_user, session, :manage) # i.e. not anonymous and not a student
     hash = {
       URL_ROOT: named_context_url(@context, :api_v1_context_discussion_topics_url),
       PERMISSIONS: {
@@ -541,7 +525,11 @@ class DiscussionTopicsController < ApplicationController
         CAN_ATTACH: @topic.grants_right?(@current_user, session, :attach),
         CAN_MODERATE: user_can_moderate,
         CAN_SET_GROUP: can_set_group_category,
-        CAN_EDIT_GRADES: can_do(@context, @current_user, :manage_grades)
+        CAN_EDIT_GRADES: can_do(@context, @current_user, :manage_grades),
+        # if not a course content manager, or if topic is graded, do not show add to todo list checkbox
+        CAN_MANAGE_CONTENT: @context.grants_any_right?(@current_user, session, :manage_content, :manage_course_content_add),
+        CAN_MANAGE_ASSIGN_TO_GRADED: @context.discussion_topics.temp_record(assignment_id: 0).grants_right?(@current_user, session, @topic.new_record? ? :create_assign_to : :manage_assign_to),
+        CAN_MANAGE_ASSIGN_TO_UNGRADED: @context.discussion_topics.temp_record(assignment_id: nil).grants_right?(@current_user, session, @topic.new_record? ? :create_assign_to : :manage_assign_to),
       }
     }
 
@@ -613,6 +601,7 @@ class DiscussionTopicsController < ApplicationController
       end
 
     js_hash = {
+      ASSIGNMENT_ID: @topic.assignment_id,
       CONTEXT_ACTION_SOURCE: :discussion_topic,
       CONTEXT_ID: @context.id,
       DISCUSSION_TOPIC: hash,
@@ -626,11 +615,16 @@ class DiscussionTopicsController < ApplicationController
       USAGE_RIGHTS_REQUIRED: usage_rights_required,
       IS_MODULE_ITEM: !@topic.context_module_tags.empty?,
       PERMISSIONS: {
-        manage_files: @context.grants_any_right?(@current_user, session, *RoleOverride::GRANULAR_FILE_PERMISSIONS)
+        manage_files: @context.grants_any_right?(@current_user, session, *RoleOverride::GRANULAR_FILE_PERMISSIONS),
+        manage_grading_schemes: can_do(@context, @current_user, :manage_grades)
       },
       REACT_DISCUSSIONS_POST: @context.feature_enabled?(:react_discussions_post),
       allow_student_anonymous_discussion_topics: @context.allow_student_anonymous_discussion_topics,
-      context_is_not_group: !@context.is_a?(Group)
+      context_is_not_group: !@context.is_a?(Group),
+      GRADING_SCHEME_UPDATES_ENABLED: Account.site_admin.feature_enabled?(:grading_scheme_updates),
+      ARCHIVED_GRADING_SCHEMES_ENABLED: Account.site_admin.feature_enabled?(:archived_grading_schemes),
+      DISCUSSION_CHECKPOINTS_ENABLED: @context.root_account.feature_enabled?(:discussion_checkpoints),
+      ASSIGNMENT_EDIT_PLACEMENT_NOT_ON_ANNOUNCEMENTS: Account.site_admin.feature_enabled?(:assignment_edit_placement_not_on_announcements)
     }
 
     post_to_sis = Assignment.sis_grade_export_enabled?(@context)
@@ -680,12 +674,35 @@ class DiscussionTopicsController < ApplicationController
       js_hash[:allow_self_signup] = true # for group creation
       js_hash[:group_user_type] = "student"
       append_default_due_time_js_env(@context, js_hash)
+      js_hash[:COURSE_ID] = @context.id
+      if Account.site_admin.feature_enabled?(:grading_scheme_updates)
+        js_hash[:COURSE_DEFAULT_GRADING_SCHEME_ID] = @context.grading_standard_id || @context.default_grading_standard&.id
+      end
     end
+
+    if @context.root_account.feature_enabled?(:discussion_create) && @context.feature_enabled?(:react_discussions_post) && @context.grants_right?(@current_user, session, :read)
+      js_hash[:context_id] = @context.id
+      if @context.is_a?(Course)
+        js_hash[:context_type] = "Course"
+      elsif @context.is_a?(Group)
+        js_hash[:context_type] = "Group"
+      end
+    end
+
     js_env(js_hash)
 
     set_master_course_js_env_data(@topic, @context)
     conditional_release_js_env(@topic.assignment)
-    render :edit, layout: (params[:embed] == "true") ? "mobile_embed" : true
+
+    if @context.root_account.feature_enabled?(:discussion_create) && @context.feature_enabled?(:react_discussions_post)
+      @page_title = topic_page_title(@topic)
+
+      js_bundle :discussion_topic_edit_v2
+      css_bundle :discussions_index, :learning_outcomes, :conditional_release_editor
+      render html: "", layout: (params[:embed] == "true") ? "mobile_embed" : true
+    else
+      render :edit, layout: (params[:embed] == "true") ? "mobile_embed" : true
+    end
   end
 
   def show
@@ -721,7 +738,7 @@ class DiscussionTopicsController < ApplicationController
       add_rss_links_to_content
     end
 
-    if @context.is_a?(Course) && @context.grants_right?(@current_user, session, :manage)
+    if (@context.is_a?(Course) || @context.is_a?(Group)) && @context.grants_right?(@current_user, session, :manage)
       set_student_context_cards_js_env
     end
 
@@ -742,9 +759,10 @@ class DiscussionTopicsController < ApplicationController
     if @context.feature_enabled?(:react_discussions_post)
       env_hash = {
         per_page: 20,
-        isolated_view_initial_page_size: 5,
+        split_screen_view_initial_page_size: 5,
         current_page: 0
       }
+      env_hash[:context_rubric_associations_url] = context_url(@context, :context_rubric_associations_url) rescue nil
       if params[:entry_id]
         entry = @topic.discussion_entries.find(params[:entry_id])
         env_hash[:discussions_deep_link] = {
@@ -764,6 +782,8 @@ class DiscussionTopicsController < ApplicationController
       if topics && topics.length == 1 && !@topic.grants_right?(@current_user, session, :update)
         redirect_params = { root_discussion_topic_id: @topic.id }
         redirect_params[:module_item_id] = params[:module_item_id] if params[:module_item_id].present?
+        # add in query parameters from the url, we want them preserved
+        redirect_params.merge!(request.query_parameters) unless request.query_parameters.empty?
         redirect_to named_context_url(topics[0].context, :context_discussion_topics_url, redirect_params)
         return
       end
@@ -813,18 +833,22 @@ class DiscussionTopicsController < ApplicationController
       edit_url += "?embed=true" if params[:embed] == "true"
       js_env({
                course_id: params[:course_id] || @context.course&.id,
+               context_type: @topic.context_type,
+               context_id: @context.id,
                EDIT_URL: edit_url,
                PEER_REVIEWS_URL: @topic.assignment ? context_url(@topic.assignment.context, :context_assignment_peer_reviews_url, @topic.assignment.id) : nil,
                discussion_topic_id: params[:id],
                manual_mark_as_read: @current_user&.manual_mark_as_read?,
                discussion_topic_menu_tools: external_tools_display_hashes(:discussion_topic_menu),
                rce_mentions_in_discussions: @context.feature_enabled?(:react_discussions_post) && !@topic.anonymous?,
-               isolated_view: Account.site_admin.feature_enabled?(:isolated_view),
-               split_screen_view: Account.site_admin.feature_enabled?(:split_screen_view),
                discussion_grading_view: Account.site_admin.feature_enabled?(:discussion_grading_view),
                draft_discussions: Account.site_admin.feature_enabled?(:draft_discussions),
                discussion_entry_version_history: Account.site_admin.feature_enabled?(:discussion_entry_version_history),
+               discussion_translation_available: Translation.available?(@domain_root_account, :translation), # Is translation enabled on the course.
+               discussion_translation_languages: Translation.available?(@domain_root_account, :translation) ? Translation.translated_languages(@current_user) : [],
                discussion_anonymity_enabled: @context.feature_enabled?(:react_discussions_post),
+               user_can_summarize: @topic.user_can_summarize?(@current_user),
+               discussion_summary_enabled: @topic.summary_enabled,
                should_show_deeply_nested_alert: @current_user&.should_show_deeply_nested_alert?,
                # although there is a permissions object in DiscussionEntry type, it's only accessible if a discussion entry
                # is being replied to. We need this env var so that replying to the topic can use this
@@ -1219,22 +1243,17 @@ class DiscussionTopicsController < ApplicationController
   def public_feed
     return unless get_feed_context
 
-    feed = Atom::Feed.new do |f|
-      f.title = t :discussion_feed_title, "%{title} Discussion Feed", title: @context.name
-      f.links << Atom::Link.new(href: polymorphic_url([@context, :discussion_topics]), rel: "self")
-      f.updated = Time.now
-      f.id = polymorphic_url([@context, :discussion_topics])
-    end
+    title = t :discussion_feed_title, "%{title} Discussion Feed", title: @context.name
+    link = polymorphic_url([@context, :discussion_topics])
+
     @entries = []
     @entries.concat(@context.discussion_topics
                             .select { |dt| dt.visible_for?(@current_user) })
     @entries.concat @context.discussion_entries.active
     @entries = @entries.sort_by(&:updated_at)
-    @entries.each do |entry|
-      feed.entries << entry.to_atom
-    end
+
     respond_to do |format|
-      format.atom { render plain: feed.to_xml }
+      format.atom { render plain: AtomFeedHelper.render_xml(title:, link:, entries: @entries) }
     end
   end
 
@@ -1262,8 +1281,9 @@ class DiscussionTopicsController < ApplicationController
   protected
 
   def cancel_redirect_url
+    query_params = request.query_parameters.empty? ? {} : request.query_parameters
     topic_type = @topic.is_announcement ? :announcements : :discussion_topics
-    @topic.new_record? ? polymorphic_url([@context, topic_type]) : polymorphic_url([@context, @topic])
+    @topic.new_record? ? polymorphic_url([@context, topic_type], query_params) : polymorphic_url([@context, @topic], query_params)
   end
 
   def pinned_topics
@@ -1361,29 +1381,18 @@ class DiscussionTopicsController < ApplicationController
 
   def process_discussion_topic_runner(is_new:)
     @errors = {}
-
     if is_new && !@context.feature_enabled?(:react_discussions_post)
       params[:anonymous_state] = nil
     end
 
     # only full_anonymity and partial_anonymity can be stored. the rest will be nil'ed out
-    if is_new &&
-       !params[:anonymous_state].nil? &&
-       !(params[:anonymous_state] == "full_anonymity" || params[:anonymous_state] == "partial_anonymity")
-
+    if is_new && params[:anonymous_state].present? && ANONYMOUS_STATES.exclude?(params[:anonymous_state])
       params[:anonymous_state] = nil
     end
 
-    if is_new &&
-       !params[:anonymous_state].nil? &&
-       !@context.settings[:allow_student_anonymous_discussion_topics] &&
-       !@context.grants_right?(@current_user, session, :manage)
-      @errors[:anonymous_state] = t(:error_anonymous_state_unauthorized_create,
-                                    "You are not able to create an anonymous discussion")
-    end
-
     if is_new && params[:anonymous_state]
-      if params[:group_category_id]
+      # group discussions in a course or discussions simply in a group context cannot be anonymous
+      if params[:group_category_id] || @context.is_a?(Group)
         @errors[:anonymous_state] = t(:error_anonymous_state_groups_create,
                                       "Group discussions cannot be anonymous.")
       end
@@ -1391,6 +1400,29 @@ class DiscussionTopicsController < ApplicationController
         @errors[:anonymous_state] = t(:error_graded_anonymous,
                                       "Anonymous discussions cannot be graded")
       end
+    end
+
+    attachment = params[:attachment]
+
+    if is_new && attachment
+      get_quota(@context)
+      if attachment.size + @quota_used > @quota
+        error = t "#application.errors.quota_exceeded_course", "Course storage quota exceeded"
+        respond_to do |format|
+          format.json { render json: { errors: { base: error } }, status: :bad_request }
+        end
+        return
+      end
+    end
+
+    # Groups do not have settings like courses do, so only run this for Course contexts
+    if is_new &&
+       !params[:anonymous_state].nil? &&
+       @context.is_a?(Course) &&
+       !@context.settings[:allow_student_anonymous_discussion_topics] &&
+       !@context.grants_right?(@current_user, session, :manage)
+      @errors[:anonymous_state] = t(:error_anonymous_state_unauthorized_create,
+                                    "You are not able to create an anonymous discussion")
     end
 
     model_type = if value_to_boolean(params[:is_announcement]) &&
@@ -1409,11 +1441,16 @@ class DiscussionTopicsController < ApplicationController
       end
     else
       @topic = @context.send(model_type).active.find(params[:id] || params[:topic_id])
-      if params.include?(:anonymous_state) && @topic.anonymous_state != params[:anonymous_state]
-        @errors[:anonymous_state] = t(:error_anonymous_state_unauthorized_update,
-                                      "You are not able to update the anonymous state of a discussion")
-      end
+
       prior_version = DiscussionTopic.find(@topic.id)
+      if params.include?(:anonymous_state) && prior_version.anonymous_state != params[:anonymous_state] && prior_version.discussion_subentry_count > 0
+        @errors[:anonymous_state] = { "message" => t(:error_anonymous_state_unauthorized_update,
+                                                     "Anonymity settings are locked due to a posted reply") }
+      end
+      if ANONYMOUS_STATES.include?(@topic.anonymous_state) && params[:group_category_id]
+        @errors[:anonymous_state] = t(:error_anonymous_state_groups_update,
+                                      "Group discussions cannot be anonymous.")
+      end
       verify_specific_section_visibilities # Make sure user actually has perms to modify this
     end
 
@@ -1622,7 +1659,7 @@ class DiscussionTopicsController < ApplicationController
     end
     @topic.lock_at = discussion_topic_hash[:lock_at] if params.key? :lock_at
 
-    if @topic.delayed_post_at_changed? || @topic.lock_at_changed?
+    if @topic.unlock_at_changed? || @topic.delayed_post_at_changed? || @topic.lock_at_changed?
       @topic.workflow_state = @topic.should_not_post_yet ? "post_delayed" : "active"
       if @topic.should_lock_yet
         @topic.lock(without_save: true)
@@ -1781,6 +1818,10 @@ class DiscussionTopicsController < ApplicationController
       )
     end
     extra_params[:module_item_id] = params[:module_item_id] if params[:module_item_id].present?
+    extra_params[:embed] = params[:embed] if params[:embed].present?
+    extra_params[:display] = params[:display] if params[:display].present?
+    extra_params[:session_timezone] = params[:session_timezone] if params[:session_timezone].present?
+    extra_params[:session_locale] = params[:session_locale] if params[:session_locale].present?
 
     @root_topic = @context.context.discussion_topics.find(params[:root_discussion_topic_id])
     @topic = @root_topic.ensure_child_topic_for(@context)

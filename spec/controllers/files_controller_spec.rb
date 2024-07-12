@@ -306,6 +306,24 @@ describe FilesController do
       end
     end
 
+    describe "sets the X-Robots-Tag" do
+      it "sets the X-Robots-Tag header to noindex, nofollow" do
+        verifier = Attachments::Verification.new(@file).verifier_for_user(nil)
+        get "show", params: { course_id: @course.id, id: @file.id, verifier: }, format: "json"
+        expect(response).to be_successful
+        expect(response.headers["X-Robots-Tag"]).to eq("noindex, nofollow")
+      end
+
+      it "does not set the X-Robots-Tag header if the account allows indexing" do
+        @course.root_account.settings[:enable_search_indexing] = true
+        @course.root_account.save!
+        verifier = Attachments::Verification.new(@file).verifier_for_user(nil)
+        get "show", params: { course_id: @course.id, id: @file.id, verifier: }, format: "json"
+        expect(response).to be_successful
+        expect(response.headers["X-Robots-Tag"]).to be_nil
+      end
+    end
+
     it "assigns variables" do
       user_session(@teacher)
       get "show", params: { course_id: @course.id, id: @file.id }
@@ -617,12 +635,28 @@ describe FilesController do
         expect(@module.evaluate_for(@student).state).to be(:completed)
       end
 
-      it "marks pdf files viewed when rendering html with file_preview" do
-        @file = attachment_model(context: @course, uploaded_data: stub_file_data("test.pdf", "asdf", "application/pdf"))
+      it "marks previewable files as viewed when rendering html with file_preview" do
+        odp = attachment_model(context: @course, uploaded_data: stub_file_data("test.odp", "asdf", "application/vnd.oasis.opendocument.presentation"))
+        odt = attachment_model(context: @course, uploaded_data: stub_file_data("test.odt", "asdf", "application/vnd.oasis.opendocument.text"))
+        docx = attachment_model(context: @course, uploaded_data: stub_file_data("test.docx", "asdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
+        pptx = attachment_model(context: @course, uploaded_data: stub_file_data("test.pptx", "asdf", "application/vnd.openxmlformats-officedocument.presentationml.presentation"))
+        pdf = attachment_model(context: @course, uploaded_data: stub_file_data("test.pdf", "asdf", "application/pdf"))
+        rft = attachment_model(context: @course, uploaded_data: stub_file_data("test.rft", "asdf", "application/rtf"))
+        [odp, odt, docx, pptx, pdf, rft].each do |file|
+          @file = file
+          file_in_a_module
+          get "show", params: { course_id: @course.id, id: @file.id }, format: :html
+          @module.reload
+          expect(@module.evaluate_for(@student).state).to be(:completed)
+        end
+      end
+
+      it "does not mark as viewed not previewable files" do
+        @file = attachment_model(context: @course, uploaded_data: stub_file_data("test", "asdf", "application/unknown"))
         file_in_a_module
         get "show", params: { course_id: @course.id, id: @file.id }, format: :html
         @module.reload
-        expect(@module.evaluate_for(@student).state).to be(:completed)
+        expect(@module.evaluate_for(@student).state).to be(:unlocked)
       end
 
       it "redirects to the user's files URL when browsing to an attachment with the same path as a deleted attachment" do
@@ -1418,7 +1452,7 @@ describe FilesController do
     end
 
     before do
-      @content = Rack::Test::UploadedFile.new(File.join(RSpec.configuration.fixture_path, "courses.yml"), "")
+      @content = Rack::Test::UploadedFile.new(file_fixture("a_file.txt"), "")
       request.env["CONTENT_TYPE"] = "multipart/form-data"
       enable_forgery_protection
     end
@@ -1431,7 +1465,7 @@ describe FilesController do
       @attachment.reload
       # the file is not available until the third api call is completed
       expect(@attachment.file_state).to eq "deleted"
-      expect(@attachment.open.read).to eq File.read(File.join(RSpec.configuration.fixture_path, "courses.yml"))
+      expect(@attachment.open.read).to eq file_fixture("a_file.txt").read
     end
 
     it "opens up cors headers" do
@@ -1724,6 +1758,40 @@ describe FilesController do
             request
 
             expect(progress.reload.workflow_state).to eq "failed"
+          end
+        end
+      end
+
+      context "with precreated attachment" do
+        let(:attachment) do
+          folder.attachments.create!(
+            context: course,
+            user:,
+            file_state: "deleted"
+          )
+        end
+
+        let(:params) do
+          super().merge(
+            precreated_attachment_id: attachment.id
+          )
+        end
+
+        it "marks attachment available" do
+          post("api_capture", params:)
+          expect(attachment.reload.file_state).to eq "available"
+        end
+
+        context "when id is wrong" do
+          let(:params) do
+            super().merge(
+              precreated_attachment_id: attachment.id + 42
+            )
+          end
+
+          it "returns an error" do
+            post("api_capture", params:)
+            assert_status(422)
           end
         end
       end

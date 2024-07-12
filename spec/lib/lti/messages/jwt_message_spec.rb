@@ -36,8 +36,12 @@ describe Lti::Messages::JwtMessage do
       }
     )
   end
+  let(:nonce) { SecureRandom.uuid }
+  let(:post_payload) do
+    jwt_message.to_cached_hash.to_json
+  end
   let(:decoded_jwt) do
-    jws = Lti::Messages::JwtMessage.generate_id_token(jwt_message.generate_post_payload)
+    jws = Lti::Messages::JwtMessage.generate_id_token(Lti::Messages::JwtMessage.cached_hash_to_launch(JSON.parse(post_payload), nonce))
     JSON::JWT.decode(jws[:id_token], pub_key)
   end
   let(:pub_key) do
@@ -87,7 +91,7 @@ describe Lti::Messages::JwtMessage do
 
   describe "signing" do
     it "signs the id token with the current canvas private key" do
-      jws = Lti::Messages::JwtMessage.generate_id_token(jwt_message.generate_post_payload)
+      jws = Lti::Messages::JwtMessage.generate_id_token(jwt_message.to_cached_hash)
 
       expect do
         JSON::JWT.decode(jws[:id_token], pub_key)
@@ -124,7 +128,7 @@ describe Lti::Messages::JwtMessage do
 
     it 'sets the "nonce" claim to a unique ID' do
       first_nonce = decoded_jwt["nonce"]
-      jws = Lti::Messages::JwtMessage.generate_id_token(jwt_message.generate_post_payload)
+      jws = Lti::Messages::JwtMessage.generate_id_token(jwt_message.to_cached_hash)
       second_nonce = JSON::JWT.decode(jws[:id_token], pub_key)["nonce"]
 
       expect(first_nonce).not_to eq second_nonce
@@ -203,10 +207,6 @@ describe Lti::Messages::JwtMessage do
 
       it 'does not set the "iss" claim' do
         expect(decoded_jwt).not_to include "iss"
-      end
-
-      it 'does not set the "nonce" claim' do
-        expect(decoded_jwt).not_to include "nonce"
       end
 
       it 'does not set the "sub" claim' do
@@ -613,23 +613,12 @@ describe Lti::Messages::JwtMessage do
     let(:lti_advantage_service_claim_group) { :names_and_roles_service }
 
     shared_examples "names and roles claim check" do
-      context "when the consistent_ags_ids_based_on_account_principal_domain feature flag is on" do
-        it "sets the NRPS url using the Account#domain" do
-          context.root_account.enable_feature! :consistent_ags_ids_based_on_account_principal_domain
-          expect_any_instance_of(Account).to receive(:environment_specific_domain).and_return("account_host")
-          expect(lti_advantage_service_claim["context_memberships_url"]).to eq "polymorphic_url"
-          expect(controller).to have_received(:polymorphic_url).with(
-            [anything, :names_and_roles], host: "account_host"
-          )
-        end
-      end
-
-      context "when the consistent_ags_ids_based_on_account_principal_domain feature flag is off" do
-        it "sets the NRPS url using the request host" do
-          context.root_account.disable_feature! :consistent_ags_ids_based_on_account_principal_domain
-          expect(lti_advantage_service_claim["context_memberships_url"]).to eq "polymorphic_url"
-          expect(controller).to have_received(:polymorphic_url).with([anything, :names_and_roles])
-        end
+      it "sets the NRPS url using the Account#domain" do
+        expect_any_instance_of(Account).to receive(:environment_specific_domain).and_return("account_host")
+        expect(lti_advantage_service_claim["context_memberships_url"]).to eq "polymorphic_url"
+        expect(controller).to have_received(:polymorphic_url).with(
+          [anything, :names_and_roles], host: "account_host"
+        )
       end
 
       it "sets the NRPS version" do
@@ -665,7 +654,6 @@ describe Lti::Messages::JwtMessage do
     let(:lti_advantage_service_claim_group) { :assignment_and_grade_service }
 
     before do
-      course.account.enable_feature!(:consistent_ags_ids_based_on_account_principal_domain)
       allow_any_instance_of(Account).to receive(:environment_specific_domain).and_return("canonical_domain")
       allow(controller).to receive(:lti_line_item_index_url)
         .with({ host: "canonical_domain", course_id: course.id })
@@ -715,13 +703,13 @@ describe Lti::Messages::JwtMessage do
     end
 
     it "adds placement-specific custom parameters" do
-      Lti::Messages::JwtMessage.generate_id_token(jwt_message.generate_post_payload)
+      Lti::Messages::JwtMessage.generate_id_token(jwt_message.to_cached_hash)
       expect(message_custom["no_expansion"]).to eq "foo"
     end
 
     it "expands variable expansions" do
-      Lti::Messages::JwtMessage.generate_id_token(jwt_message.generate_post_payload)
-      expect(message_custom["has_expansion"]).to eq user.id
+      Lti::Messages::JwtMessage.generate_id_token(jwt_message.to_cached_hash)
+      expect(message_custom["has_expansion"]).to eq user.id.to_s
     end
 
     context "when custom parameters claim group disabled" do
@@ -808,7 +796,7 @@ describe Lti::Messages::JwtMessage do
       expect(decoded_jwt.dig("https://purl.imsglobal.org/spec/lti/claim/lis", "person_sourcedid")).to eq "$Person.sourcedId"
     end
 
-    it "adds the coures offering sourcedid" do
+    it "adds the courses offering sourcedid" do
       course.update!(sis_source_id: SecureRandom.uuid)
       expect(decoded_jwt.dig("https://purl.imsglobal.org/spec/lti/claim/lis", "course_offering_sourcedid")).to eq course.sis_source_id
     end
@@ -900,7 +888,7 @@ describe Lti::Messages::JwtMessage do
       end
 
       let(:account_jwt) do
-        jws = Lti::Messages::JwtMessage.generate_id_token(account_jwt_message.generate_post_payload)
+        jws = Lti::Messages::JwtMessage.generate_id_token(account_jwt_message.to_cached_hash)
         JSON::JWT.decode(jws[:id_token], pub_key)
       end
     end
@@ -1032,35 +1020,12 @@ describe Lti::Messages::JwtMessage do
       let!(:associated_1_1_tool) { external_tool_model(context: course, opts: { url: "http://www.example.com/basic_lti" }) }
 
       before do
-        allow(Lti::Helpers::JwtMessageHelper).to receive(:generate_oauth_consumer_key_sign).and_return("avalidsignature")
+        allow(Lti::Helpers::JwtMessageHelper).to receive(:generate_oauth_consumer_key_sign).and_return("a_valid_signature")
       end
 
-      context "the include_oauth_consumer_key_in_lti_launch flag is enabled" do
-        before do
-          Account.site_admin.enable_feature!(:include_oauth_consumer_key_in_lti_launch)
-        end
-
-        it "includes the oauth_consumer_key related claims" do
-          expect(subject["oauth_consumer_key"]).to eq associated_1_1_tool.consumer_key
-          expect(subject["oauth_consumer_key_sign"]).to eq "avalidsignature"
-        end
-      end
-
-      context "the include_oauth_consumer_key_in_lti_launch flag is disabled" do
-        before do
-          Account.site_admin.disable_feature!(:include_oauth_consumer_key_in_lti_launch)
-        end
-
-        it "doesn't include the oauth_consumer_key related claims" do
-          expect(subject).not_to include "oauth_consumer_key"
-          expect(subject).not_to include "oauth_consumer_key_sign"
-        end
-
-        it "doesn't attempt to perform any lookups" do
-          expect_any_instance_of(ContextExternalTool).not_to receive(:associated_1_1_tool)
-          expect(subject).not_to include "oauth_consumer_key"
-          expect(subject).not_to include "oauth_consumer_key_sign"
-        end
+      it "includes the oauth_consumer_key related claims" do
+        expect(subject["oauth_consumer_key"]).to eq associated_1_1_tool.consumer_key
+        expect(subject["oauth_consumer_key_sign"]).to eq "a_valid_signature"
       end
     end
 
@@ -1068,6 +1033,28 @@ describe Lti::Messages::JwtMessage do
       it "doesn't include the oauth_consumer_key related claims" do
         expect(subject).not_to include "oauth_consumer_key"
         expect(subject).not_to include "oauth_consumer_key_sign"
+      end
+    end
+  end
+
+  describe "inst-specific extension claims" do
+    subject { decoded_jwt["https://www.instructure.com/#{claim}"] }
+
+    context "placement claim" do
+      let(:claim) { "placement" }
+
+      it "matches the resource_type" do
+        expect(subject).to eq opts[:resource_type]
+      end
+    end
+
+    context "lti_student_id claim" do
+      let(:claim) { "lti_student_id" }
+      let(:student_id) { "123" }
+      let(:opts) { { student_id: } }
+
+      it "uses student_id from opts" do
+        expect(subject).to eq student_id
       end
     end
   end

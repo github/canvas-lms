@@ -45,6 +45,8 @@ module Types
 
     field :mime_class, String, null: true
 
+    field :word_count, Integer, null: true
+
     field :size, String, null: true
     def size
       ActiveSupport::NumberHelper.number_to_human_size(object.size)
@@ -56,6 +58,9 @@ module Types
 
       authenticated_thumbnail_url(object)
     end
+
+    field :usage_rights, UsageRightsType, null: true
+    delegate :usage_rights, to: :object
 
     field :url, Types::UrlType, null: true
     def url
@@ -71,10 +76,14 @@ module Types
       GraphQLHelpers::UrlHelpers.file_download_url(object, opts)
     end
 
-    field :submission_preview_url, Types::UrlType, null: true do
-      argument :submission_id, ID, required: true, prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("Submission")
+    field :submission_preview_url, Types::UrlType, null: true, extras: [:parent] do
+      argument :submission_id, ID, required: false, prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("Submission")
     end
-    def submission_preview_url(submission_id:)
+    def submission_preview_url(parent:, submission_id: nil)
+      if parent.is_a?(Submission) || submission_id.nil?
+        return unless submission_id ||= parent&.id
+      end
+
       return if object.locked_for?(current_user, check_policies: true)
 
       Loaders::IDLoader.for(Submission).load(submission_id).then do |submission|

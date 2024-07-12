@@ -17,11 +17,12 @@
 
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import _ from 'underscore'
+import {map, some, compact, difference, filter, includes} from 'lodash'
 import DialogBaseView from '@canvas/dialog-base-view'
 import RosterDialogMixin from './RosterDialogMixin'
 import linkToStudentsViewTemplate from '../../jst/LinkToStudentsView.handlebars'
 import '@canvas/jquery/jquery.disableWhileLoading'
+import '../../jquery/ContextSearch'
 
 const I18n = useI18nScope('course_settings')
 
@@ -32,6 +33,8 @@ export default class LinkToStudentsView extends DialogBaseView {
     this.prototype.dialogOptions = {
       id: 'link_students',
       title: I18n.t('titles.link_to_students', 'Link to Students'),
+      modal: true,
+      zIndex: 1000,
     }
   }
 
@@ -64,9 +67,11 @@ export default class LinkToStudentsView extends DialogBaseView {
     })
     const input = this.$('#student_input').data('token_input')
     input.$fakeInput.css('width', '100%')
+    input.$fakeInput.css('min-height', '78px')
+    input.$fakeInput.css('overflow', 'auto')
 
     for (const e of this.model.allEnrollmentsByType('ObserverEnrollment')) {
-      if (e.observed_user && _.some(e.observed_user.enrollments)) {
+      if (e.observed_user && some(e.observed_user.enrollments)) {
         input.addToken({
           value: e.observed_user.id,
           text: e.observed_user.name,
@@ -102,10 +107,11 @@ export default class LinkToStudentsView extends DialogBaseView {
     const dfds = []
     const enrollments = this.model.allEnrollmentsByType('ObserverEnrollment')
     const enrollment = enrollments[0]
-    const currentLinks = _.compact(_.pluck(enrollments, 'associated_user_id'))
-    const newLinks = _.difference(this.students, currentLinks)
-    const removeLinks = _.difference(currentLinks, this.students)
+    const currentLinks = compact(map(enrollments, 'associated_user_id'))
+    const newLinks = difference(this.students, currentLinks)
+    const removeLinks = difference(currentLinks, this.students)
     const newEnrollments = []
+    let observerObservingObserver = false
 
     if (newLinks.length) {
       newDfd = $.Deferred()
@@ -118,7 +124,7 @@ export default class LinkToStudentsView extends DialogBaseView {
       // eslint-disable-next-line no-loop-func
       this.getUserData(id).done(user => {
         const udfds = []
-        const sections = _.map(user.enrollments, en => en.course_section_id)
+        const sections = map(user.enrollments, en => en.course_section_id)
         for (const sId of sections) {
           const url = `/api/v1/sections/${sId}/enrollments`
           const data = {
@@ -133,12 +139,35 @@ export default class LinkToStudentsView extends DialogBaseView {
             data.enrollment.role_id = enrollment.role_id
           }
           udfds.push(
-            $.ajaxJSON(url, 'POST', data, newEnrollment => {
-              newEnrollment.observed_user = user
-              return newEnrollments.push(newEnrollment)
-            })
+            $.ajaxJSON(
+              url,
+              'POST',
+              data,
+              newEnrollment => {
+                newEnrollment.observed_user = user
+                return newEnrollments.push(newEnrollment)
+              },
+              // eslint-disable-next-line no-loop-func
+              response => {
+                const messages = Object.keys(response.errors)
+
+                if (messages.length > 0 && messages.includes('associated_user_id')) {
+                  const responseMessage = response.errors.associated_user_id[0].message
+                  if (responseMessage === 'Cannot observe observer observing self') {
+                    observerObservingObserver = true
+                  }
+                }
+              }
+            )
           )
         }
+
+        $.when(...Array.from(udfds || [])).fail(() => {
+          if (observerObservingObserver) {
+            newDfd.reject()
+          }
+        })
+
         return $.when(...Array.from(udfds || [])).done(() => {
           dfdsDone += 1
           if (dfdsDone === newLinks.length) {
@@ -149,8 +178,8 @@ export default class LinkToStudentsView extends DialogBaseView {
     }
 
     // delete old links
-    const enrollmentsToRemove = _.filter(enrollments, en =>
-      _.includes(removeLinks, en.associated_user_id)
+    const enrollmentsToRemove = filter(enrollments, en =>
+      includes(removeLinks, en.associated_user_id)
     )
     for (const en of enrollmentsToRemove) {
       const url = `${ENV.COURSE_ROOT_URL}/unenroll/${en.id}`
@@ -163,14 +192,23 @@ export default class LinkToStudentsView extends DialogBaseView {
           this.updateEnrollments(newEnrollments, enrollmentsToRemove)
           return $.flashMessage(I18n.t('flash.links', 'Student links successfully updated'))
         })
-        .fail(() =>
-          $.flashError(
-            I18n.t(
-              'flash.linkError',
-              "Something went wrong updating the user's student links. Please try again later."
+        .fail(() => {
+          if (observerObservingObserver) {
+            $.flashError(
+              I18n.t(
+                'flash.observerObservingObserverError',
+                'Cannot observe user with another user that is being observed by the current user.'
+              )
             )
-          )
-        )
+          } else {
+            $.flashError(
+              I18n.t(
+                'flash.linkError',
+                "Something went wrong updating the user's student links. Please try again later."
+              )
+            )
+          }
+        })
         .always(() => this.close())
     )
   }

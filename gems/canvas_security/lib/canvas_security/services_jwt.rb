@@ -73,9 +73,18 @@ class CanvasSecurity::ServicesJwt
   end
 
   # Symmetric services JWTs are now deprecated
-  def self.generate(payload_data, base64 = true, symmetric: false)
+  def self.generate(payload_data, base64 = true, symmetric: false, encrypt: true)
+    raise ArgumentError, "Cannot generate a symmetric, non-encrypted JWT" if symmetric && !encrypt
+
     payload = create_payload(payload_data)
-    crypted_token = if symmetric
+    crypted_token = if !encrypt
+                      CanvasSecurity.create_jwt(
+                        payload,
+                        nil,
+                        CanvasSecurity::ServicesJwt::KeyStorage.present_key,
+                        :autodetect
+                      )
+                    elsif symmetric
                       CanvasSecurity.create_encrypted_jwt(payload, signing_secret, encryption_secret)
                     else
                       CanvasSecurity.create_encrypted_jwt(
@@ -90,7 +99,7 @@ class CanvasSecurity::ServicesJwt
     CanvasSecurity.base64_encode(crypted_token)
   end
 
-  def self.for_user(domain, user, real_user: nil, workflows: nil, context: nil, symmetric: false)
+  def self.for_user(domain, user, real_user: nil, workflows: nil, context: nil, symmetric: false, encrypt: true)
     if domain.blank? || user.nil?
       raise ArgumentError, "Must have a domain and a user to build a JWT"
     end
@@ -109,7 +118,7 @@ class CanvasSecurity::ServicesJwt
       payload[:context_type] = context.class.name
       payload[:context_id] = context.id.to_s
     end
-    generate(payload, symmetric:)
+    generate(payload, symmetric:, encrypt:)
   end
 
   def self.refresh_for_user(jwt, domain, user, real_user: nil, symmetric: false)

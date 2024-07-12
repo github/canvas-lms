@@ -27,7 +27,10 @@ import {fireEvent, render} from '@testing-library/react'
 import {getSpeedGraderUrl} from '../../../utils'
 import {MockedProvider} from '@apollo/react-testing'
 import React from 'react'
-import {updateDiscussionEntryParticipantMock} from '../../../../graphql/Mocks'
+import {
+  updateDiscussionEntryParticipantMock,
+  updateDiscussionThreadReadStateMock,
+} from '../../../../graphql/Mocks'
 import {User} from '../../../../graphql/User'
 import {waitFor} from '@testing-library/dom'
 
@@ -98,17 +101,34 @@ describe('DiscussionThreadContainer', () => {
   })
 
   it('should not render reply button if reply permission is false', () => {
-    const {queryByTestId} = setup(
+    const {container} = setup(
       defaultProps({
         discussionEntryOverrides: {permissions: DiscussionEntryPermissions.mock({reply: false})},
       })
     )
-    expect(queryByTestId('threading-toolbar-reply')).not.toBeInTheDocument()
+    expect(container.querySelector('svg[name="IconDiscussionReply2"]')).not.toBeInTheDocument()
   })
 
   it('should render reply button if reply permission is true', () => {
-    const {queryByTestId} = setup(defaultProps())
-    expect(queryByTestId('threading-toolbar-reply')).toBeInTheDocument()
+    const {container} = setup(defaultProps())
+    expect(container.querySelector('svg[name="IconDiscussionReply2"]')).toBeInTheDocument()
+  })
+
+  it('should not render quote button if reply permission is false', () => {
+    const {queryAllByText, getByTestId} = setup(
+      defaultProps({
+        discussionEntryOverrides: {permissions: DiscussionEntryPermissions.mock({reply: false})},
+      })
+    )
+    fireEvent.click(getByTestId('thread-actions-menu'))
+    expect(queryAllByText('Quote Reply').length).toBe(0)
+  })
+
+  it('should render quote button if reply permission is true', () => {
+    const {getByTestId, getByText} = setup(defaultProps())
+    fireEvent.click(getByTestId('thread-actions-menu'))
+
+    expect(getByText('Quote Reply')).toBeInTheDocument()
   })
 
   describe('delete permission', () => {
@@ -166,12 +186,24 @@ describe('DiscussionThreadContainer', () => {
     })
 
     it('Should render Mark Thread as Unread and Read', () => {
-      const {getByTestId, getAllByText} = setup(defaultProps())
+      window.location = {assign: jest.fn()}
+      const setHighlightEntryId = jest.fn()
+      const {getByTestId, getAllByText} = setup(
+        defaultProps({propOverrides: {setHighlightEntryId}}),
+        updateDiscussionThreadReadStateMock({
+          discussionEntryId: 'DiscussionEntry-default-mock',
+          read: false,
+        })
+      )
 
       fireEvent.click(getByTestId('thread-actions-menu'))
 
       expect(getAllByText('Mark Thread as Unread').length).toBe(1)
       expect(getAllByText('Mark Thread as Read').length).toBe(1)
+
+      fireEvent.click(getAllByText('Mark Thread as Unread')[0])
+      expect(setHighlightEntryId.mock.calls.length).toBe(1)
+      expect(setHighlightEntryId).toHaveBeenCalledWith('DiscussionEntry-default-mock')
     })
 
     describe('error handling', () => {
@@ -288,21 +320,6 @@ describe('DiscussionThreadContainer', () => {
 
   describe('Unread Badge', () => {
     describe('should find unread badge', () => {
-      it('root is read and child reply is unread', () => {
-        const container = setup(
-          defaultProps({
-            discussionEntryOverrides: {
-              rootEntryParticipantCounts: {
-                unreadCount: 1,
-                repliesCount: 1,
-                __typename: 'DiscussionEntryCounts',
-              },
-            },
-          })
-        )
-        expect(container.getByTestId('is-unread')).toBeInTheDocument()
-      })
-
       it('root is unread and child reply is unread', () => {
         const container = setup(
           defaultProps({
@@ -390,45 +407,59 @@ describe('DiscussionThreadContainer', () => {
   })
 
   describe('Report Reply', () => {
-    it('show Report', () => {
+    it('does not show Report', () => {
       const {getByTestId, queryByText} = setup(defaultProps())
 
       fireEvent.click(getByTestId('thread-actions-menu'))
 
-      expect(queryByText('Report')).toBeTruthy()
+      expect(queryByText('Report')).toBeNull()
     })
 
-    it('show Reported', () => {
-      const {getByTestId, queryByText} = setup(
-        defaultProps({
-          discussionEntryOverrides: {
-            entryParticipant: {
-              reportType: 'other',
+    describe('when feature flag and setting is enabled', () => {
+      beforeAll(() => {
+        window.ENV.discussions_reporting = true
+      })
+
+      it('show Report', () => {
+        const {getByTestId, queryByText} = setup(defaultProps())
+
+        fireEvent.click(getByTestId('thread-actions-menu'))
+
+        expect(queryByText('Report')).toBeTruthy()
+      })
+
+      it('show Reported', () => {
+        const {getByTestId, queryByText} = setup(
+          defaultProps({
+            discussionEntryOverrides: {
+              entryParticipant: {
+                reportType: 'other',
+              },
             },
-          },
+          })
+        )
+
+        fireEvent.click(getByTestId('thread-actions-menu'))
+
+        expect(queryByText('Reported')).toBeTruthy()
+      })
+
+      it('can Report', async () => {
+        const {getByTestId, queryByText} = setup(
+          defaultProps(),
+          updateDiscussionEntryParticipantMock({
+            reportType: 'other',
+          })
+        )
+
+        fireEvent.click(getByTestId('thread-actions-menu'))
+        fireEvent.click(queryByText('Report'))
+        fireEvent.click(queryByText('Other'))
+        fireEvent.click(getByTestId('report-reply-submit-button'))
+
+        await waitFor(() => {
+          expect(onSuccessStub).toHaveBeenCalledWith('You have reported this reply.', false)
         })
-      )
-
-      fireEvent.click(getByTestId('thread-actions-menu'))
-
-      expect(queryByText('Reported')).toBeTruthy()
-    })
-
-    it('can Report', async () => {
-      const {getByTestId, queryByText} = setup(
-        defaultProps(),
-        updateDiscussionEntryParticipantMock({
-          reportType: 'other',
-        })
-      )
-
-      fireEvent.click(getByTestId('thread-actions-menu'))
-      fireEvent.click(queryByText('Report'))
-      fireEvent.click(queryByText('Other'))
-      fireEvent.click(getByTestId('report-reply-submit-button'))
-
-      await waitFor(() => {
-        expect(onSuccessStub).toHaveBeenCalledWith('You have reported this reply.', false)
       })
     })
   })

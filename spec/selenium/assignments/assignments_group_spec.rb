@@ -27,8 +27,8 @@ describe "assignment group that can't manage assignments" do
   it "does not display the manage cog menu" do
     @domain_root_account = Account.default
     course_factory
-    account_admin_user_with_role_changes(role_changes: { manage_course: true,
-                                                         manage_assignments: false })
+    account_admin_user_with_role_changes(role_changes: { manage_courses_admin: true,
+                                                         manage_assignments_edit: false })
     user_session(@user)
     @course.require_assignment_group
     @assignment_group = @course.assignment_groups.first
@@ -57,11 +57,27 @@ describe "assignment groups" do
     @course.assignments.create(name: "test", assignment_group: @assignment_group)
   end
 
+  # EVAL-3711 Remove this test when instui_nav feature flag is removed
   it "creates a new assignment group", priority: "1" do
     get "/courses/#{@course.id}/assignments"
     wait_for_ajaximations
 
     f("#addGroup").click
+    wait_for_ajaximations
+
+    replace_content(f("#ag_new_name"), "Second AG")
+    fj(".create_group:visible").click
+    wait_for_ajaximations
+
+    expect(ff(".assignment_group .ig-header h2").map(&:text)).to include("Second AG")
+  end
+
+  it "creates a new assignment group with the instui nav feature flag on", priority: "1" do
+    @course.root_account.enable_feature!(:instui_nav)
+    get "/courses/#{@course.id}/assignments"
+    wait_for_ajaximations
+
+    f("[data-testid='new_group_button']").click
     wait_for_ajaximations
 
     replace_content(f("#ag_new_name"), "Second AG")
@@ -368,11 +384,10 @@ describe "assignment groups" do
     it "is not locked for admin", priority: "2" do
       @course.assignment_groups.create!(name: "other")
       course_with_admin_logged_in(course: @course, name: "admin user")
-      orig_title = @frozen_assign.title
 
       run_assignment_edit(@frozen_assign) do
         # title isn't locked, should allow editing
-        f("#assignment_name").send_keys("edit")
+        f("#assignment_name").send_keys("edited")
 
         expect(f("#assignment_group_id")).not_to be_disabled
         expect(f("#assignment_peer_reviews")).not_to be_disabled
@@ -380,7 +395,7 @@ describe "assignment groups" do
         click_option("#assignment_group_id", "other")
       end
 
-      expect(f("h1.title")).to include_text("edit" + orig_title)
+      expect(f("h1.title")).to include_text("edited")
       expect(@frozen_assign.reload.assignment_group.name).to eq "other"
     end
   end

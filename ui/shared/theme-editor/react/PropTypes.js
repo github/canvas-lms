@@ -17,7 +17,6 @@
  */
 
 import PropTypes from 'prop-types'
-import _ from 'underscore'
 
 const MD5_REGEX = /[0-9a-fA-F]{32}$/
 const types = {}
@@ -37,35 +36,23 @@ const baseVarDef = {
 
 types.variables = PropTypes.objectOf(PropTypes.string).isRequired
 
-types.color = PropTypes.shape(
-  _.extend(
-    {
-      type: PropTypes.oneOf(['color']).isRequired,
-    },
-    baseVarDef
-  )
-)
+types.color = PropTypes.shape({
+  type: PropTypes.oneOf(['color']).isRequired,
+  ...baseVarDef,
+})
 
-types.image = PropTypes.shape(
-  _.extend(
-    {
-      type: PropTypes.oneOf(['image']).isRequired,
-      accept: PropTypes.string.isRequired,
-      helper_text: PropTypes.string,
-    },
-    baseVarDef
-  )
-)
+types.image = PropTypes.shape({
+  type: PropTypes.oneOf(['image']).isRequired,
+  accept: PropTypes.string.isRequired,
+  helper_text: PropTypes.string,
+  ...baseVarDef,
+})
 
-types.percentage = PropTypes.shape(
-  _.extend(
-    {
-      type: PropTypes.oneOf(['percentage']).isRequired,
-      helper_text: PropTypes.string,
-    },
-    baseVarDef
-  )
-)
+types.percentage = PropTypes.shape({
+  type: PropTypes.oneOf(['percentage']).isRequired,
+  helper_text: PropTypes.string,
+  ...baseVarDef,
+})
 
 types.varDef = PropTypes.oneOfType([types.image, types.color, types.percentage])
 
@@ -81,7 +68,7 @@ types.sharedBrandConfig = PropTypes.shape({
 })
 
 types.variableGroup = PropTypes.shape({
-  group_name: PropTypes.string.isRequired,
+  group_name: PropTypes.string,
   variables: PropTypes.arrayOf(types.varDef).isRequired,
 })
 
@@ -90,7 +77,7 @@ types.userVariableInput = PropTypes.shape({
   invalid: PropTypes.bool,
 })
 
-types.variableSchema = PropTypes.arrayOf(types.variableGroup).isRequired
+types.variableSchema = PropTypes.arrayOf(types.variableGroup)
 
 types.variableDescription = PropTypes.shape({
   default: PropTypes.string.isRequired,

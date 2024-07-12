@@ -60,7 +60,7 @@ describe "as a student" do
           StudentAssignmentPageV2.visit(@course, assignment)
           wait_for_ajaximations
 
-          expect(f("body")).not_to contain_jqcss("span:contains('#{assignment.points_possible}'))")
+          expect(f("body")).not_to contain_jqcss("span:contains('#{assignment.points_possible}')")
         end
       end
 
@@ -78,9 +78,9 @@ describe "as a student" do
           user_session(@student)
           StudentAssignmentPageV2.visit(@course, assignment)
           wait_for_ajaximations
-          expect(f("span.selected-submission-grade").text).to include("A-")
+          expect(f("span.selected-submission-grade").text).to include("A−")
           expect(f("span.selected-submission-grade").text).not_to include("9")
-          expect(f("span[data-testid='grade-display']").text).to include("A-")
+          expect(f("span[data-testid='grade-display']").text).to include("A−")
           expect(f("span[data-testid='grade-display']").text).not_to include("9")
         end
 
@@ -205,9 +205,9 @@ describe "as a student" do
           StudentAssignmentPageV2.visit(@course, assignment)
           wait_for_ajaximations
           # making sure 9 does not show implicitly makes sure 90% does not show as well
-          expect(f("span.selected-submission-grade").text).to include("A-")
+          expect(f("span.selected-submission-grade").text).to include("A−")
           expect(f("span.selected-submission-grade").text).not_to include("9")
-          expect(f("span[data-testid='grade-display']").text).to include("A-")
+          expect(f("span[data-testid='grade-display']").text).to include("A−")
           expect(f("span[data-testid='grade-display']").text).not_to include("9")
         end
 
@@ -225,8 +225,8 @@ describe "as a student" do
           StudentAssignmentPageV2.visit(@course, assignment)
           wait_for_ajaximations
           # making sure 9 does not show implicitly makes sure 90% does not show as well
-          expect(f("span.selected-submission-grade").text).to include("A-")
-          expect(f("span[data-testid='grade-display']").text).to include("A-")
+          expect(f("span.selected-submission-grade").text).to include("A−")
+          expect(f("span[data-testid='grade-display']").text).to include("A−")
         end
 
         it "still shows grade as letter_grade for letter_grade grading type" do
@@ -243,8 +243,8 @@ describe "as a student" do
           StudentAssignmentPageV2.visit(@course, assignment)
           wait_for_ajaximations
           # making sure 9 does not show implicitly makes sure 90% does not show as well
-          expect(f("span.selected-submission-grade").text).to include("A-")
-          expect(f("span[data-testid='grade-display']").text).to include("A-")
+          expect(f("span.selected-submission-grade").text).to include("A−")
+          expect(f("span[data-testid='grade-display']").text).to include("A−")
         end
 
         it "still shows grade as complete/incomplete for pass_fail grading type" do
@@ -1198,7 +1198,7 @@ describe "as a student" do
           expect(StudentAssignmentPageV2.comment_container).to include_text("great job!")
         end
 
-        it "allows the student to complete a group peer review with a rubric by completing the rubric and submitting", skip: "flaky" do
+        it "allows the student to complete a group peer review with a rubric by completing the rubric and submitting" do
           rubric_model
           @association = @rubric.associate_with(@peer_review_assignment, @course, purpose: "grading", use_for_grading: true)
           @peer_review_assignment.assign_peer_review(@student1, @student2)

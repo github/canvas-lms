@@ -101,6 +101,11 @@ describe('RCE Plugins > CanvasContentTray', () => {
   }
 
   async function showTrayForPlugin(plugin) {
+    await waitFor(() => {
+      if (typeof props.bridge.showTrayForPlugin !== 'function') {
+        throw new Error('showTrayForPlugin not here yet')
+      }
+    })
     act(() => {
       props.bridge.showTrayForPlugin(plugin, 'editor_id')
     })
@@ -117,7 +122,8 @@ describe('RCE Plugins > CanvasContentTray', () => {
       getProps({storeProps: {...storeInitialState, onChangeSearchString: mockOnChangeSearchString}})
     )
     await showTrayForPlugin('links')
-    const closeButton = component.getByTestId('CloseButton_ContentTray').querySelector('button')
+    const close = await component.findByTestId('CloseButton_ContentTray')
+    const closeButton = close.querySelector('button')
     closeButton.focus()
     closeButton.click()
     await waitForElementToBeRemoved(() => component.queryByTestId('CanvasContentTray'))
@@ -163,8 +169,6 @@ describe('RCE Plugins > CanvasContentTray', () => {
     })
 
     it('sets placeholder to the current link title', async () => {
-      renderComponent()
-      await showTrayForPlugin('course_link_edit')
       await waitFor(() => {
         expect(LinkDisplay).toHaveBeenCalledWith(
           expect.objectContaining({placeholderText: 'some filename'}),
@@ -176,7 +180,8 @@ describe('RCE Plugins > CanvasContentTray', () => {
     it('creates a SR alert when the link is updated', async () => {
       const button = await component.findByTestId('replace-link-button')
       fireEvent.click(button)
-      expect(component.getByText('Updated link')).toBeInTheDocument()
+      const linkButton = await component.findAllByText('Updated link')
+      expect(linkButton.length).toBeGreaterThan(0)
     })
   })
 

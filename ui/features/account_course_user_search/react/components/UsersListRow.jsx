@@ -17,21 +17,16 @@
  */
 
 import React from 'react'
-import {string, func, object, shape, arrayOf} from 'prop-types'
+import {arrayOf, func, object, shape, string} from 'prop-types'
 import {IconButton} from '@instructure/ui-buttons'
 import {Table} from '@instructure/ui-table'
 import {Tooltip} from '@instructure/ui-tooltip'
-import {
-  IconMasqueradeLine,
-  IconMessageLine,
-  IconEditLine,
-  IconCalendarClockLine,
-} from '@instructure/ui-icons'
+import {IconEditLine, IconMasqueradeLine, IconMessageLine} from '@instructure/ui-icons'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import FriendlyDatetime from '@canvas/datetime/react/components/FriendlyDatetime'
 import CreateOrUpdateUserModal from './CreateOrUpdateUserModal'
 import UserLink from './UserLink'
-import {TempEnrollModal} from '@canvas/temporary-enrollment/react/TempEnrollModal'
+import TempEnrollUsersListRow from '@canvas/temporary-enrollment/react/TempEnrollUsersListRow'
 
 const I18n = useI18nScope('account_course_user_search')
 
@@ -42,24 +37,6 @@ export default function UsersListRow({
   handleSubmitEditUserForm,
   roles,
 }) {
-  // don't show tempEnroll if permission to create enrollments are missing
-  const canTempEnroll =
-    permissions.can_add_temporary_enrollments &&
-    (permissions.can_manage_admin_users ||
-      (permissions.can_add_designer &&
-        permissions.can_add_student &&
-        permissions.can_add_teacher &&
-        permissions.can_add_ta &&
-        permissions.can_add_observer))
-
-  const enrollPerm = {
-    teacher: permissions.can_add_teacher || permissions.can_manage_admin_users,
-    ta: permissions.can_add_ta || permissions.can_manage_admin_users,
-    student: permissions.can_add_student || permissions.can_manage_admin_users,
-    observer: permissions.can_add_observer || permissions.can_manage_admin_users,
-    designer: permissions.can_add_observer || permissions.can_manage_admin_users,
-  }
-
   return (
     <Table.Row>
       <Table.RowHeader>
@@ -68,6 +45,7 @@ export default function UsersListRow({
           avatarName={user.short_name}
           name={user.sortable_name}
           avatar_url={user.avatar_url}
+          pronouns={user.pronouns}
           size="x-small"
         />
       </Table.RowHeader>
@@ -75,31 +53,13 @@ export default function UsersListRow({
       <Table.Cell data-heap-redact-text="">{user.sis_user_id}</Table.Cell>
       <Table.Cell>{user.last_login && <FriendlyDatetime dateTime={user.last_login} />}</Table.Cell>
       <Table.Cell>
-        {canTempEnroll && (
-          <TempEnrollModal
-            user={user}
-            canReadSIS={permissions.can_read_sis}
-            permissions={enrollPerm}
-            accountId={accountId}
-            roles={roles}
-          >
-            <Tooltip
-              data-testid="user-list-row-tooltip"
-              renderTip={I18n.t('Temporarily enroll %{name}', {name: user.name})}
-            >
-              <IconButton
-                withBorder={false}
-                withBackground={false}
-                size="small"
-                screenReaderLabel={I18n.t('Temporarily enroll %{name}', {name: user.name})}
-              >
-                <IconCalendarClockLine
-                  title={I18n.t('Temporarily enroll %{name}', {name: user.name})}
-                />
-              </IconButton>
-            </Tooltip>
-          </TempEnrollModal>
-        )}
+        {permissions.can_view_temporary_enrollments &&
+          TempEnrollUsersListRow({
+            user,
+            permissions,
+            handleSubmitEditUserForm,
+            roles,
+          })}
         {permissions.can_masquerade && (
           <Tooltip
             data-testid="user-list-row-tooltip"

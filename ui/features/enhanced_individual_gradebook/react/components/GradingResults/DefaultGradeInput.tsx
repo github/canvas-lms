@@ -17,13 +17,18 @@
  */
 
 import React from 'react'
-import {outOfText, passFailStatusOptions} from '../../../utils/gradebookUtils'
+import {outOfText, passFailStatusOptions, disableGrading} from '../../../utils/gradebookUtils'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
 import {View} from '@instructure/ui-view'
 import {TextInput} from '@instructure/ui-text-input'
 import {SimpleSelect} from '@instructure/ui-simple-select'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import {ApiCallStatus, AssignmentConnection, GradebookUserSubmissionDetails} from '../../../types'
+import {
+  ApiCallStatus,
+  type AssignmentConnection,
+  type GradebookUserSubmissionDetails,
+} from '../../../types'
+import type {Spacing} from '@instructure/emotion'
 
 const I18n = useI18nScope('enhanced_individual_gradebook')
 
@@ -36,11 +41,15 @@ type Props = {
   gradeInput: string
   submitScoreStatus: ApiCallStatus
   context: string
-  elementWrapper?: string
-  margin?: string
+  elementWrapper?: 'span' | 'div'
+  margin?: Spacing
+  gradingStandardPointsBased: boolean
   handleSetGradeInput: (grade: string) => void
   handleSubmitGrade?: () => void
-  handleChangePassFailStatus: (e: React.SyntheticEvent, data: {value: string}) => void
+  handleChangePassFailStatus: (
+    e: React.SyntheticEvent<Element, Event>,
+    data: {value?: string | number}
+  ) => void
 }
 
 export default function DefaultGradeInput({
@@ -55,11 +64,12 @@ export default function DefaultGradeInput({
   handleSetGradeInput,
   handleSubmitGrade,
   handleChangePassFailStatus,
+  gradingStandardPointsBased,
 }: Props) {
   const renderOutOfText = () => {
     return (
       <View as="span" margin="0 0 0 small" data-testid={`${context}_out_of_text`}>
-        {outOfText(assignment, submission)}
+        {outOfText(assignment, submission, gradingStandardPointsBased)}
       </View>
     )
   }
@@ -71,13 +81,18 @@ export default function DefaultGradeInput({
           <SimpleSelect
             renderLabel={
               <ScreenReaderContent>
-                {I18n.t('Student Grade Pass-Fail Grade Options')}
+                {`${I18n.t('Student Grade Pass-Fail Grade Options')}: ${outOfText(
+                  assignment,
+                  submission,
+                  gradingStandardPointsBased
+                )}`}
               </ScreenReaderContent>
             }
             size="medium"
             isInline={true}
             onChange={handleChangePassFailStatus}
             value={passFailStatusOptions[passFailStatusIndex].value}
+            interaction={disableGrading(assignment, submitScoreStatus) ? 'disabled' : undefined}
             data-testid={`${context}_select`}
             onBlur={() => handleSubmitGrade?.()}
           >
@@ -93,15 +108,18 @@ export default function DefaultGradeInput({
         <View as={elementWrapper} className="grade" margin={margin}>
           <TextInput
             renderLabel={
-              <ScreenReaderContent>{I18n.t('Student Grade Text Input')}</ScreenReaderContent>
+              <ScreenReaderContent>
+                {`${I18n.t('Student Grade Text Input')}: ${outOfText(
+                  assignment,
+                  submission,
+                  gradingStandardPointsBased
+                )}`}
+              </ScreenReaderContent>
             }
             display="inline-block"
             width="14rem"
             value={gradeInput}
-            disabled={
-              submitScoreStatus === ApiCallStatus.PENDING ||
-              (assignment.moderatedGrading && !assignment.gradesPublished)
-            }
+            disabled={disableGrading(assignment, submitScoreStatus)}
             data-testid={`${context}_input`}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
               handleSetGradeInput(e.target.value)

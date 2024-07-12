@@ -100,7 +100,7 @@ export function showLoadingImage($link, position = 'adjacent') {
     )
     $link.appendChild($imageHolder)
   }
-  ReactDOM.render(<Spinner size="x-small" title={formatMessage('Loading')} />, $imageHolder)
+  ReactDOM.render(<Spinner size="x-small" renderTitle={formatMessage('Loading')} />, $imageHolder)
   return $link
 }
 
@@ -126,6 +126,10 @@ export function loadDocPreview($container, options) {
   }
 
   if (!$container) return // an issue in specs
+
+  if (!($container instanceof HTMLElement)) {
+    throw new Error('loadDocPreview requires a DOM element as first argument')
+  }
 
   function tellAppIViewedThisInline() {
     // if I have a url to ping back to the app that I viewed this file inline, ping it.

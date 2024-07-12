@@ -37,6 +37,17 @@ module Lti
     let(:tool_configuration) { described_class.new(settings:) }
     let(:developer_key) { DeveloperKey.create }
 
+    def make_placement(type, message_type, extra = {})
+      {
+        "target_link_uri" => "http://example.com/launch?placement=#{type}",
+        "text" => "Test Title",
+        "message_type" => message_type,
+        "icon_url" => "https://static.thenounproject.com/png/131630-211.png",
+        "placement" => type.to_s,
+        **extra
+      }
+    end
+
     describe "validations" do
       subject { tool_configuration.save }
 
@@ -47,24 +58,82 @@ module Lti
         end
 
         it { is_expected.to be true }
+
+        context "with a description property at the submission_type_selection placement" do
+          let(:settings) do
+            super().tap do |res|
+              res["extensions"].first["settings"]["placements"] << make_placement(
+                :submission_type_selection,
+                "LtiDeepLinkingRequest",
+                "description" => "Test Description"
+              )
+            end
+          end
+
+          it { is_expected.to be true }
+        end
+
+        context "with a require_resource_selection property at the submission_type_selection placement" do
+          let(:settings) do
+            super().tap do |res|
+              res["extensions"].first["settings"]["placements"] << make_placement(
+                :submission_type_selection,
+                "LtiDeepLinkingRequest",
+                "require_resource_selection" => true
+              )
+            end
+          end
+
+          it { is_expected.to be true }
+        end
       end
 
       context "with non-matching schema" do
-        let(:settings) do
-          s = super()
-          s.delete("target_link_uri")
-          s
-        end
-
         before do
           tool_configuration.developer_key = developer_key
         end
 
-        it { is_expected.to be false }
+        context "a missing target_link_uri" do
+          let(:settings) do
+            s = super()
+            s.delete("target_link_uri")
+            s
+          end
 
-        it "is contains a message about missing target_link_uri" do
-          tool_configuration.valid?
-          expect(tool_configuration.errors[:configuration].first.message).to include("target_link_uri,")
+          it { is_expected.to be false }
+
+          it "contains a message about a missing target_link_uri" do
+            tool_configuration.valid?
+            expect(tool_configuration.errors[:configuration].first.message).to include("target_link_uri,")
+          end
+        end
+
+        context "when the submission_type_selection description is longer than 255 characters" do
+          let(:settings) do
+            super().tap do |s|
+              s["extensions"].first["settings"]["placements"] << make_placement(
+                :submission_type_selection,
+                "LtiDeepLinkingRequest",
+                "description" => "a" * 256
+              )
+            end
+          end
+
+          it { is_expected.to be false }
+        end
+
+        context "when the submission_type_selection require_resource_selection is of the wrong type" do
+          let(:settings) do
+            super().tap do |s|
+              s["extensions"].first["settings"]["placements"] << make_placement(
+                :submission_type_selection,
+                "LtiDeepLinkingRequest",
+                "require_resource_selection" => "true"
+              )
+            end
+          end
+
+          it { is_expected.to be false }
         end
       end
 
@@ -116,6 +185,25 @@ module Lti
         before { tool_configuration.disabled_placements = ["invalid_placement", "account_navigation"] }
 
         it { is_expected.to be false }
+      end
+
+      context "when one of the configured placements has an unsupported message_type" do
+        before do
+          tool_configuration.developer_key = developer_key
+          tool_configuration.settings["extensions"].first["settings"]["placements"] = [
+            {
+              "placement" => "account_navigation",
+              "message_type" => "LtiDeepLinkingRequest",
+            }
+          ]
+        end
+
+        it { is_expected.to be false }
+
+        it "includes a friendly error message" do
+          subject
+          expect(tool_configuration.errors[:placements].first.message).to include("does not support message type")
+        end
       end
 
       context "when extensions have non-Canvas platform" do
@@ -175,6 +263,30 @@ module Lti
         end
 
         it { is_expected.to be false }
+      end
+
+      context "when oidc_initiation_urls is not an hash" do
+        let(:settings) { super().tap { |s| s["oidc_initiation_urls"] = ["https://test.com"] } }
+
+        before { tool_configuration.developer_key = developer_key }
+
+        it { is_expected.to be false }
+      end
+
+      context "when oidc_initiation_urls values are not urls" do
+        let(:settings) { super().tap { |s| s["oidc_initiation_urls"] = { "us-east-1" => "@?!" } } }
+
+        before { tool_configuration.developer_key = developer_key }
+
+        it { is_expected.to be false }
+      end
+
+      context "when oidc_initiation_urls values are urls" do
+        let(:settings) { super().tap { |s| s["oidc_initiation_urls"] = { "us-east-1" => "http://example.com" } } }
+
+        before { tool_configuration.developer_key = developer_key }
+
+        it { is_expected.to be true }
       end
     end
 
@@ -394,6 +506,26 @@ module Lti
             end
           end
         end
+
+        context "when the configuration has oidc_initiation_urls" do
+          let(:oidc_initiation_urls) do
+            {
+              "us-east-1" => "http://www.example.com/initiate",
+              "us-west-1" => "http://www.example.com/initiate2"
+            }
+          end
+
+          before do
+            tool_configuration.settings["oidc_initiation_urls"] = oidc_initiation_urls
+            tool_configuration.save!
+          end
+
+          subject { tool_configuration.new_external_tool(context) }
+
+          it "includes the oidc_initiation_urls in the new tool settings" do
+            expect(subject.settings["oidc_initiation_urls"]).to eq oidc_initiation_urls
+          end
+        end
       end
 
       context "when context is a course" do
@@ -558,6 +690,78 @@ module Lti
 
       it "returns the appropriate placements" do
         expect(subject).to eq(settings["extensions"].first["settings"]["placements"])
+      end
+    end
+
+    describe "domain" do
+      subject { tool_configuration.domain }
+
+      it { is_expected.to eq(settings["extensions"].first["domain"]) }
+    end
+
+    describe "verify_placements" do
+      subject { tool_configuration.verify_placements }
+
+      before do
+        tool_configuration.developer_key = developer_key
+        tool_configuration.save!
+      end
+
+      context "when the lti_placement_restrictions feature flag is disabled" do
+        before do
+          Account.site_admin.disable_feature!(:lti_placement_restrictions)
+        end
+
+        it { is_expected.to be_nil }
+      end
+
+      %w[submission_type_selection top_navigation].each do |placement|
+        context "when the lti_placement_restrictions feature flag is enabled" do
+          before do
+            Account.site_admin.enable_feature!(:lti_placement_restrictions)
+          end
+
+          it "returns nil when there are no #{placement} placements" do
+            expect(subject).to be_nil
+          end
+
+          context "when the configuration has a #{placement} placement" do
+            let(:tool_configuration) do
+              super().tap do |tc|
+                tc.settings["extensions"].first["settings"]["placements"] <<
+                  make_placement(placement, "LtiResourceLinkRequest")
+              end
+            end
+
+            it { is_expected.to include("Warning").and include(placement) }
+
+            context "when the tool is allowed to use the #{placement} placement through it's dev key" do
+              before do
+                Setting.set("#{placement}_allowed_dev_keys", tool_configuration.developer_key.global_id.to_s)
+              end
+
+              it { is_expected.to be_nil }
+            end
+
+            context "when the tool is allowed to use the #{placement} placement through it's domain" do
+              before do
+                Setting.set("#{placement}_allowed_launch_domains", tool_configuration.domain)
+              end
+
+              it { is_expected.to be_nil }
+            end
+
+            context "when the tool has no domain and domain list is containing an empty space" do
+              before do
+                allow(tool_configuration).to receive_messages(domain: "", developer_key_id: nil)
+                Setting.set("#{placement}_allowed_launch_domains", ", ,,")
+                Setting.set("#{placement}_allowed_dev_keys", ", ,,")
+              end
+
+              it { is_expected.to include("Warning").and include(placement) }
+            end
+          end
+        end
       end
     end
 

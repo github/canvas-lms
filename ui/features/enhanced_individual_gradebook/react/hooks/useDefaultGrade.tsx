@@ -17,11 +17,11 @@
  */
 
 import {useCallback, useState} from 'react'
-import {executeApiRequest} from '@canvas/util/apiRequest'
+import {executeApiRequest} from '@canvas/do-fetch-api-effect/apiRequest'
 
-import {ApiCallStatus, SubmissionGradeChange} from '../../types'
+import {ApiCallStatus, type SubmissionGradeChange} from '../../types'
 import {mapToSubmissionGradeChange} from '../../utils/gradebookUtils'
-import {Submission} from '../../../../api'
+import type {Submission} from '../../../../api'
 
 export type DefaultGradeSubmissionParams = {
   submissions: {
@@ -46,6 +46,10 @@ export const useDefaultGrade = () => {
   )
   const [savedGrade, setSavedGrade] = useState<string>('')
   const [updatedSubmissions, setUpdatedSubmissions] = useState<SubmissionGradeChange[]>([])
+
+  const resetDefaultGradeStatus = () => {
+    setDefaultGradeStatus(ApiCallStatus.NOT_STARTED)
+  }
 
   const setGrades = useCallback(
     async (
@@ -82,6 +86,7 @@ export const useDefaultGrade = () => {
     defaultGradeStatus,
     savedGrade,
     setGrades,
+    resetDefaultGradeStatus,
     updatedSubmissions,
   }
 }

@@ -29,6 +29,7 @@ import {ScreenReaderContent} from '@instructure/ui-a11y-content'
 import {Text} from '@instructure/ui-text'
 import {Heading} from '@instructure/ui-heading'
 import {Spinner} from '@instructure/ui-spinner'
+import ItemAssignToTray from '@canvas/context-modules/differentiated-modules/react/Item/ItemAssignToTray'
 
 import DirectShareCourseTray from '@canvas/direct-sharing/react/components/DirectShareCourseTray'
 import DirectShareUserModal from '@canvas/direct-sharing/react/components/DirectShareUserModal'
@@ -60,8 +61,8 @@ export default class DiscussionsIndex extends Component {
   static propTypes = {
     arrangePinnedDiscussions: func.isRequired,
     closedForCommentsDiscussions: discussionList.isRequired,
-    contextId: string.isRequired,
-    contextType: string.isRequired,
+    contextId: string,
+    contextType: string,
     deleteDiscussion: func.isRequired,
     getDiscussions: func.isRequired,
     setCopyToOpen: func.isRequired,
@@ -85,6 +86,8 @@ export default class DiscussionsIndex extends Component {
   state = {
     showDelete: false,
     deleteFunction: () => {},
+    showAssignToTray: false,
+    discussionDetails: {},
   }
 
   componentDidMount() {
@@ -104,6 +107,14 @@ export default class DiscussionsIndex extends Component {
     this.setState({showDelete: false, deleteFunction: () => {}})
   }
 
+  openAssignToTray = discussion => {
+    this.setState({showAssignToTray: true, discussionDetails: discussion})
+  }
+
+  closeAssignToTray = () => {
+    this.setState({showAssignToTray: false, discussionDetails: null})
+  }
+
   selectPage(page) {
     return () => this.props.getDiscussions({page, select: true})
   }
@@ -115,7 +126,10 @@ export default class DiscussionsIndex extends Component {
 
   renderSpinner(title) {
     return (
-      <div className="discussions-v2__spinnerWrapper">
+      <div
+        className="discussions-v2__spinnerWrapper"
+        data-testid="discussions-index-spinner-container"
+      >
         <Spinner size="large" renderTitle={title} />
         <Text size="small" as="p">
           {title}
@@ -152,7 +166,10 @@ export default class DiscussionsIndex extends Component {
     return (
       <View margin="medium">
         {this.props.pinnedDiscussions.length ? (
-          <div className="pinned-discussions-v2__wrapper">
+          <div
+            className="pinned-discussions-v2__wrapper"
+            data-testid="discussion-connected-container"
+          >
             <ConnectedDiscussionsContainer
               title={I18n.t('Pinned Discussions')}
               discussions={this.props.pinnedDiscussions}
@@ -166,7 +183,10 @@ export default class DiscussionsIndex extends Component {
             />
           </div>
         ) : null}
-        <div className="unpinned-discussions-v2__wrapper">
+        <div
+          className="unpinned-discussions-v2__wrapper"
+          data-testid="discussion-connected-container"
+        >
           <ConnectedDiscussionsContainer
             title={I18n.t('Discussions')}
             discussions={this.props.unpinnedDiscussions}
@@ -180,7 +200,10 @@ export default class DiscussionsIndex extends Component {
             }
           />
         </div>
-        <div className="closed-for-comments-discussions-v2__wrapper">
+        <div
+          className="closed-for-comments-discussions-v2__wrapper"
+          data-testid="discussion-connected-container"
+        >
           <ConnectedDiscussionsContainer
             title={I18n.t('Closed for Comments')}
             discussions={this.props.closedForCommentsDiscussions}
@@ -206,12 +229,16 @@ export default class DiscussionsIndex extends Component {
   renderTeacherView() {
     return (
       <View margin="medium">
-        <div className="pinned-discussions-v2__wrapper">
+        <div
+          className="pinned-discussions-v2__wrapper"
+          data-testid="discussion-droppable-connected-container"
+        >
           <DroppableConnectedDiscussionsContainer
             title={I18n.t('Pinned Discussions')}
             discussions={this.props.pinnedDiscussions}
             deleteDiscussion={this.openDeleteDiscussionsModal}
             onMoveDiscussion={this.renderMoveDiscussionTray}
+            onOpenAssignToTray={this.openAssignToTray}
             pinned={true}
             renderContainerBackground={() =>
               pinnedDiscussionBackground({
@@ -220,11 +247,15 @@ export default class DiscussionsIndex extends Component {
             }
           />
         </div>
-        <div className="unpinned-discussions-v2__wrapper">
+        <div
+          className="unpinned-discussions-v2__wrapper"
+          data-testid="discussion-droppable-connected-container"
+        >
           <DroppableConnectedDiscussionsContainer
             title={I18n.t('Discussions')}
             discussions={this.props.unpinnedDiscussions}
             deleteDiscussion={this.openDeleteDiscussionsModal}
+            onOpenAssignToTray={this.openAssignToTray}
             closedState={false}
             renderContainerBackground={() =>
               unpinnedDiscussionsBackground({
@@ -235,11 +266,15 @@ export default class DiscussionsIndex extends Component {
             }
           />
         </div>
-        <div className="closed-for-comments-discussions-v2__wrapper">
+        <div
+          className="closed-for-comments-discussions-v2__wrapper"
+          data-testid="discussion-droppable-connected-container"
+        >
           <DroppableConnectedDiscussionsContainer
             title={I18n.t('Closed for Comments')}
             discussions={this.props.closedForCommentsDiscussions}
             deleteDiscussion={this.openDeleteDiscussionsModal}
+            onOpenAssignToTray={this.openAssignToTray}
             closedState={true}
             renderContainerBackground={() =>
               closedDiscussionBackground({
@@ -271,6 +306,24 @@ export default class DiscussionsIndex extends Component {
             onDismiss={() => this.props.setSendToOpen(false)}
           />
         )}{' '}
+        {ENV?.FEATURES?.selective_release_ui_api &&
+          this.state.showAssignToTray &&
+          this.props.contextType === 'course' && (
+            <ItemAssignToTray
+              open={this.state.showAssignToTray}
+              onClose={this.closeAssignToTray}
+              onDismiss={this.closeAssignToTray}
+              courseId={ENV.COURSE_ID}
+              itemName={this.state.discussionDetails.title}
+              itemType="discussion"
+              iconType="discussion"
+              pointsPossible={this.state?.discussionDetails?.assignment?.points_possible || null}
+              itemContentId={this.state.discussionDetails.id}
+              locale={ENV.LOCALE || 'en'}
+              timezone={ENV.TIMEZONE || 'UTC'}
+              removeDueDateInput={!this.state?.discussionDetails?.assignment_id}
+            />
+          )}
       </View>
     )
   }

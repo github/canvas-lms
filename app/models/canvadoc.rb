@@ -59,6 +59,27 @@ class Canvadoc < ActiveRecord::Base
       .map(&:submission)
   end
 
+  def document_id
+    if ApplicationController.test_cluster?
+      # since PDF documents created in production DocViewer environments are not available in
+      # DocViewer beta environments, this treats as nil any document_id from any canvadoc record
+      # that was last updated before the last test cluster data refresh.  Put another way, we
+      # pretend here that any document_ids that came from prod data as part of the last data
+      # refresh are nil.  Nilling a document_id will cause canvas to request a new document
+      # conversion (and save the resulting document_id) if/when the document is next interacted
+      # with by a user on this test cluster.  This will create the document on the configured
+      # DocViewer test cluster for this region.
+      region = ApplicationController.region
+      if (refresh_timestamp = Setting.get("last_data_refresh_time_#{region}", nil)) && updated_at < Time.parse(refresh_timestamp)
+        nil
+      else
+        self[:document_id]
+      end
+    else
+      self[:document_id]
+    end
+  end
+
   def available?
     !!(document_id && process_state != "error" && Canvadocs.enabled?)
   end
@@ -85,59 +106,78 @@ class Canvadoc < ActiveRecord::Base
     application/excel
     application/msword
     application/pdf
+    application/postscript
+    application/rtf
+    application/mspowerpoint
     application/vnd.ms-excel
     application/vnd.ms-powerpoint
     application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
     application/vnd.openxmlformats-officedocument.presentationml.presentation
     application/vnd.openxmlformats-officedocument.wordprocessingml.document
+    application/vnd.openxmlformats-officedocument.spreadsheetml.template
+    application/vnd.openxmlformats-officedocument.presentationml.slideshow
+    application/vnd.openxmlformats-officedocument.presentationml.template
+    application/vnd.openxmlformats-officedocument.wordprocessingml.template
     application/vnd.oasis.opendocument.graphics
     application/vnd.oasis.opendocument.formula
+    application/vnd.oasis.opendocument.presentation
+    application/vnd.oasis.opendocument.spreadsheet
+    application/vnd.oasis.opendocument.text
+    application/vnd.sun.xml.writer
+    application/vnd.sun.xml.impress
+    application/vnd.sun.xml.calc
+    text/rtf
+    text/plain
   ].freeze
 
   DEFAULT_SUBMISSION_MIME_TYPES = %w[
     application/excel
     application/msword
     application/pdf
+    application/postscript
+    application/rtf
+    application/mspowerpoint
     application/vnd.ms-excel
     application/vnd.ms-powerpoint
     application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
     application/vnd.openxmlformats-officedocument.presentationml.presentation
     application/vnd.openxmlformats-officedocument.wordprocessingml.document
+    application/vnd.openxmlformats-officedocument.spreadsheetml.template
+    application/vnd.openxmlformats-officedocument.presentationml.slideshow
+    application/vnd.openxmlformats-officedocument.presentationml.template
+    application/vnd.openxmlformats-officedocument.wordprocessingml.template
     application/vnd.oasis.opendocument.graphics
     application/vnd.oasis.opendocument.formula
+    application/vnd.oasis.opendocument.presentation
+    application/vnd.oasis.opendocument.spreadsheet
+    application/vnd.oasis.opendocument.text
+    application/vnd.sun.xml.writer
+    application/vnd.sun.xml.impress
+    application/vnd.sun.xml.calc
     image/bmp
     image/jpeg
     image/jpg
     image/png
     image/tif
     image/tiff
+    text/rtf
+    text/plain
   ].freeze
 
-  # NOTE: the Setting.get('canvadoc_mime_types', ...) and the
-  # Setting.get('canvadoc_submission_mime_types', ...) will
-  # pull from the database first. the second parameter is there
-  # as a default in case the settings are not located in the
-  # db. this means that for instructure production canvas,
-  # we need to update the beta and prod databases with any
-  # mime_types we want to add/remove.
-  # TODO: find out if opensource users need the second param
-  # to the Setting.get(...,...) calls and if not, then remove
-  # them entirely from the codebase (since intructure prod
-  # does not need them)
   def self.mime_types
-    types = JSON.parse Setting.get("canvadoc_mime_types", DEFAULT_MIME_TYPES.to_json)
-
-    types.concat(IWORK_MIME_TYPES) if Account.current_domain_root_account&.feature_enabled?(:docviewer_enable_iwork_files)
-
-    types
+    if Account.current_domain_root_account&.feature_enabled?(:docviewer_enable_iwork_files)
+      DEFAULT_MIME_TYPES + IWORK_MIME_TYPES
+    else
+      DEFAULT_MIME_TYPES
+    end
   end
 
   def self.submission_mime_types
-    types = JSON.parse Setting.get("canvadoc_submission_mime_types", DEFAULT_SUBMISSION_MIME_TYPES.to_json)
-
-    types.concat(IWORK_MIME_TYPES) if Account.current_domain_root_account&.feature_enabled?(:docviewer_enable_iwork_files)
-
-    types
+    if Account.current_domain_root_account&.feature_enabled?(:docviewer_enable_iwork_files)
+      DEFAULT_SUBMISSION_MIME_TYPES + IWORK_MIME_TYPES
+    else
+      DEFAULT_SUBMISSION_MIME_TYPES
+    end
   end
 
   def self.canvadocs_api

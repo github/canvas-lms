@@ -18,6 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 require_relative "../common"
+require_relative "pages/course_people_modal"
 
 describe "course people" do
   include_context "in-process server selenium tests"
@@ -123,7 +124,7 @@ describe "course people" do
       # open dialog
       use_edit_sections_dialog(@student) do
         # choose section
-        select_from_auto_complete(section_name, "section_input")
+        CoursePeople.select_from_section_autocomplete(section_name)
       end
       # expect
       expect(f("#user_#{@student.id}")).to include_text(section_name)
@@ -161,7 +162,7 @@ describe "course people" do
       # open dialog
       use_edit_sections_dialog(@student) do
         # choose section
-        select_from_auto_complete(section_name, "section_input")
+        CoursePeople.select_from_section_autocomplete(section_name)
       end
       # expect
       expect(f("#user_#{@student.id}")).to include_text(section_name)
@@ -302,8 +303,8 @@ describe "course people" do
 
     %w[ta designer].each do |et|
       it "does not let #{et}s remove admins from the course" do
-        send "custom_#{et}_role", "custom"
-        send "course_with_#{et}", course: @course, active_all: true, custom_role: "custom"
+        send :"custom_#{et}_role", "custom"
+        send :"course_with_#{et}", course: @course, active_all: true, custom_role: "custom"
         user_session @user
         student_in_course user: user_with_pseudonym, course: @course, role: @custom_student_role
 
@@ -394,7 +395,7 @@ describe "course people" do
       %w[student teacher ta designer observer].each do |base_type|
         it "allows adding custom #{base_type} enrollments" do
           user = user_with_pseudonym(active_all: true, username: "#{base_type}@example.com", name: "#{base_type}@example.com")
-          send "custom_#{base_type}_role", "custom"
+          send :"custom_#{base_type}_role", "custom"
           add_user(user.name, "custom")
           expect(f("#user_#{user.id} .admin-links")).not_to be_nil
         end
@@ -408,7 +409,7 @@ describe "course people" do
         %w[student teacher ta designer observer].each do |base_type|
           it "allows adding custom #{base_type} enrollments" do
             user = user_with_pseudonym(active_all: true, username: "#{base_type}@example.com", name: "#{base_type}@example.com")
-            send "custom_#{base_type}_role", "custom"
+            send :"custom_#{base_type}_role", "custom"
             add_user(user.name, "custom")
             expect(f("#user_#{user.id} .admin-links")).not_to be_nil
           end

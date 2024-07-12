@@ -99,9 +99,9 @@ const isLoadingChunkError = (a?: string): boolean => {
 // more info about the error when pressed.
 // Is displayed at the top of the document, and will close itself after a while
 
-type FlashAlertProps = typeof FlashAlert.defaultProps & {
+type FlashAlertProps = {
   onClose: () => void
-  message: HTMLElement | string
+  message: string | React.ReactNode
   error?: Error | null
   variant?: 'info' | 'success' | 'warning' | 'error'
   timeout?: number
@@ -216,7 +216,7 @@ export default class FlashAlert extends React.Component<FlashAlertProps> {
 }
 
 type ShowFlashAlertArgs = {
-  message: string
+  message: string | React.ReactNode
   err?: Error | null
   type?: 'info' | 'success' | 'warning' | 'error'
   srOnly?: boolean
@@ -277,7 +277,7 @@ export function destroyContainer() {
 }
 
 export function showFlashError(message = I18n.t('An error occurred making a network request')) {
-  return (err: Error) => showFlashAlert({message, err, type: 'error'})
+  return (err?: Error) => showFlashAlert({message, err, type: 'error'})
 }
 
 export function showFlashSuccess(message: string) {

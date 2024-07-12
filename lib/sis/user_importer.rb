@@ -20,6 +20,8 @@
 
 module SIS
   class UserImporter < BaseImporter
+    BATCH_SIZE = 100
+
     def process(messages, login_only: false)
       importer = Work.new(@batch, @root_account, @logger, messages)
       User.skip_updating_account_associations do
@@ -77,7 +79,7 @@ module SIS
         end
 
         @batched_users << user
-        process_batch(login_only:) if @batched_users.size >= Setting.get("sis_user_batch_size", "100").to_i
+        process_batch(login_only:) if @batched_users.size >= BATCH_SIZE
       end
 
       def any_left_to_process?
@@ -122,7 +124,7 @@ module SIS
 
         until @batched_users.empty?
           user_row = @batched_users.shift
-          pseudo = @root_account.pseudonyms.where(sis_user_id: user_row.user_id.to_s).take
+          pseudo = @root_account.pseudonyms.find_by(sis_user_id: user_row.user_id.to_s)
           if user_row.authentication_provider_id.present?
             unless @authentication_providers.key?(user_row.authentication_provider_id)
               begin
@@ -132,12 +134,12 @@ module SIS
                 @authentication_providers[user_row.authentication_provider_id] = nil
               end
             end
-            pseudo_by_login = @root_account.pseudonyms.active.by_unique_id(user_row.login_id).where(authentication_provider_id: @authentication_providers[user_row.authentication_provider_id]).take
+            pseudo_by_login = @root_account.pseudonyms.active.by_unique_id(user_row.login_id).find_by(authentication_provider_id: @authentication_providers[user_row.authentication_provider_id])
           else
             pseudo_by_login = @root_account.pseudonyms.active.by_unique_id(user_row.login_id).take
           end
           pseudo_by_integration = nil
-          pseudo_by_integration = @root_account.pseudonyms.where(integration_id: user_row.integration_id.to_s).take if user_row.integration_id.present?
+          pseudo_by_integration = @root_account.pseudonyms.find_by(integration_id: user_row.integration_id.to_s) if user_row.integration_id.present?
           status = user_row.status.downcase
           status = "active" unless VALID_STATUSES.include?(status)
           pseudo ||= pseudo_by_login
@@ -351,7 +353,7 @@ module SIS
                            CommunicationChannel.where("workflow_state='active' OR user_id=?", user)
                          end
               cc_scope = cc_scope.email.by_path(user_row.email)
-              limit = Setting.get("merge_candidate_search_limit", "100").to_i
+              limit = 10
               ccs = cc_scope.limit(limit + 1).to_a
               if ccs.count > limit
                 ccs = cc_scope.where(user_id: user).to_a # don't bother with merge candidates anymore
@@ -449,7 +451,7 @@ module SIS
         root_account.shard.activate do
           login = nil
           user_row.login_hash.each do |attr, value|
-            login ||= root_account.pseudonyms.active.where(attr => value).take
+            login ||= root_account.pseudonyms.active.find_by(attr => value)
           end
           login
         end

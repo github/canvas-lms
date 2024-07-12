@@ -21,7 +21,18 @@
 
 /* header */
 .assignment-edit-header {
-  margin-bottom: 12px;
+  margin-bottom: 24px;
+}
+
+.assignment-edit-header-group-left{
+  padding-top: 2px;
+}
+
+.assignment-edit-header-title{
+  font-weight: 700;
+  font-size: 38px;
+  line-height: 40px;
+  margin:0;
 }
 
 #edit_assignment_header {
@@ -140,6 +151,9 @@ div.form-column-right, div.overrides-column-right {
     .nest {
       padding-#{direction(left)}: 20px;
     }
+    .datetime_suggest{
+      padding-#{direction(left)}: 70px;
+    }
   }
 }
 
@@ -164,6 +178,10 @@ div.form-column-right, div.overrides-column-right {
 
 #discussion-edit-view {
   @include readonly-input;
+}
+
+#grading-schemes-selector-dropdown {
+  font-weight: normal !important;
 }
 
 /* support for master class locked input fields */
@@ -408,4 +426,8 @@ div.form-column-right, div.overrides-column-right {
       background: none;
     }
   }
+}
+
+fieldset legend {
+  border-bottom: none;
 }

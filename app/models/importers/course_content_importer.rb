@@ -184,7 +184,8 @@ module Importers
         end
         migration.update_import_progress(90)
 
-        if migration.migration_settings[:import_blueprint_settings] || (migration.copy_options && migration.copy_options[:all_blueprint_settings])
+        if (migration.migration_settings[:import_blueprint_settings] || (migration.copy_options && migration.copy_options[:all_blueprint_settings])) &&
+           (course.account.grants_any_right?(migration.user, :manage_courses, :manage_courses_admin) && course.account.grants_right?(migration.user, :manage_master_courses))
           Importers::BlueprintSettingsImporter.process_migration(data, migration)
         end
 
@@ -279,6 +280,9 @@ module Importers
       imported_items = migration.imported_migration_items_for_insert_type
       return unless imported_items.any?
 
+      # get rid of assignments relating to quizzes lest they create 2 quizzes in the module
+      quiz_assignments = imported_items.filter { |item| item.is_a? Quizzes::Quiz }.pluck(:assignment_id)
+      imported_items.filter! { |item| !(item.is_a?(Assignment) && quiz_assignments.include?(item.id)) }
       start_pos = migration.migration_settings[:insert_into_module_position]
       start_pos = start_pos.to_i unless start_pos.nil? # 0 = start; nil = end
       mod.insert_items(imported_items, start_pos)
@@ -383,7 +387,7 @@ module Importers
               date = event.send(field)
               next unless date
 
-              event.send("#{field}=", shift_date(date, shift_options))
+              event.send(:"#{field}=", shift_date(date, shift_options))
             end
             event.save_without_broadcasting
           end
@@ -497,7 +501,7 @@ module Importers
       end
 
       settings.slice(*atts.map(&:to_s)).each do |key, val|
-        course.send("#{key}=", val)
+        course.send(:"#{key}=", val)
       end
       if settings.key?(:grading_standard_enabled)
         if settings[:grading_standard_enabled]
@@ -555,6 +559,14 @@ module Importers
 
       if settings.key?(:enable_course_paces) && course.account.feature_enabled?(:course_paces)
         course.enable_course_paces = settings[:enable_course_paces]
+      end
+
+      if settings.key?(:allow_student_discussion_reporting)
+        course.allow_student_discussion_reporting = settings[:allow_student_discussion_reporting]
+      end
+
+      if settings.key?(:allow_student_anonymous_discussion_topics)
+        course.allow_student_anonymous_discussion_topics = settings[:allow_student_anonymous_discussion_topics]
       end
     end
 

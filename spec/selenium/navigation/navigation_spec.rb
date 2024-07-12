@@ -70,7 +70,7 @@ describe "Global Navigation" do
 
     describe "Groups Link" do
       it "filters concluded groups and loads additional pages if necessary" do
-        Setting.set("api_per_page", 2)
+        stub_const("Api::PER_PAGE", 2)
 
         student = user_factory
         2.times do |x|
@@ -87,7 +87,7 @@ describe "Global Navigation" do
         f("#global_nav_groups_link").click
         wait_for_ajaximations
         links = ff('[aria-label="Groups tray"] li a')
-        expect(links.map(&:text)).to eq(["Z Current Group", "All Groups"])
+        expect(links.map(&:text)).to eq(["All Groups", "Z Current Group"])
       end
     end
 

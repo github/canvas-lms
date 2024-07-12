@@ -3,6 +3,8 @@ require:
   - rubocop-graphql
   - rubocop-rails
   - rubocop-rake
+  - rubocop-rspec
+  #- rubocop-rspec_rails
   # this odd relative path is so that rubocop works when run without "bundle
   # exec", such as from most editors/IDEs.
   - ./gems/rubocop-canvas/lib/rubocop_canvas
@@ -19,8 +21,8 @@ AllCops:
 Bundler:
   Severity: error
 
-Capybara:
-  Enabled: false # we don't use capybara (it's automatically included by rubocop-rspec until they hit 3.0)
+FactoryBot:
+  Severity: error
 
 Gemspec:
   Severity: error
@@ -80,6 +82,7 @@ Naming/FileName:
     - "**/urn_*.rb"
     - "**/fixtures/**/*.rb"
     - "config/environments/*-*.rb"
+    - "config/initializers/~*.rb"
     - "config/locales/*.rb" # names must match locale names
     - "spec/selenium/a11y_and_i18n/localized-timezone-lists_spec.rb" # matches JS file it tests
 
@@ -95,6 +98,8 @@ Rails:
   Exclude:
     - "bin/**/*"
     - "gems/google_drive/**/*"
+Rails/ActionControllerFlashBeforeRender:
+  AutoCorrect: false # auto-correct just changes it to `flash.now`, when that may not be appropriate
 Rails/ApplicationRecord:
   Enabled: false # we never bothered creating an ApplicationRecord
 Rails/Blank:
@@ -124,6 +129,8 @@ Rails/I18nLocaleTexts:
     - "**/spec_canvas/**/*.rb"
 Rails/NegateInclude:
   Enabled: false # exclude? isn't as intuitive as !include?
+Rails/Output:
+  AutoCorrect: false # Force the developer to think about what to do; don't just silently convert it to a debug log
 Rails/Present:
   UnlessBlank: false # allow `unless foo.blank?`
 Rails/RedundantPresenceValidationOnBelongsTo:
@@ -150,11 +157,8 @@ RSpec/MultipleMemoizedHelpers:
 RSpec/SubjectStub:
   Enabled: false # yes, canvas is big and complicated sometimes
 
-RSpec/Capybara:
-  Enabled: false # we don't use capybara
-
-RSpec/Rails:
-  Severity: error
+#RSpec/Rails:
+#  Severity: error
 
 Security:
   Severity: error
@@ -215,13 +219,6 @@ Style/WordArray:
 # them to the section above)
 # auto-correct needs to be disabled for any that support it in the meantime
 
-FactoryBot/ConsistentParenthesesStyle:
-  AutoCorrect: false
-FactoryBot/CreateList:
-  AutoCorrect: false
-FactoryBot/SyntaxMethods:
-  AutoCorrect: false
-
 GraphQL/FieldMethod:
   AutoCorrect: false
 GraphQL/FieldName:
@@ -238,9 +235,6 @@ GraphQL/UnusedArgument:
 Layout/LineLength:
   Enabled: false
   AutoCorrect: false
-
-Lint/UriEscapeUnescape:
-  Severity: warning
 
 Naming/AccessorMethodName:
   Severity: convention
@@ -268,9 +262,6 @@ Naming/VariableName:
 Naming/VariableNumber:
   Enabled: false
 
-Rails/ActionControllerFlashBeforeRender:
-  Severity: convention
-  AutoCorrect: false
 Rails/ActionOrder:
   Severity: convention
   AutoCorrect: false
@@ -285,30 +276,9 @@ Rails/ActiveSupportOnLoad:
 Rails/ApplicationMailer:
   Severity: convention
   AutoCorrect: false
-Rails/BelongsTo:
-  Severity: convention
-  AutoCorrect: false
-Rails/BulkChangeTable:
-  Severity: convention
-Rails/CreateTableWithTimestamps:
-  Severity: convention
-Rails/Date:
-  Enabled: false
-  AutoCorrect: false
 Rails/DeprecatedActiveModelErrorsMethods:
   AutoCorrect: false
-Rails/DuplicateAssociation:
-  AutoCorrect: false
 Rails/EagerEvaluationLogMessage:
-  Severity: convention
-  AutoCorrect: false
-Rails/EnumHash:
-  Severity: convention
-  AutoCorrect: false
-Rails/FindBy:
-  Severity: convention
-  AutoCorrect: false
-Rails/FindById:
   Severity: convention
   AutoCorrect: false
 Rails/FindEach:
@@ -318,27 +288,14 @@ Rails/InverseOf:
   Severity: convention
 Rails/LexicallyScopedActionFilter:
   Severity: convention
-Rails/NotNullColumn:
-  Severity: convention
-Rails/Output:
-  Severity: convention
-  AutoCorrect: false
 Rails/OutputSafety:
   Severity: convention
-Rails/Pick:
-  Severity: convention
-  AutoCorrect: false
-Rails/PluckInWhere:
-  Severity: convention
-  AutoCorrect: false
 Rails/RakeEnvironment:
   Severity: convention
   AutoCorrect: false
 Rails/ReadWriteAttribute:
   Enabled: false # accessors are often defined in terms of read_attribute
   AutoCorrect: false
-Rails/ReversibleMigration:
-  Severity: convention
 Rails/TimeZone:
   Enabled: false
   AutoCorrect: false
@@ -372,7 +329,7 @@ RSpec/ExpectActual:
 RSpec/ExpectChange:
   Enabled: false
   AutoCorrect: false
-RSpec/FilePath:
+RSpec/SpecFilePathFormat:
   Severity: convention
 RSpec/HooksBeforeExamples:
   Severity: convention
@@ -457,6 +414,8 @@ Style/FormatString:
   Severity: convention
   AutoCorrect: false
 Style/GlobalVars:
+  AllowedVariables:
+  - $canvas_rails
   Severity: convention
 Style/GuardClause:
   Enabled: false

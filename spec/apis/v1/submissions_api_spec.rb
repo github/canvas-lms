@@ -130,7 +130,7 @@ describe "Submissions API", type: :request do
 
     shared_examples_for "enrollment_state" do
       it "scopes call to enrollment_state" do
-        e = @section.enrollments.where(user_id: @student1.id).take
+        e = @section.enrollments.find_by(user_id: @student1.id)
         json = api_call(:get,
                         "/api/v1/sections/sis_section_id:my-section-sis-id/students/submissions",
                         { controller: "submissions_api",
@@ -808,6 +808,32 @@ describe "Submissions API", type: :request do
     )
   end
 
+  context "checkpointed discussions" do
+    before do
+      course_with_teacher(active_all: true)
+      @student1 = student_in_course(course: @course, active_enrollment: true).user
+      @course.root_account.enable_feature!(:discussion_checkpoints)
+      @assignment = @course.assignments.create!(has_sub_assignments: true)
+      @assignment.sub_assignments.create!(context: @course, sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC, due_at: 2.days.from_now)
+      @assignment.sub_assignments.create!(context: @course, sub_assignment_tag: CheckpointLabels::REPLY_TO_ENTRY, due_at: 3.days.from_now)
+      @topic = @course.discussion_topics.create!(assignment: @assignment, reply_to_entry_required_count: 4)
+    end
+
+    it "returns sub_assignment_submissions for checkpointed discussions submissions" do
+      json = api_call(:get,
+                      "/api/v1/courses/#{@course.id}/assignments/#{@assignment.id}/submissions/#{@student.id}.json",
+                      { controller: "submissions_api",
+                        action: "show",
+                        format: "json",
+                        course_id: @course.id.to_s,
+                        assignment_id: @assignment.id.to_s,
+                        user_id: @student1.id.to_s },
+                      include: %w[sub_assignment_submissions])
+
+      expect(json["sub_assignment_submissions"].size).to eq 2
+    end
+  end
+
   def submission_with_comment
     @student = user_factory(active_all: true)
     course_with_teacher(active_all: true)
@@ -1153,7 +1179,7 @@ describe "Submissions API", type: :request do
                           "custom_grade_status_id" => nil,
                           "submission_comments" =>
          [{ "comment" => "Well here's the thing...",
-            "attempt" => nil,
+            "attempt" => 1,
             "media_comment" => {
               "media_id" => "3232",
               "media_type" => "audio",
@@ -1526,7 +1552,7 @@ describe "Submissions API", type: :request do
          "user_id" => student1.id,
          "submission_comments" =>
          [{ "comment" => "Well here's the thing...",
-            "attempt" => nil,
+            "attempt" => 3,
             "media_comment" => {
               "media_type" => "audio",
               "media_id" => "3232",
@@ -3126,7 +3152,7 @@ describe "Submissions API", type: :request do
       end
 
       it "errors if too many students requested" do
-        allow(Api).to receive(:max_per_page).and_return(0)
+        stub_const("Api::MAX_PER_PAGE", 0)
         @user = @student1
         api_call(:get,
                  "/api/v1/courses/#{@course.id}/students/submissions.json",
@@ -3411,7 +3437,7 @@ describe "Submissions API", type: :request do
       )
     end
 
-    it "allows grading an uncreated submission" do
+    it "allows grading a student that has not submitted" do
       json = api_call(
         :put,
         "/api/v1/courses/#{@course.id}/assignments/#{@assignment.id}/submissions/#{@student.id}.json",
@@ -3431,6 +3457,55 @@ describe "Submissions API", type: :request do
       )
 
       expect(Submission.count).to eq 1
+      expect(json["grade"]).to eq "B"
+      expect(json["score"]).to eq 12.9
+    end
+
+    it "allows grading an assigned student whose placeholder submission object has not yet been created" do
+      # This simulates a scenario where the delayed job to create the
+      # assigned student's submission has not yet completed
+      @assignment.submissions.find_by(user: @student).destroy
+      json = api_call(
+        :put,
+        "/api/v1/courses/#{@course.id}/assignments/#{@assignment.id}/submissions/#{@student.id}.json",
+        {
+          controller: "submissions_api",
+          action: "update",
+          format: "json",
+          course_id: @course.id.to_s,
+          assignment_id: @assignment.id.to_s,
+          user_id: @student.id.to_s
+        },
+        {
+          submission: {
+            posted_grade: "B"
+          },
+        }
+      )
+      expect(@assignment.reload.submissions.where(user: @student).exists?).to be true
+      expect(json["grade"]).to eq "B"
+      expect(json["score"]).to eq 12.9
+    end
+
+    it "allows grading an assigned student without visibility" do
+      @course.enrollments.find_by(user: @student).deactivate
+      json = api_call(
+        :put,
+        "/api/v1/courses/#{@course.id}/assignments/#{@assignment.id}/submissions/#{@student.id}.json",
+        {
+          controller: "submissions_api",
+          action: "update",
+          format: "json",
+          course_id: @course.id.to_s,
+          assignment_id: @assignment.id.to_s,
+          user_id: @student.id.to_s
+        },
+        {
+          submission: {
+            posted_grade: "B"
+          },
+        }
+      )
       expect(json["grade"]).to eq "B"
       expect(json["score"]).to eq 12.9
     end
@@ -3586,6 +3661,66 @@ describe "Submissions API", type: :request do
       end.to change {
         submission.reload.versions.count
       }.by(1)
+    end
+
+    describe "checkpointed discussions" do
+      before do
+        @course.root_account.enable_feature!(:discussion_checkpoints)
+        assignment = @course.assignments.create!(has_sub_assignments: true)
+        assignment.sub_assignments.create!(context: @course, sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC, due_at: 2.days.from_now)
+        assignment.sub_assignments.create!(context: @course, sub_assignment_tag: CheckpointLabels::REPLY_TO_ENTRY, due_at: 3.days.from_now)
+        @topic = @course.discussion_topics.create!(assignment:, reply_to_entry_required_count: 1)
+      end
+
+      let(:api_call_args) do
+        [
+          :put,
+          "/api/v1/courses/#{@course.id}/assignments/#{@topic.assignment_id}/submissions/#{@student.id}.json",
+          {
+            controller: "submissions_api",
+            action: "update",
+            format: "json",
+            course_id: @course.id.to_s,
+            assignment_id: @topic.assignment_id.to_s,
+            user_id: @student.id.to_s
+          }
+        ]
+      end
+
+      let(:reply_to_topic_submission) do
+        @topic.reply_to_topic_checkpoint.submissions.find_by(user: @student)
+      end
+
+      it "supports grading checkpoints" do
+        api_call(
+          *api_call_args,
+          submission: { posted_grade: 10 },
+          sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC
+        )
+        expect(response).to be_successful
+        expect(reply_to_topic_submission.score).to eq 10
+      end
+
+      it "raises an error if no sub assignment tag is provided" do
+        api_call(
+          *api_call_args,
+          submission: { posted_grade: 10 }
+        )
+        expect(response).to have_http_status :bad_request
+        expect(json_parse.fetch("error")).to eq "Must provide a valid sub assignment tag when grading checkpointed discussions"
+      end
+
+      it "ignores checkpoints when the feature flag is disabled" do
+        @course.root_account.disable_feature!(:discussion_checkpoints)
+        api_call(
+          *api_call_args,
+          submission: { posted_grade: 10 },
+          sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC
+        )
+        expect(response).to be_successful
+        expect(reply_to_topic_submission.score).to be_nil
+        expect(@topic.assignment.submissions.find_by(user: @student).score).to eq 10
+      end
     end
 
     describe "stickers" do
@@ -5711,9 +5846,8 @@ describe "Submissions API", type: :request do
     expect(@submission.reload.read?(@teacher)).to be_falsey
   end
 
-  context "with feedback visibility on" do
+  context "submission feedback" do
     before :once do
-      Account.site_admin.enable_feature!(:visibility_feedback_student_grades_page)
       course_with_student_and_submitted_homework
     end
 
@@ -5872,7 +6006,6 @@ describe "Submissions API", type: :request do
 
   context "clear unread submissions" do
     before :once do
-      Account.site_admin.enable_feature!(:visibility_feedback_student_grades_page)
       course_with_teacher(active_all: true)
       student_in_course(active_all: true)
       assignment_model(course: @course)

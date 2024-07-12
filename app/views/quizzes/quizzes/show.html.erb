@@ -16,6 +16,8 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 %>
 
+<% js_env :context_rubric_associations_url => context_url(@context, :context_rubric_associations_url) rescue nil %>
+
 <% provide :page_title do %><%= join_title(@quiz.quiz_title || @quiz.readable_type, @context.name) %><% end %>
 
 <%
@@ -85,7 +87,7 @@
 
         <% if (can_do(@quiz, @current_user, :grade) || can_do(@quiz, @current_user, :review_grades)) && @quiz.available? &&
           @quiz.published? && !!@quiz.assignment&.can_view_speed_grader?(@current_user) %>
-          <% speed_grader_title = t(:speed_grader, "SpeedGrader™") %>
+          <% speed_grader_title = t(:speed_grader, "SpeedGrader") %>
           <li>
             <a target="_blank" href="<%= context_url(@context, :speed_grader_context_gradebook_url, :assignment_id => @quiz.assignment.id) %>">
               <i class="icon-speed-grader"><span class="screenreader-only"><%= speed_grader_title %></span></i> <%= speed_grader_title %>
@@ -130,6 +132,17 @@
           <%= 'data-tooltip' unless @quiz.can_unpublish? %>>
         </button>
         <%= link_to_preview_quiz('class' => "btn", 'id' => "preview_quiz_button", 'preview' => 1) %>
+      <% if @quiz.grants_right?(@current_user, session, :manage_assign_to) && Account.site_admin.feature_enabled?(:selective_release_ui_api) %>
+          <button
+            class='btn assign-to-link'
+            data-quiz-name="<%= @quiz.title %>"
+            data-quiz-context-id="<%= @quiz.context_id %>"
+            data-quiz-id="<%= @quiz.id %>"
+            data-quiz-points-possible="<%= @quiz.points_possible %>"
+          >
+            <i class='icon-permissions'></i> <%= t('Assign To') %>
+          </button>
+        <% end %>
       </div>
 
       <% if can_do(@quiz, @current_user, :update) || can_do(@quiz, @current_user, :grade) || can_do(@quiz, @current_user, :review_grades) %>
@@ -401,6 +414,7 @@
   </header>
 
   <div id="direct-share-mount-point"></div>
+  <div id="assign-to-mount-point"></div>
 
   <% if @submission && @submission.completed? %>
     <%= render "quiz_submission_results" %>

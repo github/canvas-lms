@@ -143,6 +143,9 @@
     "content_type_2cf90d95": {
         "message": "نوع محتوا"
     },
+    "copy_9748f9f": {
+        "message": "کپی کردن"
+    },
     "copyright_holder_66ee111": {
         "message": "دارنده حق نشر:"
     },
@@ -262,6 +265,9 @@
     },
     "filipino_33339264": {
         "message": "فیلیپینی"
+    },
+    "find_8d605019": {
+        "message": "یافتن"
     },
     "finish_bc343002": {
         "message": "پایان"
@@ -485,6 +491,9 @@
     "no_results_940393cf": {
         "message": "No results."
     },
+    "no_results_found_58717065": {
+        "message": "نتیجه ای یافت نشد"
+    },
     "no_video_1ed00b26": {
         "message": "بدون تصویر"
     },
@@ -560,6 +569,9 @@
     "preview_a3f8f854": {
         "message": "پیش نمایش"
     },
+    "previous_bd2ac015": {
+        "message": "Previous"
+    },
     "published_c944a23d": {
         "message": "منتشر شده"
     },
@@ -592,6 +604,9 @@
     },
     "reset_95a81614": {
         "message": "بازنشانی"
+    },
+    "retry_ebd5f8ba": {
+        "message": "تلاش دوباره"
     },
     "rich_content_editor_2708ef21": {
         "message": "ویرایشگر محتوای غنی"

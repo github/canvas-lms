@@ -18,14 +18,12 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "atom"
-
 class EportfoliosController < ApplicationController
   include EportfolioPage
   before_action :require_user, only: [:index, :user_index]
   before_action :reject_student_view_student
   before_action :verified_user_check, only: %i[index user_index create]
-  before_action :get_eportfolio, except: %i[index user_index create]
+  before_action :find_eportfolio, except: %i[index user_index create]
 
   def index
     user_index
@@ -41,26 +39,6 @@ class EportfoliosController < ApplicationController
     add_crumb(t(:crumb, "ePortfolios"))
     @portfolios = @current_user.eportfolios.active.order(:updated_at).to_a
     render :user_index
-  end
-
-  def create
-    if authorized_action(Eportfolio.new, @current_user, :create)
-      @portfolio = @current_user.eportfolios.build(eportfolio_params)
-      respond_to do |format|
-        if @portfolio.save
-          @portfolio.ensure_defaults
-          flash[:notice] = t("notices.created", "ePortfolio successfully created")
-          format.html { redirect_to eportfolio_url(@portfolio) }
-          format.json { render json: @portfolio.as_json(permissions: { user: @current_user, session: }) }
-        else
-          format.html do
-            rce_js_env
-            render :new
-          end
-          format.json { render json: @portfolio.errors, status: :bad_request }
-        end
-      end
-    end
   end
 
   def show
@@ -109,6 +87,26 @@ class EportfoliosController < ApplicationController
     end
   end
 
+  def create
+    if authorized_action(Eportfolio.new, @current_user, :create)
+      @portfolio = @current_user.eportfolios.build(eportfolio_params)
+      respond_to do |format|
+        if @portfolio.save
+          @portfolio.ensure_defaults
+          flash[:notice] = t("notices.created", "ePortfolio successfully created")
+          format.html { redirect_to eportfolio_url(@portfolio) }
+          format.json { render json: @portfolio.as_json(permissions: { user: @current_user, session: }) }
+        else
+          format.html do
+            rce_js_env
+            render :new
+          end
+          format.json { render json: @portfolio.errors, status: :bad_request }
+        end
+      end
+    end
+  end
+
   def update
     update_params = if @portfolio.grants_right?(@current_user, session, :update)
                       eportfolio_params
@@ -153,8 +151,7 @@ class EportfoliosController < ApplicationController
 
   def reorder_categories
     if authorized_action(@portfolio, @current_user, :update)
-      order = []
-      params[:order].split(",").each { |id| order << Shard.relative_id_for(id, Shard.current, @portfolio.shard) }
+      order = params[:order].split(",").map { |id| Shard.relative_id_for(id, Shard.current, @portfolio.shard) }
       @portfolio.eportfolio_categories.build.update_order(order)
       render json: @portfolio.eportfolio_categories.map { |c| [c.id, c.position] }, status: :ok
     end
@@ -162,8 +159,7 @@ class EportfoliosController < ApplicationController
 
   def reorder_entries
     if authorized_action(@portfolio, @current_user, :update)
-      order = []
-      params[:order].split(",").each { |id| order << Shard.relative_id_for(id, Shard.current, @portfolio.shard) }
+      order = params[:order].split(",").map { |id| Shard.relative_id_for(id, Shard.current, @portfolio.shard) }
       @category = @portfolio.eportfolio_categories.find(params[:eportfolio_category_id])
       @category.eportfolio_entries.build.update_order(order)
       render json: @portfolio.eportfolio_entries.map { |c| [c.id, c.position] }, status: :ok
@@ -220,17 +216,15 @@ class EportfoliosController < ApplicationController
   def public_feed
     if @portfolio.public || params[:verifier] == @portfolio.uuid
       @entries = @portfolio.eportfolio_entries.order("eportfolio_entries.created_at DESC").to_a
-      feed = Atom::Feed.new do |f|
-        f.title = t(:title, "%{portfolio_name} Feed", portfolio_name: @portfolio.name)
-        f.links << Atom::Link.new(href: eportfolio_url(@portfolio.id), rel: "self")
-        f.updated = @entries.first.updated_at rescue Time.now
-        f.id = eportfolio_url(@portfolio.id)
-      end
-      @entries.each do |e|
-        feed.entries << e.to_atom(private: params[:verifier] == @portfolio.uuid)
-      end
+
+      title = t(:title, "%{portfolio_name} Feed", portfolio_name: @portfolio.name)
+      updated = @entries.first.updated_at rescue Time.now
+      link = eportfolio_url(@portfolio.id)
+
+      private_value = params[:verifier] == @portfolio.uuid
+
       respond_to do |format|
-        format.atom { render plain: feed.to_xml }
+        format.atom { render plain: AtomFeedHelper.render_xml(title:, link:, updated:, entries: @entries, private: private_value) }
       end
     else
       authorized_action(nil, nil, :bad_permission)
@@ -247,7 +241,7 @@ class EportfoliosController < ApplicationController
     params.require(:eportfolio).permit(:spam_status)
   end
 
-  def get_eportfolio
+  def find_eportfolio
     @portfolio = Eportfolio.active.find(params[:eportfolio_id] || params[:id])
   end
 

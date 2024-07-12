@@ -193,7 +193,7 @@ module AccountReports
     end
 
     def mgp_grade_export_runner(runner)
-      term = root_account.enrollment_terms.where(id: root_account.all_courses.where(id: runner.batch_items.first).select(:enrollment_term_id)).take
+      term = root_account.enrollment_terms.find_by(id: root_account.all_courses.where(id: runner.batch_items.first).select(:enrollment_term_id))
       gp_set = term.grading_period_group
       grading_periods = gp_set.grading_periods.active.order(:start_date)
       return unless grading_periods
@@ -206,7 +206,7 @@ module AccountReports
         users_by_id = users.index_by(&:id)
         pseudonyms = preload_logins_for_users(users, include_deleted: @include_deleted)
         students_by_course = student_chunk.group_by(&:course_id)
-        students_by_course.each do |_course_id, course_students|
+        students_by_course.each_value do |course_students|
           scores = indexed_scores(course_students, grading_periods)
           course_students.each_with_index do |student, i|
             p = loaded_pseudonym(pseudonyms,
@@ -283,12 +283,14 @@ module AccountReports
                 sc.unposted_current_score,
                 sc.unposted_final_score,
                 sc.override_score,
-           CASE WHEN enrollments.workflow_state = 'active' THEN 'active'
+           CASE WHEN es.state = 'completed' THEN 'concluded'
+                WHEN enrollments.workflow_state = 'active' THEN 'active'
                 WHEN enrollments.workflow_state = 'completed' THEN 'concluded'
                 WHEN enrollments.workflow_state = 'inactive' THEN 'inactive'
                 WHEN enrollments.workflow_state = 'deleted' THEN 'deleted' END AS enroll_state")
                              .order("t.id, c.id, enrollments.id")
                              .joins("INNER JOIN #{User.quoted_table_name} u ON enrollments.user_id = u.id
+               INNER JOIN #{EnrollmentState.quoted_table_name} AS es ON enrollments.id = es.enrollment_id
                INNER JOIN #{Course.quoted_table_name} c ON c.id = enrollments.course_id
                INNER JOIN #{EnrollmentTerm.quoted_table_name} t ON c.enrollment_term_id = t.id
                INNER JOIN #{CourseSection.quoted_table_name} s ON enrollments.course_section_id = s.id
@@ -310,7 +312,7 @@ module AccountReports
         students = students.where(
           "c.workflow_state='available'
            AND enrollments.workflow_state IN ('active', 'completed')
-           AND sc.workflow_state <> 'deleted'"
+           AND (sc.workflow_state IS DISTINCT FROM 'deleted')"
         )
       end
       students

@@ -17,8 +17,8 @@
 %>
 
 <% unless AuthenticationProvider::Microsoft.globally_configured? %>
-  <p><%= mt(<<~TEXT, ms_app_url: "https://apps.dev.microsoft.com/", callback_url: oauth2_login_callback_url)
-You will need to register a [new app with Microsoft](%{ms_app_url}).
+  <p><%= mt(<<~TEXT, ms_app_url: "https://portal.azure.com/", callback_url: oauth2_login_callback_url, wrappers: { "*" => "<code>\\1</code>" })
+You will need to register a [new app with Microsoft](%{ms_app_url}) under *App registrations*.
 You should configure %{callback_url} as the Redirect URI.
 After you save your app, make a note of the Application ID and Secret, and enter them here.
 TEXT
@@ -31,17 +31,20 @@ TEXT
     <%= f.label :application_secret, t('Application Secret'), class: 'ic-Label', for: "application_secret_#{presenter.id_suffix(aac)}" %>
     <%= f.password_field :application_secret, class: 'ic-Input', id: "application_secret_#{presenter.id_suffix(aac)}" %>
   </div><% end %>
-<p><%= t(<<~TEXT)
-To restrict to users of your Azure Active Directory, enter your tenant here.
+<p><%= mt(<<~TEXT, wrappers: { "*" => "<code>\\1</code>" })
+To restrict to users of specific Entra ID instances, enter the tenant GUID(s) here, separated by commas.
+You can specify *microsoft* to allow personal Microsoft accounts.
+If your Entra ID is configured to allow guest users from other tenants, you can specify *guests* to allow them without specifically naming their tenant.
 TEXT
 %></p>
 <div class="ic-Form-control">
-  <%= f.label :tenant, t('Tenant'), class: 'ic-Label', for: "tenant_#{presenter.id_suffix(aac)}" %>
-  <%= f.text_field :tenant, placeholder: 'mytenant.onmicrosoft.com', class: 'ic-Input', id: "tenant_#{presenter.id_suffix(aac)}" %>
+  <%= f.label :tenants, t('Tenants'), class: 'ic-Label', for: "tenants_#{presenter.id_suffix(aac)}" %>
+  <%= f.text_field :tenants, class: 'ic-Input', id: "tenants_#{presenter.id_suffix(aac)}", value: aac.tenants.join(","), placeholder: '00000000-0000-0000-0000-000000000000,11111111-1111-1111-1111-111111111111' %>
 </div>
-<p><%= t <<~TEXT
-Note that email may not always be populated in the user's profile at Microsoft.
-Oid will not be populated for personal Microsoft accounts.
+<p><%= mt(<<~TEXT, wrappers: { "*" => "<code>\\1</code>" })
+Note that all login attributes from Entra ID logins are potentially modifiable with the exception of *tid* and *oid*.
+To ensure user accounts cannot be compromised, you should only use an attribute besides *tid+oid* if you are certain
+it cannot be changed by users in all of your allowed Entra ID tenants.
 TEXT
 %></p>
 <%= render partial: 'login_attribute_dropdown', locals: { aac: aac, presenter: presenter, f: f } %>

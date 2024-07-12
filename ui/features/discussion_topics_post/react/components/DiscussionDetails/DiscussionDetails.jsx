@@ -33,7 +33,6 @@ const I18n = useI18nScope('discussion_posts')
 
 export function DiscussionDetails({...props}) {
   const pointsPossible = props.discussionTopic?.assignment?.pointsPossible || 0
-
   const formattedPoints = pointsPossible
     ? numberFormat._format(pointsPossible, {
         precision: 2,
@@ -83,6 +82,9 @@ export function DiscussionDetails({...props}) {
                   isAdmin={props.discussionTopic.permissions.readAsAdmin}
                   inPacedCourse={props.inPacedCourse}
                   courseId={props.courseId}
+                  replyToEntryRequiredCount={props.discussionTopic.replyToEntryRequiredCount}
+                  replyToTopicSubmission={props.replyToTopicSubmission}
+                  replyToEntrySubmission={props.replyToEntrySubmission}
                 />
               </Flex.Item>
               {!props.discussionTopic.assignment.restrictQuantitativeData && (
@@ -117,6 +119,8 @@ DiscussionDetails.propTypes = {
   discussionTopic: PropTypes.object,
   inPacedCourse: PropTypes.bool,
   courseId: PropTypes.string,
+  replyToTopicSubmission: PropTypes.object,
+  replyToEntrySubmission: PropTypes.object,
 }
 
 export default DiscussionDetails

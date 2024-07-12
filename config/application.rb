@@ -27,6 +27,20 @@ require "rails/test_unit/railtie"
 
 Bundler.require(*Rails.groups)
 
+debug_launch = lambda do
+  if ENV["RUBY_DEBUG_OPEN"]
+    require "debug/session"
+    next unless defined?(DEBUGGER__)
+
+    DEBUGGER__.open(nonstop: ENV["RUBY_DEBUG_NONSTOP"])
+  elsif ENV["RUBY_DEBUG_START"]
+    require "debug/start" # rubocop:disable Lint/Debugger
+  end
+end
+
+Spring.after_fork(&debug_launch) if defined?(Spring)
+debug_launch.call if !defined?(Passenger) && Rails.env.development?
+
 module CanvasRails
   class Application < Rails::Application
     config.autoloader = :zeitwerk
@@ -44,6 +58,8 @@ module CanvasRails
     config.action_dispatch.default_headers["Referrer-Policy"] = "no-referrer-when-downgrade"
     config.action_controller.forgery_protection_origin_check = true
     ActiveSupport.to_time_preserves_timezone = true
+    # Ensure switchman gets the new version before the main initialize_cache initializer runs
+    config.active_support.cache_format_version = ActiveSupport.cache_format_version = 7.0
 
     config.app_generators do |c|
       c.test_framework :rspec
@@ -63,34 +79,57 @@ module CanvasRails
 
     log_config = Rails.root.join("config/logging.yml").file? && Rails.application.config_for(:logging).with_indifferent_access
     log_config = { "logger" => "rails", "log_level" => "debug" }.merge(log_config || {})
-    opts = {}
-    require "canvas_logger"
 
     config.log_level = log_config["log_level"]
-    log_level = ActiveSupport::Logger.const_get(config.log_level.to_s.upcase)
-    opts[:skip_thread_context] = true if log_config["log_context"] == false
+    log_level = Logger.const_get(config.log_level.to_s.upcase)
 
     case log_config["logger"]
     when "syslog"
-      require "syslog_wrapper"
+      require "syslog/logger"
       log_config["app_ident"] ||= "canvas-lms"
       log_config["daemon_ident"] ||= "canvas-lms-daemon"
       facilities = 0
       (log_config["facilities"] || []).each do |facility|
-        facilities |= Syslog.const_get "LOG_#{facility.to_s.upcase}"
+        facilities |= Syslog.const_get :"LOG_#{facility.to_s.upcase}"
       end
       ident = (ENV["RUNNING_AS_DAEMON"] == "true") ? log_config["daemon_ident"] : log_config["app_ident"]
-      opts[:include_pid] = true if log_config["include_pid"] == true
-      config.logger = SyslogWrapper.new(ident, facilities, opts)
-      config.logger.level = log_level
+
+      config.logger = Syslog::Logger.new(ident, facilities)
+
+      syslog_options = (log_config["include_pid"] == true) ? Syslog::LOG_PID : 0
+      if (Syslog.instance.options & Syslog::LOG_PID) != syslog_options
+        config.logger.syslog = Syslog.reopen(Syslog.instance.ident,
+                                             (Syslog.instance.options & ~Syslog::LOG_PID) | syslog_options,
+                                             Syslog.instance.facility)
+      end
     else
+      require "canvas_logger"
       log_path = config.paths["log"].first
 
       if ENV["RUNNING_AS_DAEMON"] == "true"
         log_path = Rails.root.join("log/delayed_job.log")
       end
 
-      config.logger = CanvasLogger.new(log_path, log_level, opts)
+      FileUtils.mkdir_p(File.dirname(log_path))
+      config.logger = CanvasLogger.new(log_path, log_level)
+    end
+    config.logger.level = log_level
+    unless log_config["log_context"] == false
+      class ContextFormatter < Logger::Formatter
+        def initialize(parent_formatter)
+          super()
+
+          @parent_formatter = parent_formatter
+        end
+
+        def call(severity, time, progname, msg)
+          msg = @parent_formatter.call(severity, time, progname, msg)
+          context = Thread.current[:context] || {}
+          "[#{context[:session_id] || "-"} #{context[:request_id] || "-"}] #{msg}"
+        end
+      end
+
+      config.logger.formatter = ContextFormatter.new(config.logger.formatter)
     end
 
     # Activate observers that should always be running
@@ -136,51 +175,33 @@ module CanvasRails
     end
 
     module PostgreSQLEarlyExtensions
-      module ConnectionHandling
-        def postgresql_connection(config)
-          conn_params = config.symbolize_keys
-
-          hosts = Array(conn_params[:host]).presence || [nil]
-          hosts.each_with_index do |host, index|
-            conn_params[:host] = host
-            return super(conn_params)
-            # we _shouldn't_ be catching a NoDatabaseError, but that's what Rails raises
-            # for an error where the database name is in the message (i.e. a hostname lookup failure)
-          rescue ::ActiveRecord::NoDatabaseError, ::ActiveRecord::ConnectionNotEstablished
-            raise if index == hosts.length - 1
-            # else try next host
-          end
-        end
-      end
-
-      def initialize(connection, logger, connection_parameters, config)
+      def initialize(config)
         unless config.key?(:prepared_statements)
           config = config.dup
           config[:prepared_statements] = false
         end
-        super(connection, logger, connection_parameters, config)
+        if config[:host].is_a?(Array)
+          config = config.dup
+          config[:host] = config[:host].join(",")
+        end
+        super
       end
 
       def connect
-        hosts = Array(@connection_parameters[:host]).presence || [nil]
-        hosts.each_with_index do |host, index|
-          connection_parameters = @connection_parameters.dup
-          connection_parameters[:host] = host
-          @connection = PG::Connection.connect(connection_parameters)
+        super
 
-          configure_connection
-
-          raise "Canvas requires PostgreSQL 12 or newer" unless postgresql_version >= 12_00_00 # rubocop:disable Style/NumericLiterals
-
-          break
-        rescue ::PG::Error => e
-          if e.message.include?("does not exist")
-            raise ActiveRecord::NoDatabaseError, e.message
-          elsif index == hosts.length - 1
-            raise
-          end
-          # else try next host
+        raise "Canvas requires PostgreSQL 12 or newer" unless postgresql_version >= 12_00_00 # rubocop:disable Style/NumericLiterals
+      rescue ::ActiveRecord::ActiveRecordError, ::ActiveRecord::ConnectionFailed, ::ActiveRecord::ConnectionNotEstablished, ::PG::Error => e
+        # If exception occurs using parameters from a predefined pg service, retry without
+        if @connection_parameters.key?(:service)
+          CanvasErrors.capture(e, { tags: { pg_service: @connection_parameters[:service] } }, :warn)
+          Rails.logger.warn("Error connecting to database using pg service `#{@connection_parameters[:service]}`; retrying without... (error: #{e.message})")
+          @connection_parameters.delete(:service)
+          @connection_parameters[:sslmode] = "disable"
+          retry
         end
+
+        raise
       end
     end
 
@@ -194,9 +215,6 @@ module CanvasRails
       end
     end
 
-    Autoextend.hook(:"ActiveRecord::Base",
-                    PostgreSQLEarlyExtensions::ConnectionHandling,
-                    singleton: true)
     Autoextend.hook(:"ActiveRecord::ConnectionAdapters::PostgreSQLAdapter",
                     PostgreSQLEarlyExtensions,
                     method: :prepend)
@@ -309,8 +327,17 @@ module CanvasRails
       def self.generate_key(*); end
     end
 
-    def key_generator
+    def key_generator(...)
       DummyKeyGenerator
+    end
+
+    # This also depends on secret_key_base and is not a feature we use or currently intend to support
+    initializer "canvas.ignore_generated_token_verifier", before: "active_record.generated_token_verifier" do
+      config.after_initialize do
+        ActiveSupport.on_load(:active_record) do
+          self.generated_token_verifier = "UNUSED"
+        end
+      end
     end
 
     initializer "canvas.init_dynamic_settings", before: "canvas.extend_shard" do
@@ -324,17 +351,17 @@ module CanvasRails
         # needs the rails app for anything.
 
         # Do it early with the wrong cache for things super early in boot
-        DynamicSettingsInitializer.bootstrap!
+        reloader = DynamicSettingsInitializer.bootstrap!
         # Do it at the end when the autoloader is set up correctly
         config.to_prepare do
-          DynamicSettingsInitializer.bootstrap!
+          reloader.call
         end
       end
     end
 
     initializer "canvas.extend_shard", before: "active_record.initialize_database" do
       # have to do this before the default shard loads
-      Switchman::Shard.serialize :settings, Hash
+      Switchman::Shard.serialize :settings, type: Hash
       Switchman.cache = -> { MultiCache.cache }
     end
 

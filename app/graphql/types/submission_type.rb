@@ -49,19 +49,19 @@ module Types
 
     global_id_field :id
 
-    field :cached_due_date, DateTimeType, null: true
+    field :custom_grade_status, String, null: true
+    def custom_grade_status
+      CustomGradeStatus.find(object.custom_grade_status_id).name if object.custom_grade_status_id
+    end
 
     field :read_state, String, null: true
     def read_state
       object.read_state(current_user)
     end
 
-    field :hide_grade_from_student, Boolean, null: true
-    def hide_grade_from_student
-      object.hide_grade_from_student?
-    end
-
     field :grading_period_id, ID, null: true
+
+    field :student_entered_score, Float, null: true
 
     field :redo_request, Boolean, null: true
 
@@ -73,7 +73,6 @@ module Types
     def submission_histories_connection(filter:)
       filter = filter.to_h
       states, include_current_submission = filter.values_at(:states, :include_current_submission)
-
       Promise.all([
                     load_association(:versions),
                     load_association(:assignment)
@@ -82,6 +81,13 @@ module Types
         histories.pop unless include_current_submission
         histories.select { |h| states.include?(h.workflow_state) }
       end
+    end
+
+    field :sub_assignment_tag, String, null: true
+    def sub_assignment_tag
+      return object.assignment.sub_assignment_tag if object.assignment.is_a?(SubAssignment)
+
+      nil
     end
   end
 end

@@ -119,7 +119,7 @@ class GroupCategoriesController < ApplicationController
     respond_to do |format|
       format.json do
         if authorized_action(@context, @current_user, [:manage_groups, *RoleOverride::GRANULAR_MANAGE_GROUPS_PERMISSIONS])
-          path = send("api_v1_#{@context.class.to_s.downcase}_group_categories_url")
+          path = send(:"api_v1_#{@context.class.to_s.downcase}_group_categories_url")
           paginated_categories = Api.paginate(@categories, self, path)
           includes = ["progress_url"]
           includes.concat(params[:includes]) if params[:includes]
@@ -371,7 +371,6 @@ class GroupCategoriesController < ApplicationController
         if api_request?
           render json: group_category_json(@group_category, @current_user, session)
         else
-          flash[:notice] = t("notices.delete_category_success", "Category successfully deleted")
           render json: { deleted: true }
         end
       elsif api_request?

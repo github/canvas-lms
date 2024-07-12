@@ -26,7 +26,7 @@ import GradingTypeSelector from '@canvas/assignments/backbone/views/GradingTypeS
 import GroupCategorySelector from '@canvas/groups/backbone/views/GroupCategorySelector'
 import PeerReviewsSelector from '@canvas/assignments/backbone/views/PeerReviewsSelector'
 import PostToSisSelector from './PostToSisSelector'
-import _ from 'underscore'
+import {uniqueId, defer, includes, isEqual, extend as lodashExtend} from 'lodash'
 import React from 'react'
 import ReactDOM from 'react-dom'
 import template from '../../jst/EditView.handlebars'
@@ -46,6 +46,8 @@ import UsageRightsIndicator from '@canvas/files/react/components/UsageRightsIndi
 import setUsageRights from '@canvas/files/util/setUsageRights'
 import * as returnToHelper from '@canvas/util/validateReturnToURL'
 import 'jqueryui/tabs'
+import {unfudgeDateForProfileTimezone} from '@instructure/moment-utils'
+import {renderDatetimeField} from '@canvas/datetime/jquery/DatetimeField'
 
 const I18n = useI18nScope('discussion_topics')
 
@@ -85,6 +87,8 @@ function EditView() {
   this.locationAfterCancel = this.locationAfterCancel.bind(this)
   this.locationAfterSave = this.locationAfterSave.bind(this)
   this.setRenderSectionsAutocomplete = this.setRenderSectionsAutocomplete.bind(this)
+  this.handleMessageEvent = this.handleMessageEvent.bind(this)
+  window.addEventListener('message', this.handleMessageEvent.bind(this))
   return EditView.__super__.constructor.apply(this, arguments)
 }
 
@@ -112,7 +116,7 @@ EditView.prototype.els = {
   '#assignment_external_tools': '$AssignmentExternalTools',
 }
 
-EditView.prototype.events = _.extend(EditView.prototype.events, {
+EditView.prototype.events = lodashExtend(EditView.prototype.events, {
   'click .removeAttachment': 'removeAttachment',
   'click .save_and_publish': 'saveAndPublish',
   'click .cancel_button': 'handleCancel',
@@ -144,10 +148,31 @@ EditView.prototype.initialize = function (options) {
     'success',
     (function (_this) {
       return function (xhr) {
+        // a request with attachment always will be successfull because of the iframe submit
+        const errors = xhr?.errors && Object.values(xhr.errors)
+
+        if (errors?.length) {
+          // when a request with attachment fails we need to re-enable the form
+          this.disablingDfd.reject()
+
+          errors.forEach(errorMsg => {
+            if (typeof errorMsg === 'string') {
+              $.flashError(errorMsg)
+              return
+            }
+
+            // internal server error has a different response
+            if (typeof errorMsg?.message === 'string') {
+              $.flashError(errorMsg.message)
+            }
+          })
+          return
+        }
+
         let contextId, contextType, ref, ref1, usageRights
         if (((ref = xhr.attachments) != null ? ref.length : void 0) === 1) {
           usageRights = _this.attachment_model.get('usage_rights')
-          if (usageRights && !_.isEqual(_this.initialUsageRights(), usageRights)) {
+          if (usageRights && !isEqual(_this.initialUsageRights(), usageRights)) {
             ref1 = ENV.context_asset_string.split('_')
             contextType = ref1[0]
             contextId = ref1[1]
@@ -230,12 +255,14 @@ EditView.prototype.isAnnouncement = function () {
   return this.model.constructor === Announcement
 }
 
-EditView.prototype.willPublish = function ({ delayed_post_at } = {}) {
+EditView.prototype.willPublish = function ({delayed_post_at} = {}) {
   const delayedString = delayed_post_at || this.getFormData().delayed_post_at // date string
   // When the page is first loaded, the delay_post checkbox info is not available. In that case we want to default to true and
   // Rely on the existence of the delayedString to determine if the announcement will publish immediately or not
-  const delayPostingCheckbox = this.getFormData().delay_posting ? this.getFormData().delay_posting : "1" // status of the checkbox
-  const isDelayedPostedAtChecked = delayPostingCheckbox === "1"
+  const delayPostingCheckbox = this.getFormData().delay_posting
+    ? this.getFormData().delay_posting
+    : '1' // status of the checkbox
+  const isDelayedPostedAtChecked = delayPostingCheckbox === '1'
 
   if (delayedString && isDelayedPostedAtChecked) {
     const delayedDate = new Date(delayedString)
@@ -252,7 +279,7 @@ EditView.prototype.canPublish = function () {
 
 EditView.prototype.toJSON = function () {
   const data = EditView.__super__.toJSON.apply(this, arguments)
-  const json = _.extend(data, this.options, {
+  const json = lodashExtend(data, this.options, {
     showAssignment: !!this.assignmentGroupCollection,
     useForGrading: this.model.get('assignment') != null,
     isTopic: this.isTopic(),
@@ -271,6 +298,7 @@ EditView.prototype.toJSON = function () {
     allow_todo_date: data.todo_date != null,
     unlocked: data.locked === void 0 ? !this.isAnnouncement() : !data.locked,
     announcementsLocked: this.announcementsLocked,
+    isCreate: !this.options.isEditing,
   })
   json.assignment = json.assignment.toView()
   return json
@@ -295,6 +323,32 @@ EditView.prototype.handlePointsChange = function (ev) {
   }
 }
 
+EditView.prototype.validateGuidData = function (event) {
+  const data = event.data.data
+
+  // If data is a string, convert it to an array for consistent processing
+  const dataArray = Array.isArray(data) ? data : [data]
+  const regexPattern =
+    /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/
+
+  for (const str of dataArray) {
+    if (!regexPattern.test(str)) {
+      return false
+    }
+  }
+  return dataArray
+}
+
+EditView.prototype.handleMessageEvent = function (event) {
+  if (event?.data?.subject !== 'assignment.set_ab_guid') {
+    return
+  }
+  const abGuid = this.validateGuidData(event)
+  if (abGuid) {
+    this.assignment.set('ab_guid', abGuid)
+  }
+}
+
 EditView.prototype.loadNewEditor = function ($textarea) {
   if (this.lockedItems.content) {
     return
@@ -308,10 +362,10 @@ EditView.prototype.loadNewEditor = function ($textarea) {
 EditView.prototype.render = function () {
   EditView.__super__.render.apply(this, arguments)
   this.$textarea = this.$('textarea[name=message]')
-    .attr('id', _.uniqueId('discussion-topic-message'))
+    .attr('id', uniqueId('discussion-topic-message'))
     .css('display', 'none')
   if (!this.lockedItems.content) {
-    _.defer(
+    defer(
       (function (_this) {
         return function () {
           return _this.loadNewEditor(_this.$textarea)
@@ -325,22 +379,22 @@ EditView.prototype.render = function () {
       (this.assignmentGroupFetchDfd = this.assignmentGroupCollection.fetch())
     ).done(this.renderAssignmentGroupOptions)
   }
-  _.defer(this.renderGradingTypeOptions)
+  defer(this.renderGradingTypeOptions)
   if (this.permissions.CAN_SET_GROUP) {
-    _.defer(this.renderGroupCategoryOptions)
+    defer(this.renderGroupCategoryOptions)
   }
-  _.defer(this.renderPeerReviewOptions)
+  defer(this.renderPeerReviewOptions)
   if (ENV.POST_TO_SIS) {
-    _.defer(this.renderPostToSisOptions)
+    defer(this.renderPostToSisOptions)
   }
-  _.defer(this.watchUnload)
+  defer(this.watchUnload)
   if (this.showConditionalRelease()) {
-    _.defer(this.renderTabs)
+    defer(this.renderTabs)
   }
   if (this.showConditionalRelease()) {
-    _.defer(this.loadConditionalRelease)
+    defer(this.loadConditionalRelease)
   }
-  this.$('.datetime_field').datetime_field()
+  renderDatetimeField(this.$('.datetime_field'))
   if (!this.model.get('locked')) {
     this.updateAllowComments()
   }
@@ -529,7 +583,7 @@ EditView.prototype.getFormData = function () {
   const dateFields = ['last_reply_at', 'posted_at', 'delayed_post_at', 'lock_at']
   for (i = 0, len = dateFields.length; i < len; i++) {
     dateField = dateFields[i]
-    data[dateField] = $.unfudgeDateForProfileTimezone(data[dateField])
+    data[dateField] = unfudgeDateForProfileTimezone(data[dateField])
   }
   data.title || (data.title = I18n.t('default_discussion_title', 'No Title'))
   data.discussion_type = data.threaded === '1' ? 'threaded' : 'side_comment'
@@ -554,6 +608,9 @@ EditView.prototype.getFormData = function () {
   }
   const assign_data = data.assignment
   delete data.assignment
+  if (assign_data != null ? assign_data.points_possible : void 0) {
+    assign_data.ab_guid = this.assignment.get('ab_guid')
+  }
   if (assign_data != null ? assign_data.points_possible : void 0) {
     if (numberHelper.validate(assign_data.points_possible)) {
       assign_data.points_possible = numberHelper.parse(assign_data.points_possible)
@@ -646,6 +703,7 @@ EditView.prototype.submit = function (event) {
   let missingDateDialog, sections
   event.preventDefault()
   event.stopPropagation()
+  this.disablingDfd = new $.Deferred()
   if (this.gradedChecked() && this.dueDateOverrideView.containsSectionsWithoutOverrides()) {
     sections = this.dueDateOverrideView.sectionsWithoutOverrides()
     missingDateDialog = new MissingDateDialog({
@@ -675,7 +733,7 @@ EditView.prototype.submit = function (event) {
   }
 }
 
-EditView.prototype.fieldSelectors = _.extend(
+EditView.prototype.fieldSelectors = lodashExtend(
   {
     usage_rights_control: '#usage_rights_control button',
   },
@@ -806,6 +864,11 @@ EditView.prototype.validateBeforeSave = function (data, errors) {
       },
     ]
   }
+
+  if (Object.keys(errors).length === 0 && data.anonymous_state != null) {
+    data.set_assignment = false
+  }
+
   return errors
 }
 
@@ -836,7 +899,7 @@ EditView.prototype._validateTitle = function (data, errors) {
 
 EditView.prototype._validatePointsPossible = function (data, errors) {
   const assign = data.assignment
-  const frozenPoints = _.includes(assign.frozenAttributes(), 'points_possible')
+  const frozenPoints = includes(assign.frozenAttributes(), 'points_possible')
   if (!frozenPoints && assign.pointsPossible() && !numberHelper.validate(assign.pointsPossible())) {
     errors['assignment[points_possible]'] = [
       {
@@ -873,11 +936,11 @@ EditView.prototype.toggleGradingDependentOptions = function () {
 }
 
 EditView.prototype.hanldeDelayedPostAtChange = function () {
-  const submitButton = $(".submit_button")
-  if(!this.willPublish()){
-    submitButton.text("Save")
+  const submitButton = $('.submit_button')
+  if (!this.willPublish()) {
+    submitButton.text(I18n.t('Save'))
   } else {
-    submitButton.text("Publish")
+    submitButton.text(I18n.t('Publish'))
   }
 }
 

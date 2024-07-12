@@ -18,6 +18,8 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
+require_relative "content_migration/course_copy_helper"
+
 describe ContentMigration do
   before :once do
     course_with_teacher
@@ -757,12 +759,13 @@ describe ContentMigration do
 
     expect(cm.migration_issues).to be_empty
     quiz = @course.quizzes.available.first
+    att_to = @course.attachments.find_by(filename: "m-5U5Jww6HL7zG35CgyaYGyA5bhzsremxY.flv")
     expect(quiz.quiz_data).to be_present
-    expect(quiz.quiz_data.to_yaml).to include("/media_objects/m-5U5Jww6HL7zG35CgyaYGyA5bhzsremxY")
+    expect(quiz.quiz_data.to_yaml).to include("/media_attachments_iframe/#{att_to.id}")
 
     qq = quiz.quiz_questions.first
     expect(qq.question_data).to be_present
-    expect(qq.question_data.to_yaml).to include("/media_objects/m-5U5Jww6HL7zG35CgyaYGyA5bhzsremxY")
+    expect(qq.question_data.to_yaml).to include("/media_attachments_iframe/#{att_to.id}")
   end
 
   context "migrations with skip_job_progress enabled" do
@@ -840,7 +843,7 @@ describe ContentMigration do
 
   it "delays queueing imports if one in course is already running" do
     cms = []
-    Timecop.freeze(Time.zone.now) do
+    Timecop.freeze do
       2.times do
         cm = ContentMigration.new(context: @course, user: @teacher)
         cm.migration_type = "common_cartridge_importer"
@@ -938,6 +941,131 @@ describe ContentMigration do
         .to receive(:new).and_return(importer)
       expect(importer).to receive(:import_content)
       @cm.import!({})
+    end
+  end
+
+  context "common_cartridge_qti_new_quizzes_import" do
+    let(:importer) { double }
+
+    before do
+      allow(importer)
+        .to receive(:import_content)
+        .with(any_args)
+        .and_return(true)
+      allow(@cm.migration_settings)
+        .to receive(:[])
+        .with("migration_type")
+        .and_return("common_cartridge_importer")
+      allow(QuizzesNext::Importers::CourseContentImporter)
+        .to receive(:new)
+        .with(any_args)
+        .and_return(importer)
+    end
+
+    context "FF enabled" do
+      before do
+        allow(NewQuizzesFeaturesHelper)
+          .to receive(:common_cartridge_qti_new_quizzes_import_enabled?)
+          .with(instance_of(Course))
+          .and_return(true)
+      end
+
+      describe "not Quizzes.Next CC import" do
+        before do
+          allow(@cm.migration_settings)
+            .to receive(:[])
+            .with(:import_quizzes_next)
+            .and_return(false)
+        end
+
+        it "calls QuizzesNext::Importers" do
+          expect(@cm.migration_settings)
+            .to receive(:[])
+            .with(:migration_ids_to_import)
+          expect(Importers).not_to receive(:content_importer_for)
+          expect(QuizzesNext::Importers::CourseContentImporter)
+            .to receive(:new).and_return(importer)
+          expect(importer).to receive(:import_content)
+          @cm.import!({})
+        end
+      end
+
+      describe "Quizzes.Next CC import" do
+        before do
+          allow(@cm.migration_settings)
+            .to receive(:[])
+            .with(:import_quizzes_next)
+            .and_return(true)
+        end
+
+        it "calls QuizzesNext::Importers" do
+          expect(@cm.migration_settings)
+            .to receive(:[])
+            .with(:migration_ids_to_import)
+          expect(Importers).not_to receive(:content_importer_for)
+          expect(QuizzesNext::Importers::CourseContentImporter)
+            .to receive(:new).and_return(importer)
+          expect(importer).to receive(:import_content)
+          @cm.import!({})
+        end
+      end
+    end
+
+    context "FF disabled" do
+      before do
+        allow(NewQuizzesFeaturesHelper)
+          .to receive(:common_cartridge_qti_new_quizzes_import_enabled?)
+          .with(instance_of(Course))
+          .and_return(false)
+        allow(Importers)
+          .to receive(:content_importer_for)
+          .with("Course")
+          .and_return(importer)
+      end
+
+      describe "not Quizzes.Next CC import" do
+        before do
+          allow(@cm.migration_settings)
+            .to receive(:[])
+            .with(:import_quizzes_next)
+            .and_return(false)
+        end
+
+        it "does not call QuizzesNext::Importers" do
+          expect(@cm.migration_settings)
+            .to receive(:[])
+            .with(:migration_ids_to_import)
+          expect(Importers).to receive(:content_importer_for)
+          expect(QuizzesNext::Importers::CourseContentImporter)
+            .not_to receive(:new)
+          expect(importer).to receive(:import_content)
+          @cm.import!({})
+        end
+      end
+
+      describe "Quizzes.Next CC import" do
+        before do
+          allow(@cm.context)
+            .to receive(:feature_enabled?)
+            .with(:quizzes_next)
+            .and_return(true)
+          allow(@cm.migration_settings)
+            .to receive(:[])
+            .with(:import_quizzes_next)
+            .and_return(true)
+        end
+
+        it "calls QuizzesNext::Importers" do
+          expect(@cm.migration_settings)
+            .to receive(:[])
+            .with(:migration_ids_to_import)
+          expect(Importers).not_to receive(:content_importer_for)
+          expect(QuizzesNext::Importers::CourseContentImporter)
+            .to receive(:new).and_return(importer)
+          expect(importer).to receive(:import_content)
+          @cm.import!({})
+        end
+      end
     end
   end
 
@@ -1055,24 +1183,34 @@ describe ContentMigration do
   end
 
   context "insert_into_module_id" do
-    it "successfully migrates into context module" do
-      @module = @course.context_modules.create! name: "test"
+    include_context "course copy"
 
-      @cm.migration_type = "common_cartridge_importer"
-      @cm.migration_settings["import_immediately"] = true
-      @cm.migration_settings["insert_into_module_id"] = @module.id
+    it "successfully migrates headers" do
+      @module_to = @copy_to.context_modules.create! name: "test"
+      @module_from = @copy_from.context_modules.create! name: "test"
+      @module_from.add_item(title: "Some subheader", type: "sub_header", indent: 2)
+      @module_from.add_item(title: "example", type: "external_url", indent: 3, url: "http://example.com")
+      @module_from.add_item(title: "Some Other subheader", type: "sub_header", indent: 2)
+      @cm.migration_settings["insert_into_module_id"] = @module_to.id
       @cm.save!
+      run_export_and_import
+      expect(@cm.warnings).to be_empty
+      expect(@module_to.content_tags.pluck(:title, :indent)).to eq([["Some subheader", 2], ["example", 3], ["Some Other subheader", 2]])
+    end
 
-      package_path = File.join("#{File.dirname(__FILE__)}/../fixtures/migration/child-course-2-export.imscc")
-      attachment = Attachment.new(context: @cm, filename: "file.zip")
-      attachment.uploaded_data = File.open(package_path, "rb")
-      attachment.save!
-
-      @cm.update_attribute(:attachment, attachment)
-      @cm.queue_migration
-      run_jobs
-      expect(@module.content_tags.length).to eq 5
-      expect(@module.content_tags.map(&:title)).to eq(["Whatever Else", "Assignment 1 Upper", "Whatever", "Assignment 1 Upper", "Whatever Else Else"])
+    it "successfully migrates quiz assignments without apparent duplication" do
+      skip unless Qti.qti_enabled?
+      @module_to = @copy_to.context_modules.create! name: "test"
+      @q = @copy_from.quizzes.create! title: "some quiz"
+      @q.did_edit
+      @q.offer!
+      @cm.migration_settings["insert_into_module_id"] = @module_to.id
+      @cm.save!
+      run_export_and_import
+      expect(@cm.warnings).to be_empty
+      expect(@module_to.content_tags.pluck(:title)).to eq(["some quiz"])
+      expect(@copy_to.assignments.pluck(:title)).to eq(["some quiz"])
+      expect(@copy_to.quizzes.pluck(:title)).to eq(["some quiz"])
     end
   end
 
@@ -1230,7 +1368,7 @@ describe ContentMigration do
           title: "bar",
           migration_id: CC::CCHelper.create_key(@old_wp, global: true)
         )
-        @cm = @dst.content_migrations.build(migration_type: "course_copy_importer")
+        @cm = @dst.content_migrations.build(migration_type: "course_copy_importer", user: @teacher)
         @cm.workflow_state = "imported"
         @cm.source_course = @src
         @cm.save!
@@ -1247,6 +1385,7 @@ describe ContentMigration do
         expect(json).to eq({ "source_course" => @src.id.to_s,
                              "source_host" => "pineapple.edu",
                              "contains_migration_ids" => false,
+                             "migration_user_uuid" => @cm.user.uuid,
                              "resource_mapping" => {
                                "assignments" => { @old.id.to_s => @new.id.to_s },
                                "pages" => { @old_wp.id.to_s => @new_wp.id.to_s }
@@ -1326,7 +1465,7 @@ describe ContentMigration do
           migration_id: CC::CCHelper.create_key(@old_wp, global: true)
         )
 
-        @cm = @dst.content_migrations.build(migration_type: "course_copy_importer")
+        @cm = @dst.content_migrations.build(migration_type: "course_copy_importer", user: @teacher)
         @cm.workflow_state = "imported"
         @cm.source_course = @src
         @cm.save!
@@ -1357,6 +1496,7 @@ describe ContentMigration do
                              "destination_course" => @dst.id.to_s,
                              "destination_hosts" => ["apple.edu", "kiwi.edu"],
                              "destination_root_folder" => Folder.root_folders(@dst).first.name + "/",
+                             "migration_user_uuid" => @cm.user.uuid,
                              "resource_mapping" => {
                                "assignments" => {
                                  @old.id.to_s => @new.id.to_s,
@@ -1404,6 +1544,7 @@ describe ContentMigration do
                              "destination_course" => @dst.id.to_s,
                              "destination_hosts" => ["apple.edu", "kiwi.edu"],
                              "destination_root_folder" => Folder.root_folders(@dst).first.name + "/",
+                             "migration_user_uuid" => @cm.user.uuid,
                              "resource_mapping" => {
                                "assignments" => {
                                  old_migration_id => {
@@ -1450,6 +1591,7 @@ describe ContentMigration do
                                "destination_course" => @dst.id.to_s,
                                "destination_hosts" => ["apple.edu", "kiwi.edu"],
                                "destination_root_folder" => Folder.root_folders(@dst).first.name + "/",
+                               "migration_user_uuid" => @cm.user.uuid,
                                "resource_mapping" => {
                                  "assignments" => {
                                    @old.id.to_s => @new.id.to_s,
@@ -1497,6 +1639,7 @@ describe ContentMigration do
                                "destination_course" => @dst.id.to_s,
                                "destination_hosts" => ["apple.edu", "kiwi.edu"],
                                "destination_root_folder" => Folder.root_folders(@dst).first.name + "/",
+                               "migration_user_uuid" => @cm.user.uuid,
                                "resource_mapping" => {
                                  "assignments" => {
                                    old_migration_id => {
@@ -1522,7 +1665,7 @@ describe ContentMigration do
   end
 
   context "outcomes" do
-    def context_outcome(context)
+    def context_outcome(context, outcome_group = nil)
       outcome_group ||= context.root_outcome_group
       outcome = context.created_learning_outcomes.create!(title: "outcome")
       outcome_group.add_outcome(outcome)
@@ -1576,6 +1719,39 @@ describe ContentMigration do
       )
     end
 
+    def import_academic_benchmark
+      @root_account = Account.site_admin
+      account_admin_user(account: @root_account, active_all: true)
+      @cm_ab = ContentMigration.new(context: @root_account)
+      @plugin = Canvas::Plugin.find("academic_benchmark_importer")
+      @cm_ab.converter_class = @plugin.settings["converter_class"]
+      @cm_ab.migration_settings[:migration_type] = "academic_benchmark_importer"
+      @cm_ab.migration_settings[:import_immediately] = true
+      @cm_ab.migration_settings[:migration_options] = { points_possible: 10,
+                                                        mastery_points: 6,
+                                                        ratings: [{ description: "Bad", points: 0 }, { description: "Awesome", points: 10 }] }
+      @cm_ab.user = @user
+      @cm_ab.save!
+
+      current_settings = @plugin.settings
+      new_settings = current_settings.merge(partner_id: "instructure", partner_key: "secret")
+      allow(@plugin).to receive(:settings).and_return(new_settings)
+      @florida_standards = File.join(File.dirname(__FILE__) + "/../../gems/plugins/academic_benchmark/spec_canvas/fixtures", "florida_standards.json")
+      File.open(@florida_standards, "r") do |file|
+        @att = Attachment.create!(
+          filename: "standards.json",
+          display_name: "standards.json",
+          uploaded_data: file,
+          context: @cm_ab
+        )
+      end
+      @cm_ab.attachment = @att
+      @cm_ab.save!
+      @cm_ab.export_content
+      run_jobs
+      @cm_ab.reload
+    end
+
     before(:once) do
       @course_from = course_model
       @course_to = course_model
@@ -1583,115 +1759,210 @@ describe ContentMigration do
       @sub = @template.add_child_course!(@course_to)
     end
 
-    describe "course level outcomes" do
-      before do
-        @outcome_from = context_outcome(@course_from)
+    describe "moving outcomes" do
+      it "moving account level outcomes to a different group" do
+        group1_from = LearningOutcomeGroup.create(title: "Group 1", context: @course_from, learning_outcome_group_id: @course_from.root_outcome_group)
+        account_outcome = context_outcome(@course_from.account, group1_from)
+        group2_from = LearningOutcomeGroup.create(title: "Group 2", context: @course_from, learning_outcome_group_id: @course_from.root_outcome_group)
+        # Step 1: Populate @course_to with the current outcomes from @course_from
         run_migration
+
+        # Step 2: Move outcomes around in @course_from
+        outcome_link_from = group1_from.child_outcome_links.active.where(content_id: account_outcome.id).first
+        group2_from.adopt_outcome_link(outcome_link_from)
+
+        # Step 3: Run the migration again and verify outcomes in  @course_to
+        run_migration
+
+        # account_outcome_to = ContentTag.find_by!(content_type: "LearningOutcome", context_type: "Course", context_id: @course_to.id).content #TODO: esto no deberia ser necesario
+        expect(@course_to.learning_outcome_groups.where(title: "Group 1").first.child_outcome_links).to be_empty
+        expect(@course_to.learning_outcome_groups.where(title: "Group 2").first.child_outcome_links.first.content).to eq account_outcome
       end
 
-      it "there are no learning outcome results, authoritative results, and alignments" do
-        @outcome_to = @course_to.learning_outcomes.where(migration_id: mig_id(@outcome_from)).first
-        @outcome_from.destroy!
+      it "moving course level outcomes to a different group" do
+        group1_from = LearningOutcomeGroup.create(title: "Group 1", context: @course_from, learning_outcome_group_id: @course_from.root_outcome_group)
+        course_outcome_from = context_outcome(@course_from, group1_from)
+        group2_from = LearningOutcomeGroup.create(title: "Group 2", context: @course_from, learning_outcome_group_id: @course_from.root_outcome_group)
+        # Step 1: Populate @course_to with the current outcomes from @course_from
         run_migration
-        expect(@outcome_from.reload).to be_deleted
-        expect(@outcome_to.reload).to be_deleted
+
+        # Step 2: Move outcomes around in @course_from
+        outcome_link_from = group1_from.child_outcome_links.active.where(content_id: course_outcome_from.id).first
+        group2_from.adopt_outcome_link(outcome_link_from)
+
+        # Step 3: Run the migration again and verify outcomes in  @course_to
+        run_migration
+
+        course_outcome_to = ContentTag.find_by!(content_type: "LearningOutcome", context_type: "Course", context_id: @course_to.id).content
+        expect(@course_to.learning_outcome_groups.where(title: "Group 1").first.child_outcome_links).to be_empty
+        expect(@course_to.learning_outcome_groups.where(title: "Group 2").first.child_outcome_links.first.content).to eq course_outcome_to
       end
 
-      it "there are learning outcome results" do
-        mig_id = mig_id(@outcome_from)
-        @outcome_to = @course_to.learning_outcomes.where(migration_id: mig_id).first
-        create_learning_outcome_results(@outcome_to)
-        @outcome_from.destroy!
+      it "moving global outcomes with alignments to a different group" do
+        import_academic_benchmark
+        group1_from = LearningOutcomeGroup.create(title: "Group 1", context: @course_from, learning_outcome_group_id: @course_from.root_outcome_group)
+        global_outcome = LearningOutcome.where(migration_id: "AF2F887A-CCB8-11DD-A7C8-69619DFF4B22").first
+        group2_from = LearningOutcomeGroup.create(title: "Group 2", context: @course_from, learning_outcome_group_id: @course_from.root_outcome_group)
+        group1_from.add_outcome(global_outcome)
+        # Step 1: Populate @course_to with the current outcomes from @course_from
         run_migration
-        expect(@outcome_from.reload).to be_deleted
-        expect(@outcome_to.reload).not_to be_deleted
-        expect(@migration.migration_results.first.results[:skipped].first).to eq(mig_id)
-      end
 
-      it "there are authoritative results" do
-        mig_id = mig_id(@outcome_from)
-        @outcome_to = @course_to.learning_outcomes.where(migration_id: mig_id).first
-        @outcome_from.destroy!
-        allow_any_instance_of(ContentMigration).to receive(:outcome_has_authoritative_results?).and_return true
+        # Step 2: Move outcomes around in @course_from and align a bank to the outcome
+        outcome_link_from = group1_from.child_outcome_links.active.where(content_id: global_outcome.id).first
+        group2_from.adopt_outcome_link(outcome_link_from)
+        bank = @course_from.assessment_question_banks.create!(title: "bank")
+        bank.assessment_questions.create!(question_data: { "question_name" => "test question", "question_type" => "essay_question" })
+        global_outcome.align(bank, @course_from)
+        alignment_from = global_outcome.alignments.find_by(content: bank)
+        expect(alignment_from.context).to eq @course_from
+
+        # Step 3: Run the migration again and verify outcomes in  @course_to
+        # and bank_to is aligned with the global outcome
         run_migration
-        expect(@outcome_from.reload).to be_deleted
-        expect(@outcome_to.reload).not_to be_deleted
-        expect(@migration.migration_results.first.results[:skipped].first).to eq(mig_id)
-      end
 
-      describe "there are active alignments" do
-        it "from Canvas" do
-          mig_id = mig_id(@outcome_from)
-          @outcome_to = @course_to.learning_outcomes.where(migration_id: mig_id).first
-          create_outcome_alignment(@outcome_to)
-          @outcome_from.destroy!
-          run_migration
-          expect(@outcome_from.reload).to be_deleted
-          expect(@outcome_to.reload).not_to be_deleted
-          expect(@migration.migration_results.first.results[:skipped].first).to eq(mig_id)
-        end
+        expect(@course_to.learning_outcome_groups.where(title: "Group 1").first.child_outcome_links).to be_empty
+        expect(@course_to.learning_outcome_groups.where(title: "Group 2").first.child_outcome_links.first.content).to eq global_outcome
 
-        it "from Outcomes Service" do
-          mig_id = mig_id(@outcome_from)
-          @outcome_to = @course_to.learning_outcomes.where(migration_id: mig_id).first
-          @outcome_from.destroy!
-          allow_any_instance_of(ContentMigration).to receive(:outcome_has_alignments?).and_return true
-          run_migration
-          expect(@outcome_from.reload).to be_deleted
-          expect(@outcome_to.reload).not_to be_deleted
-          expect(@migration.migration_results.first.results[:skipped].first).to eq(mig_id)
-        end
+        bank_to = @course_to.assessment_question_banks.where(migration_id: mig_id(bank)).first
+        alignment_to = global_outcome.alignments.find_by(content: bank_to)
+        expect(alignment_to.context).to eq @course_to
       end
     end
 
-    describe "account level outcomes" do
-      before(:once) do
-        @account = @course_from.account
-        @account_outcome = context_outcome(@account)
+    describe "deletion" do
+      describe "course level outcomes" do
+        before do
+          @outcome_from = context_outcome(@course_from)
+          run_migration
+        end
+
+        context "when you delete the rubric and the outcome from the blueprint and run a sync" do
+          it "outcome is deleted from the associated course" do
+            @rubric_from = outcome_with_rubric context: @course_from, outcome: @outcome_from
+            @rubric_from.associate_with(@course_from, @course_from)
+            run_migration
+            expect(@course_to.reload.rubrics.count).to eq 1
+            @rubric_from.destroy!
+            @outcome_from.destroy!
+            @outcome_to = @course_to.learning_outcomes.where(migration_id: mig_id(@outcome_from)).first
+            run_migration
+            expect(@outcome_to.reload).to be_deleted
+          end
+        end
+
+        context "when you un-associate the outcome from the rubric and delete the outcome from the blueprint and run a sync" do
+          it "outcome is deleted from the associated course" do
+            @rubric_from = outcome_with_rubric context: @course_from, outcome: @outcome_from
+            @rubric_from.associate_with(@course_from, @course_from)
+            run_migration
+            expect(@course_to.reload.rubrics.count).to eq 1
+            criteria = {
+              "1" => {
+                points: 5,
+                description: "no outcome row",
+                long_description: "non outcome criterion",
+                ratings: {
+                  "0" => {
+                    points: 5,
+                    description: "Amazing",
+                  },
+                  "1" => {
+                    points: 3,
+                    description: "not too bad",
+                  },
+                  "2" => {
+                    points: 0,
+                    description: "no bueno",
+                  }
+                }
+              }
+            }
+            @rubric_from.update_criteria({ criteria: })
+            @outcome_from.destroy!
+            @outcome_to = @course_to.learning_outcomes.where(migration_id: mig_id(@outcome_from)).first
+            run_migration
+            expect(@outcome_to.reload).to be_deleted
+          end
+        end
+
+        it "there are no learning outcome results, authoritative results, and alignments" do
+          @outcome_to = @course_to.learning_outcomes.where(migration_id: mig_id(@outcome_from)).first
+          @outcome_from.destroy!
+          run_migration
+          expect(@outcome_from.reload).to be_deleted
+          expect(@outcome_to.reload).to be_deleted
+        end
+
+        it "there are learning outcome results" do
+          mig_id = mig_id(@outcome_from)
+          @outcome_to = @course_to.learning_outcomes.where(migration_id: mig_id).first
+          create_learning_outcome_results(@outcome_to)
+          @outcome_from.destroy!
+          run_migration
+          expect(@outcome_from.reload).to be_deleted
+          expect(@outcome_to.reload).not_to be_deleted
+          expect(@migration.migration_results.first.results[:skipped].first).to eq(mig_id)
+        end
+
+        it "there are authoritative results" do
+          mig_id = mig_id(@outcome_from)
+          @outcome_to = @course_to.learning_outcomes.where(migration_id: mig_id).first
+          @outcome_from.destroy!
+          allow_any_instance_of(ContentMigration).to receive(:outcome_has_authoritative_results?).and_return true
+          run_migration
+          expect(@outcome_from.reload).to be_deleted
+          expect(@outcome_to.reload).not_to be_deleted
+          expect(@migration.migration_results.first.results[:skipped].first).to eq(mig_id)
+        end
+
+        describe "there are active alignments" do
+          it "from Canvas" do
+            mig_id = mig_id(@outcome_from)
+            @outcome_to = @course_to.learning_outcomes.where(migration_id: mig_id).first
+            create_outcome_alignment(@outcome_to)
+            @outcome_from.destroy!
+            run_migration
+            expect(@outcome_from.reload).to be_deleted
+            expect(@outcome_to.reload).not_to be_deleted
+            expect(@migration.migration_results.first.results[:skipped].first).to eq(mig_id)
+          end
+
+          it "from Outcomes Service" do
+            mig_id = mig_id(@outcome_from)
+            @outcome_to = @course_to.learning_outcomes.where(migration_id: mig_id).first
+            @outcome_from.destroy!
+            allow_any_instance_of(ContentMigration).to receive(:outcome_has_alignments?).and_return true
+            run_migration
+            expect(@outcome_from.reload).to be_deleted
+            expect(@outcome_to.reload).not_to be_deleted
+            expect(@migration.migration_results.first.results[:skipped].first).to eq(mig_id)
+          end
+        end
       end
 
-      before do
-        @course_root = @course_from.root_outcome_group
-        @course_root.add_outcome(@account_outcome)
-        run_migration
-      end
+      describe "account level outcomes" do
+        before(:once) do
+          @account = @course_from.account
+          @account_outcome = context_outcome(@account)
+        end
 
-      it "there are no learning outcome results, authoritative results, and alignments" do
-        @ct_from = ContentTag.find_by!(content_id: @account_outcome.id, content_type: "LearningOutcome", context_type: "Course", context_id: @course_from.id)
-        @ct_to = ContentTag.find_by!(content_id: @account_outcome.id, content_type: "LearningOutcome", context_type: "Course", context_id: @course_to.id)
-        @ct_from.destroy!
-        run_migration
-        expect(@ct_from.reload).to be_deleted
-        expect(@ct_to.reload).to be_deleted
-      end
+        before do
+          @course_root = @course_from.root_outcome_group
+          @course_root.add_outcome(@account_outcome)
+          run_migration
+        end
 
-      it "there are learning outcome results" do
-        create_learning_outcome_results(@account_outcome)
-        @ct_from = ContentTag.find_by!(content_id: @account_outcome.id, content_type: "LearningOutcome", context_type: "Course", context_id: @course_from.id)
-        @ct_to = ContentTag.find_by!(content_id: @account_outcome.id, content_type: "LearningOutcome", context_type: "Course", context_id: @course_to.id)
-        mig_id = @ct_to.migration_id
-        @ct_from.destroy!
-        run_migration
-        expect(@ct_from.reload).to be_deleted
-        expect(@ct_to.reload).not_to be_deleted
-        expect(@migration.migration_results.first.results[:skipped].first).to eq(mig_id)
-      end
+        it "there are no learning outcome results, authoritative results, and alignments" do
+          @ct_from = ContentTag.find_by!(content_id: @account_outcome.id, content_type: "LearningOutcome", context_type: "Course", context_id: @course_from.id)
+          @ct_to = ContentTag.find_by!(content_id: @account_outcome.id, content_type: "LearningOutcome", context_type: "Course", context_id: @course_to.id)
+          @ct_from.destroy!
+          run_migration
+          expect(@ct_from.reload).to be_deleted
+          expect(@ct_to.reload).to be_deleted
+        end
 
-      it "there are authoritative results" do
-        @ct_from = ContentTag.find_by!(content_id: @account_outcome.id, content_type: "LearningOutcome", context_type: "Course", context_id: @course_from.id)
-        @ct_to = ContentTag.find_by!(content_id: @account_outcome.id, content_type: "LearningOutcome", context_type: "Course", context_id: @course_to.id)
-        mig_id = @ct_to.migration_id
-        @ct_from.destroy!
-        allow_any_instance_of(ContentMigration).to receive(:outcome_has_authoritative_results?).and_return true
-        run_migration
-        expect(@ct_from.reload).to be_deleted
-        expect(@ct_to.reload).not_to be_deleted
-        expect(@migration.migration_results.first.results[:skipped].first).to eq(mig_id)
-      end
-
-      describe "there are active alignments" do
-        it "from Canvas" do
-          create_outcome_alignment(@account_outcome)
+        it "there are learning outcome results" do
+          create_learning_outcome_results(@account_outcome)
           @ct_from = ContentTag.find_by!(content_id: @account_outcome.id, content_type: "LearningOutcome", context_type: "Course", context_id: @course_from.id)
           @ct_to = ContentTag.find_by!(content_id: @account_outcome.id, content_type: "LearningOutcome", context_type: "Course", context_id: @course_to.id)
           mig_id = @ct_to.migration_id
@@ -1702,16 +1973,42 @@ describe ContentMigration do
           expect(@migration.migration_results.first.results[:skipped].first).to eq(mig_id)
         end
 
-        it "from Outcomes Service" do
+        it "there are authoritative results" do
           @ct_from = ContentTag.find_by!(content_id: @account_outcome.id, content_type: "LearningOutcome", context_type: "Course", context_id: @course_from.id)
           @ct_to = ContentTag.find_by!(content_id: @account_outcome.id, content_type: "LearningOutcome", context_type: "Course", context_id: @course_to.id)
           mig_id = @ct_to.migration_id
           @ct_from.destroy!
-          allow_any_instance_of(ContentMigration).to receive(:outcome_has_alignments?).and_return true
+          allow_any_instance_of(ContentMigration).to receive(:outcome_has_authoritative_results?).and_return true
           run_migration
           expect(@ct_from.reload).to be_deleted
           expect(@ct_to.reload).not_to be_deleted
           expect(@migration.migration_results.first.results[:skipped].first).to eq(mig_id)
+        end
+
+        describe "there are active alignments" do
+          it "from Canvas" do
+            create_outcome_alignment(@account_outcome)
+            @ct_from = ContentTag.find_by!(content_id: @account_outcome.id, content_type: "LearningOutcome", context_type: "Course", context_id: @course_from.id)
+            @ct_to = ContentTag.find_by!(content_id: @account_outcome.id, content_type: "LearningOutcome", context_type: "Course", context_id: @course_to.id)
+            mig_id = @ct_to.migration_id
+            @ct_from.destroy!
+            run_migration
+            expect(@ct_from.reload).to be_deleted
+            expect(@ct_to.reload).not_to be_deleted
+            expect(@migration.migration_results.first.results[:skipped].first).to eq(mig_id)
+          end
+
+          it "from Outcomes Service" do
+            @ct_from = ContentTag.find_by!(content_id: @account_outcome.id, content_type: "LearningOutcome", context_type: "Course", context_id: @course_from.id)
+            @ct_to = ContentTag.find_by!(content_id: @account_outcome.id, content_type: "LearningOutcome", context_type: "Course", context_id: @course_to.id)
+            mig_id = @ct_to.migration_id
+            @ct_from.destroy!
+            allow_any_instance_of(ContentMigration).to receive(:outcome_has_alignments?).and_return true
+            run_migration
+            expect(@ct_from.reload).to be_deleted
+            expect(@ct_to.reload).not_to be_deleted
+            expect(@migration.migration_results.first.results[:skipped].first).to eq(mig_id)
+          end
         end
       end
     end
@@ -1760,6 +2057,127 @@ describe ContentMigration do
       cm_to_a_more_recent = ContentMigration.create!(source_course: @source_course, context: @other_course_a, finished_at: 1.day.ago)
 
       expect(ContentMigration.find_most_recent_by_course_ids(@source_course.id, @other_course_a)&.id).to eq cm_to_a_more_recent.id
+    end
+  end
+
+  context "media catridge migration" do
+    include_context "course copy"
+
+    let(:success_response) { Net::HTTPSuccess.new(Net::HTTPOK, "200", "OK") }
+
+    def mig_id(obj)
+      CC::CCHelper.create_key(obj, global: true)
+    end
+
+    def og_asset(id)
+      {
+        isOriginal: 1,
+        containerFormat: "mp4",
+        fileExt: "mp4",
+        id:,
+        status: "2",
+        size: 15,
+      }
+    end
+
+    before do
+      @copy_to = @course
+      course_with_teacher(active_all: true)
+      @copy_from = @course
+      root = Folder.root_folders(@copy_from).first
+      uploaded_media_folder = root.sub_folders.create!(name: "Uploaded Media", context: @copy_from)
+      @att1 = Attachment.create!(filename: "first.webm", uploaded_data: stub_file_data("first.webm", "asdf", "video/mp4"), folder: uploaded_media_folder, context: @copy_from, media_entry_id: "m-media_id_1")
+      @att2 = Attachment.create!(filename: "second.webm", uploaded_data: stub_file_data("second.webm", "asdf", "video/mp4"), folder: uploaded_media_folder, context: @copy_from, media_entry_id: "m-media_id_2")
+      MediaObject.create!(attachment_id: @att1.id, media_id: "m-media_id_1")
+      MediaObject.create!(attachment_id: @att2.id, media_id: "m-media_id_2")
+      @copy_from.wiki_pages.create! title: "wp1", body: "<iframe data-media-type=\"audio\" data-media-id=\"#{@att1.media_entry_id}\" src=\"/media_attachments_iframe/#{@att1.id}?type=audio\"></iframe>"
+      @copy_from.wiki_pages.create! title: "wp2", body: "<iframe data-media-type=\"video\" data-media-id=\"#{@att2.media_entry_id}\" src=\"/media_attachments_iframe/#{@att2.id}?type=video\"></iframe>"
+      @kaltura = double("CanvasKaltura::ClientV3")
+      @kaltura_media_handler = instance_double("KalturaMediaFileHandler")
+      expect(@kaltura_media_handler).to receive(:add_media_files) do |_attachments, _wait_for_completion|
+        att3 = @copy_to.attachments.where(migration_id: mig_id(@att1)).first.id
+        att4 = @copy_to.attachments.where(migration_id: mig_id(@att2)).first.id
+        bulk_upload_response = {
+          entries: [
+            {
+              name: att3.filename,
+              originalId: att3.id,
+              entryId: "m-media_id_3"
+            },
+            {
+              name: att4.filename,
+              originalId: att4.id,
+              entryId: "m-media_id_4"
+            }
+          ]
+        }
+        MediaObject.build_media_objects(bulk_upload_response, @course.root_account_id)
+      end
+      expect(KalturaMediaFileHandler).to receive(:new).and_return(@kaltura_media_handler)
+      expect(CanvasKaltura::ClientV3).to receive(:config).and_return({})
+    end
+
+    it "properly migrates webm embeds" do
+      run_export_and_import
+      destination_att1 = @copy_to.attachments.find_by(migration_id: mig_id(@att1))
+      destination_att2 = @copy_to.attachments.find_by(migration_id: mig_id(@att2))
+      expect(destination_att1.media_entry_id).to be_truthy
+      expect(destination_att2.media_entry_id).to be_truthy
+      @zip_file = Zip::File.open(@copy_from.content_exports.last.attachment.open.path)
+      expect(@copy_to.wiki_pages.first.body).to eq("<iframe data-media-type=\"audio\" data-media-id=\"#{destination_att1.media_entry_id}\" src=\"/media_attachments_iframe/#{destination_att1.id}?embedded=true&amp;type=audio\"></iframe>")
+      expect(@copy_to.wiki_pages.last.body).to eq("<iframe data-media-type=\"video\" data-media-id=\"#{destination_att2.media_entry_id}\" src=\"/media_attachments_iframe/#{destination_att2.id}?embedded=true&amp;type=video\"></iframe>")
+      expect(@zip_file.find_entry("web_resources/Uploaded Media/first.webm")).not_to be_nil
+      expect(@zip_file.find_entry("web_resources/Uploaded Media/second.webm")).not_to be_nil
+    end
+  end
+
+  context "old media exports with deleted assignments" do
+    let(:success_response) { Net::HTTPSuccess.new(Net::HTTPOK, "200", "OK") }
+
+    def og_asset(id)
+      {
+        isOriginal: 1,
+        containerFormat: "mp4",
+        fileExt: "mp4",
+        id:,
+        status: "2",
+        size: 15,
+      }
+    end
+
+    before do
+      @kaltura_media_handler = instance_double("KalturaMediaFileHandler")
+      expect(@kaltura_media_handler).to receive(:add_media_files) do |attachments, _wait_for_completion|
+        MediaObject.build_media_objects({
+                                          entries: [
+                                            {
+                                              name: "m-5JxJzd136Gk3nSPn9G5e5b46s4xRXz2m.mp4",
+                                              originalId: attachments.last.id,
+                                              entryId: "m-2t1CXfzgyJh3qEpM9CqMAPNFnwQTXNyM"
+                                            }
+                                          ]
+                                        },
+                                        @course.root_account_id)
+      end
+      expect(KalturaMediaFileHandler).to receive(:new).and_return(@kaltura_media_handler)
+      expect(CanvasKaltura::ClientV3).to receive(:config).at_least(3).times.and_return({})
+    end
+
+    it "retains the destination media object attachment" do
+      archive_file_path = File.join(File.dirname(__FILE__) + "/../fixtures/migration/rcx-1949.imscc")
+      unzipped_file_path = create_temp_dir!
+      converter = CC::Importer::Canvas::Converter.new(export_archive_path: archive_file_path, course_name: "oi", base_download_dir: unzipped_file_path)
+      converter.export
+      @course_data = converter.course.with_indifferent_access
+
+      @course = course_factory
+      @migration = ContentMigration.create(context: @course)
+      @migration.migration_type = "canvas_cartridge_importer"
+      @migration.migration_settings[:migration_ids_to_import] = { copy: {} }
+      Importers::CourseContentImporter.import_content(@course, @course_data, nil, @migration)
+      run_jobs
+      expect(@course.attachments.last.media_entry_id).not_to eq("maybe")
+      expect(@course.attachments.last.file_state).not_to eq("deleted")
     end
   end
 end

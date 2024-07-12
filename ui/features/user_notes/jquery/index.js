@@ -19,11 +19,13 @@
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
 import ready from '@instructure/ready'
-import '@canvas/forms/jquery/jquery.instructure_forms'
+import '@canvas/jquery/jquery.instructure_forms'
 import '@canvas/loading-image'
-import '@canvas/datetime'
+import {datetimeString} from '@canvas/datetime/date-functions'
 import '@canvas/jquery/jquery.instructure_misc_plugins'
 import 'jquery-pageless'
+import '@canvas/jquery-keycodes'
+import {raw} from '@instructure/html-escape'
 
 const I18n = useI18nScope('user_notes')
 
@@ -60,7 +62,7 @@ ready(function () {
       $(this).find('.title').val('')
       $(this).find('.note').val('')
       const user_note = data.user_note
-      user_note.created_at = $.datetimeString(user_note.updated_at)
+      user_note.created_at = datetimeString(user_note.updated_at)
       const action = $('#add_entry_form').attr('action') + '/' + user_note.id
       $('#proccessing').loadingImage('remove')
       $('#user_note_blank')
@@ -76,7 +78,7 @@ ready(function () {
         .end()
         .end()
         .find('.formatted_note')
-        .html($.raw(user_note.formatted_note))
+        .html(raw(user_note.formatted_note))
         .end()
         .slideDown()
     },

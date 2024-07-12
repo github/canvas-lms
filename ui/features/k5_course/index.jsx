@@ -19,10 +19,10 @@ import React from 'react'
 import ReactDOM from 'react-dom'
 // eslint-disable-next-line import/no-named-as-default
 import K5Course from './react/K5Course'
-import k5Theme from '@canvas/k5/react/k5-theme'
+import {useK5Theme} from '@canvas/k5/react/k5-theme'
 import ready from '@instructure/ready'
 
-k5Theme.use()
+useK5Theme()
 
 ready(() => {
   const courseContainer = document.getElementById('course-dashboard-container')
@@ -63,6 +63,7 @@ ready(() => {
         isMasterCourse={ENV.BLUEPRINT_COURSES_DATA?.isMasterCourse}
         showImmersiveReader={ENV.SHOW_IMMERSIVE_READER}
         gradingScheme={ENV.GRADING_SCHEME}
+        pointsBasedGradingScheme={ENV.POINTS_BASED}
         restrictQuantitativeData={ENV.RESTRICT_QUANTITATIVE_DATA}
       />,
       courseContainer

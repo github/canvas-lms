@@ -169,6 +169,9 @@ const locale = {
   "congruent_5a244acd": { "message": "全等" },
   "contains_311f37b7": { "message": "包含" },
   "content_1440204b": { "message": "内容" },
+  "content_in_the_editor_will_be_changed_press_cancel_d5bf3357": {
+    "message": "编辑器中的内容将更改。按“取消”以保留原始内容。"
+  },
   "content_is_still_being_uploaded_if_you_continue_it_8f06d0cb": {
     "message": "内容仍在上传中，如果您继续，该内容将不会正确嵌入。"
   },
@@ -300,6 +303,8 @@ const locale = {
   "enter_at_least_3_characters_to_search_4f037ee0": {
     "message": "输入至少 3 个字符以进行搜索"
   },
+  "enter_replacement_text_17631bbc": { "message": "输入替换文本" },
+  "enter_search_text_26cb4459": { "message": "输入搜索文本" },
   "epsilon_54bb8afa": { "message": "Epsilon" },
   "epsilon_variant_d31f1e77": { "message": "Epsilon（变体）" },
   "equals_sign_c51bdc58": { "message": "等号" },
@@ -332,6 +337,8 @@ const locale = {
   "filename_text_preview_e41ca2d8": { "message": "{ filename }文本预览" },
   "files_c300e900": { "message": "文件" },
   "files_index_af7c662b": { "message": "文件索引" },
+  "find_8d605019": { "message": "查找" },
+  "find_and_replace_6e345933": { "message": "查找并替换" },
   "finish_bc343002": { "message": "完成" },
   "fix_heading_hierarchy_f60884c4": { "message": "置顶标题层次结构" },
   "flat_music_76d5a5c3": { "message": "降调（音乐）" },
@@ -438,6 +445,7 @@ const locale = {
   "in_element_of_19ca2f33": { "message": "包含（元素）" },
   "increase_indent_6af90f7c": { "message": "增加缩进" },
   "indefinite_integral_6623307e": { "message": "不定积分" },
+  "index_of_max_80dcf7a5": { "message": "{ index }，共{ max }" },
   "indigo_2035fc55": { "message": "靛蓝色" },
   "inference_fed5c960": { "message": "推断" },
   "infinity_7a10f206": { "message": "无穷" },
@@ -589,6 +597,7 @@ const locale = {
   "nested_less_than_27d17e58": { "message": "嵌套小于" },
   "new_quiz_34aacba6": { "message": "新测验" },
   "next_40e12421": { "message": "下一步" },
+  "next_findtext_9d69f0fe": { "message": "下一步{ findText }" },
   "no_accessibility_issues_were_detected_f8d3c875": {
     "message": "没有发现辅助功能问题。"
   },
@@ -612,6 +621,7 @@ const locale = {
   "no_quizzes_created_yet_1a2370b9": { "message": "尚未创建测验。" },
   "no_quizzes_found_c80c537a": { "message": "未找到测验。" },
   "no_results_940393cf": { "message": "无结果。" },
+  "no_results_found_58717065": { "message": "未发现结果" },
   "no_results_found_for_filterterm_ad1b04c8": {
     "message": "未找到{ filterTerm }的结果"
   },
@@ -690,11 +700,16 @@ const locale = {
   "precedes_196b9aef": { "message": "先于" },
   "precedes_equal_20701e84": { "message": "先于等于" },
   "preformatted_d0670862": { "message": "预定义格式" },
+  "prepend_findtext_append_8e0e769a": {
+    "message": "{ prepend }{ findText }{ append }"
+  },
   "prev_f82cbc48": { "message": "上一个" },
   "preview_53003fd2": { "message": "预览" },
   "preview_a3f8f854": { "message": "预览" },
   "preview_in_overlay_ed772c46": { "message": "在图层中预览" },
   "preview_inline_9787330": { "message": "嵌入式预览" },
+  "previous_bd2ac015": { "message": "上一个" },
+  "previous_findtext_8dfbfd30": { "message": "上一步{ findText }" },
   "prime_917ea60e": { "message": "质" },
   "prime_numbers_13464f61": { "message": "质数" },
   "product_39cf144f": { "message": "乘积" },
@@ -721,10 +736,25 @@ const locale = {
   "religion_icon_246e0be1": { "message": "宗教图标" },
   "remove_heading_style_5fdc8855": { "message": "删除标题样式" },
   "remove_link_d1f2f4d0": { "message": "删除链接" },
+  "replace_all_d3d68b3": { "message": "全部替换" },
+  "replace_all_findtext_with_replacetext_da574b32": {
+    "message": "将所有{ findText }全部替换为{ replaceText }"
+  },
   "replace_e61834a7": { "message": "替换" },
+  "replace_findtext_with_replacetext_7b5c7fb3": {
+    "message": "将{ findText }替换为{ replaceText }"
+  },
+  "replace_with_eeff01ad": { "message": "替换为" },
+  "replaced_alertfindtext_with_alertreplacetext_de5c1795": {
+    "message": "将{ alertFindText }替换为{ alertReplaceText }"
+  },
+  "replaced_all_alertfindtext_with_alertreplacetext_83fdfe59": {
+    "message": "将所有{ alertFindText }全部替换为{ alertReplaceText }"
+  },
   "reset_95a81614": { "message": "重置" },
   "resize_ec83d538": { "message": "调整大小" },
   "restore_auto_save_deccd84b": { "message": "是否恢复自动保存？" },
+  "result_index_of_max_7db5ad8b": { "message": "结果 { index }/{ max }。" },
   "reverse_turnstile_does_not_yield_7558be06": {
     "message": "反十字转门（不产生）"
   },

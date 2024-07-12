@@ -20,6 +20,7 @@ import {AlertManagerContext} from '@canvas/alerts/react/AlertManager'
 import {render, fireEvent} from '@testing-library/react'
 import React from 'react'
 import {DiscussionPostToolbar} from '../DiscussionPostToolbar'
+import {DiscussionManagerUtilityContext} from '../../../utils/constants'
 import {updateUserDiscussionsSplitscreenViewMock} from '../../../../graphql/Mocks'
 import {ChildTopic} from '../../../../graphql/ChildTopic'
 import {waitFor} from '@testing-library/dom'
@@ -33,7 +34,7 @@ const onFailureStub = jest.fn()
 const onSuccessStub = jest.fn()
 const openMock = jest.fn()
 
-beforeAll(() => {
+beforeEach(() => {
   window.matchMedia = jest.fn().mockImplementation(() => {
     return {
       matches: true,
@@ -67,7 +68,9 @@ const setup = (props, mocks) => {
       <AlertManagerContext.Provider
         value={{setOnFailure: onFailureStub, setOnSuccess: onSuccessStub}}
       >
-        <DiscussionPostToolbar {...props} />
+        <DiscussionManagerUtilityContext.Provider value={{translationLanguages: {current: []}}}>
+          <DiscussionPostToolbar {...props} />
+        </DiscussionManagerUtilityContext.Provider>
       </AlertManagerContext.Provider>
     </MockedProvider>
   )
@@ -92,20 +95,7 @@ describe('DiscussionPostToolbar', () => {
   })
 
   describe('Splitscreen Button', () => {
-    it('should not render if split_screen_view ff is off', async () => {
-      window.ENV.split_screen_view = false
-      const {queryByTestId} = setup(
-        {
-          setUserSplitScreenPreference: jest.fn(),
-          userSplitScreenPreference: false,
-        },
-        updateUserDiscussionsSplitscreenViewMock({discussionsSplitscreenView: true})
-      )
-
-      expect(queryByTestId('splitscreenButton')).toBeNull()
-    })
     it('should call updateUserDiscussionsSplitscreenView mutation when clicked', async () => {
-      window.ENV.split_screen_view = true
       const {getByTestId} = setup(
         {
           setUserSplitScreenPreference: jest.fn(),
@@ -147,16 +137,6 @@ describe('DiscussionPostToolbar', () => {
       expect(onViewFilterMock.mock.calls.length).toBe(1)
       expect(onViewFilterMock.mock.calls[0][1].id).toBe('unread')
     })
-
-    it('"My Drafts" filter should be visible', () => {
-      window.ENV.draft_discussions = true
-
-      const onViewFilterMock = jest.fn()
-      const {getByText, getByLabelText} = setup({onViewFilter: onViewFilterMock})
-      const simpleSelect = getByLabelText('Filter by')
-      fireEvent.click(simpleSelect)
-      expect(getByText('My Drafts')).toBeTruthy()
-    })
   })
 
   describe('Sort control', () => {
@@ -188,18 +168,28 @@ describe('DiscussionPostToolbar', () => {
   })
 
   describe('Groups Menu Button', () => {
-    it('should not render when there are no child topics', () => {
+    it('should not render when there are no child topics and the user is an admin', () => {
       const container = setup({
         childTopics: [],
+        isAdmin: true,
       })
       expect(container.queryByTestId('groups-menu-button')).toBeNull()
     })
 
-    it('should render when there are child topics', () => {
+    it('should render when there are child topics and the user is an admin', () => {
       const container = setup({
         childTopics: [ChildTopic.mock()],
+        isAdmin: true,
       })
       expect(container.queryByTestId('groups-menu-button')).toBeTruthy()
+    })
+
+    it('should not render when the user is not an admin', () => {
+      const container = setup({
+        childTopics: [ChildTopic.mock()],
+        isAdmin: false,
+      })
+      expect(container.queryByTestId('groups-menu-button')).toBeNull()
     })
   })
 
@@ -222,6 +212,71 @@ describe('DiscussionPostToolbar', () => {
         })
         expect(container.queryByTestId('anonymous_avatar')).toBeNull()
       })
+    })
+  })
+
+  describe('Assign To', () => {
+    beforeEach(() => {
+      ENV.FEATURES = {
+        selective_release_ui_api: true,
+      }
+    })
+
+    it('renders the Assign To button if user can manageAssignTo and in a course discussion', () => {
+      const {getByRole} = setup({
+        manageAssignTo: true,
+        contextType: 'Course',
+      })
+      expect(getByRole('button', {name: 'Assign To'})).toBeInTheDocument()
+    })
+
+    it('does not render the Assign To button if user can not manageAssignTo', () => {
+      const {queryByRole} = setup({
+        manageAssignTo: false,
+        contextType: 'Course',
+      })
+      expect(queryByRole('button', {name: 'Assign To'})).not.toBeInTheDocument()
+    })
+
+    it('does not render the Assign To button if a group discussion', () => {
+      const {queryByRole} = setup({
+        manageAssignTo: true,
+        contextType: 'Group',
+      })
+      expect(queryByRole('button', {name: 'Assign To'})).not.toBeInTheDocument()
+    })
+
+    it('does not render the Assign To button if an ungraded group discussion in course context', () => {
+      const {queryByTestId} = setup({
+        manageAssignTo: true,
+        contextType: 'Course',
+        isGraded: false,
+        isGroupDiscussion: true,
+      })
+      expect(queryByTestId('manage-assign-to')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('Discussion Summary', () => {
+    it('should render the discussion summary button if user can summarize and summary is not enabled', () => {
+      ENV.user_can_summarize = true
+      const {queryByTestId} = setup({isSummaryEnabled: false})
+
+      expect(queryByTestId('summarize-button')).toBeTruthy()
+    })
+
+    it('should not render the discussion summary button if summary is enabled', () => {
+      ENV.user_can_summarize = true
+      const {queryByTestId} = setup({isSummaryEnabled: true})
+
+      expect(queryByTestId('summarize-button')).toBeNull()
+    })
+
+    it('should not render the discussion summary button if user can not summarize', () => {
+      ENV.user_can_summarize = false
+      const {queryByTestId} = setup({isSummaryEnabled: false})
+
+      expect(queryByTestId('summarize-button')).toBeNull()
     })
   })
 })

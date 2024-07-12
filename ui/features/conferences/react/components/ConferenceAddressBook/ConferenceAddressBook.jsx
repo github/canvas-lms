@@ -72,7 +72,9 @@ export const ConferenceAddressBook = ({menuItemList, onChange, selectedItems, is
     groupIDs?.forEach(id => {
       const groupUsers = groupUserMap[id]
       const intersectionArray = intersection(groupUsers, selectedUserIDs)
-      if (intersectionArray.length === groupUsers.length) {
+      // guarding against empty arrays, these lead to pre-selecting groups
+      // that have no members
+      if (intersectionArray.length > 0 && intersectionArray.length === groupUsers.length) {
         selectedGroups.push(id)
       }
     })
@@ -107,8 +109,9 @@ export const ConferenceAddressBook = ({menuItemList, onChange, selectedItems, is
   }
 
   const filteredMenuItems = useMemo(() => {
-    let newMenuItemList = menuItemList.filter(u => u.displayName.includes(inputValue))
-    newMenuItemList = newMenuItemList.filter(u => !selectedMenuItems.includes(u))
+    const filteredMenuItemList = menuItemList
+      .filter(u => u.displayName.toLowerCase().includes(inputValue.toLowerCase()))
+      .filter(u => !selectedMenuItems.includes(u))
 
     const getOptionsChangedMessage = newMenuItems => {
       let message =
@@ -126,11 +129,11 @@ export const ConferenceAddressBook = ({menuItemList, onChange, selectedItems, is
     }
 
     if (inputValue.length) {
-      const newAnnouncement = getOptionsChangedMessage(newMenuItemList)
+      const newAnnouncement = getOptionsChangedMessage(filteredMenuItemList)
       setAnnouncement(newAnnouncement)
     }
 
-    return newMenuItemList
+    return filteredMenuItemList
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputValue, menuItemList, selectedMenuItems.length])
 

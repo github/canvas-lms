@@ -36,16 +36,8 @@ module Canvas
     CanvasCache::Redis.redis
   end
 
-  def self.redis_config
-    CanvasCache::Redis.config
-  end
-
   def self.redis_enabled?
     CanvasCache::Redis.enabled?
-  end
-
-  def self.reconnect_redis
-    CanvasCache::Redis.reconnect_redis
   end
 
   def self.cache_store_config_for(cluster)
@@ -57,29 +49,32 @@ module Canvas
   end
 
   def self.lookup_cache_store(config, cluster)
-    config = { "cache_store" => "nil_store" }.merge(config)
+    config = config.to_h.deep_symbolize_keys
+    cache_store = config.delete(:cache_store)&.to_sym || :null_store
 
-    case config.delete("cache_store")
-    when "redis_cache_store"
-      CanvasCache::Redis.patch
-      # if cache and redis data are configured identically, we want to share connections
-      if config.except("expires_in") == {} && cluster == Rails.env && Canvas.redis_enabled?
-        ActiveSupport::Cache.lookup_store(:redis_cache_store, redis: Canvas.redis)
-      else
-        # merge in redis.yml, but give precedence to cache_store.yml
-        redis_config = (ConfigFile.load("redis", cluster) || {})
-        config = redis_config.merge(config) if redis_config.is_a?(Hash)
-        # config has to be a vanilla hash, with symbol keys, to auto-convert to kwargs
-        ActiveSupport::Cache.lookup_store(:redis_cache_store, config.to_h.symbolize_keys)
-      end
-    when "zonal_redis_cache_store"
-      CanvasCache::Redis.patch
-      ActiveSupport::Cache.lookup_store(:zonal_redis_cache_store, config.to_h.symbolize_keys)
-    when "memory_store"
-      ActiveSupport::Cache.lookup_store(:memory_store, { coder: Marshal })
-    when "nil_store", "null_store"
-      ActiveSupport::Cache.lookup_store(:null_store)
+    # if cache and redis data are configured identically, we want to share connections
+    if cache_store == :redis_cache_store && config.except(:expires_in) == {} && cluster == Rails.env && Canvas.redis_enabled?
+      config = { redis: Canvas.redis }
     end
+    if cache_store == :redis_cache_store
+      store = nil
+      config[:error_handler] = lambda do |method:, returning:, exception:| # rubocop:disable Lint/UnusedBlockArgument
+        redis_name = store.redis.respond_to?(:id) ? store.redis.id : cluster
+        if exception.cause.is_a?(RedisClient::CircuitBreaker::OpenCircuitError)
+          Rails.logger.warn("  [REDIS] Short circuiting due to recent redis failure (#{redis_name})")
+          next
+        end
+
+        Rails.logger.error("  [REDIS] Query failure #{exception.inspect} (#{redis_name})")
+        InstStatsd::Statsd.increment("redis.errors.all")
+        InstStatsd::Statsd.increment("redis.errors.#{InstStatsd::Statsd.escape(redis_name)}",
+                                     short_stat: "redis.errors",
+                                     tags: { redis_name: InstStatsd::Statsd.escape(redis_name) })
+        Canvas::Errors.capture(exception, { tags: { type: "redis" }, skip_setting_cache: true }, :warn)
+      end
+    end
+
+    store = ActiveSupport::Cache.lookup_store(cache_store, config)
   end
 
   # `sample` reports KB, not B
@@ -175,7 +170,7 @@ module Canvas
   # all the configurable params have service-specific Settings with fallback to
   # generic Settings.
   def self.timeout_protection(service_name, options = {}, &)
-    timeout = (Setting.get("service_#{service_name}_timeout", nil) || options[:fallback_timeout_length] || Setting.get("service_generic_timeout", 15.seconds.to_s)).to_f
+    timeout = (Setting.get("service_#{service_name}_timeout", nil) || options[:fallback_timeout_length] || 15).to_f
 
     if Canvas.redis_enabled?
       if timeout_protection_method(service_name) == "percentage"
@@ -208,7 +203,7 @@ module Canvas
     redis_key = "service:timeouts:#{service_name}:error_count"
     cutoff = timeout_protection_cutoff(service_name)
 
-    error_count = redis.get(redis_key)
+    error_count = redis.get(redis_key, failsafe: 0)
     if error_count.to_i >= cutoff
       raise TimeoutCutoff, error_count
     end
@@ -217,8 +212,10 @@ module Canvas
       Timeout.timeout(timeout, &)
     rescue Timeout::Error
       error_ttl = timeout_protection_error_ttl(service_name)
-      redis.incrby(redis_key, 1)
-      redis.expire(redis_key, error_ttl)
+      redis.pipelined(redis_key, failsafe: nil) do |pipeline|
+        pipeline.incrby(redis_key, 1)
+        pipeline.expire(redis_key, error_ttl)
+      end
       raise
     end
   end
@@ -243,7 +240,7 @@ module Canvas
     cutoff = timeout_protection_failure_rate_cutoff(service_name)
 
     protection_activated_key = "#{redis_key}:protection_activated"
-    protection_activated = redis.get(protection_activated_key)
+    protection_activated = redis.get(protection_activated_key, failsafe: nil)
     raise TimeoutCutoff, cutoff if protection_activated
 
     counter_window = timeout_protection_failure_counter_window(service_name)
@@ -258,8 +255,10 @@ module Canvas
       # has the added benefit of making the error block below much
       # smaller.
       error_ttl = timeout_protection_error_ttl(service_name)
-      redis.set(protection_activated_key, "true")
-      redis.expire(protection_activated_key, error_ttl)
+      redis.pipelined(protection_activated_key, failsafe: nil) do |pipeline|
+        pipeline.set(protection_activated_key, "true")
+        pipeline.expire(protection_activated_key, error_ttl)
+      end
       raise TimeoutCutoff, failure_rate
     end
 
@@ -293,7 +292,7 @@ module Canvas
     nil
   end
 
-  def self.region_code
+  def self.region_code(_region = nil)
     nil
   end
 

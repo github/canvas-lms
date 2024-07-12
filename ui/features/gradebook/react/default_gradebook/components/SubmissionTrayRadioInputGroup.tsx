@@ -21,7 +21,7 @@ import {FormFieldGroup} from '@instructure/ui-form-field'
 import SubmissionTrayRadioInput from './SubmissionTrayRadioInput'
 import {statusesTitleMap} from '../constants/statuses'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import {CamelizedSubmission} from '@canvas/grading/grading.d'
+import type {CamelizedSubmission} from '@canvas/grading/grading.d'
 import type {GradeStatus} from '@canvas/grading/accountGradingStatus'
 
 const I18n = useI18nScope('gradebook')
@@ -186,9 +186,9 @@ export default function SubmissionTrayRadioInputGroup({
           onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
             handleRadioInputChanged(e, status.isCustom)
           }
-          // @ts-ignore
+          // @ts-expect-error
           updateSubmission={updateSubmission}
-          // @ts-ignore
+          // @ts-expect-error
           submission={submission}
           text={status.name}
           value={status.key}

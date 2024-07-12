@@ -20,9 +20,16 @@ import React from 'react'
 import DateHelper from '@canvas/datetime/dateHelper'
 import {useScope as useI18nScope} from '@canvas/i18n'
 
+import useStore from '../../stores'
+
 import {Badge} from '@instructure/ui-badge'
 import {Flex} from '@instructure/ui-flex'
-import {IconCommentLine, IconMutedLine, IconAnalyticsLine} from '@instructure/ui-icons'
+import {
+  IconCommentLine,
+  IconMutedLine,
+  IconAnalyticsLine,
+  IconRubricLine,
+} from '@instructure/ui-icons'
 import {IconButton} from '@instructure/ui-buttons'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
 import {Table} from '@instructure/ui-table'
@@ -30,18 +37,61 @@ import {Text} from '@instructure/ui-text'
 import {Tooltip} from '@instructure/ui-tooltip'
 import {View} from '@instructure/ui-view'
 
+import WhatIfGrade from '../WhatIfGrade'
 import {getDisplayStatus, getDisplayScore, submissionCommentsPresent} from '../utils'
 
 const I18n = useI18nScope('grade_summary')
+
+const getSubmissionCommentsTrayProps = assignmentId => {
+  const matchingSubmission = ENV.submissions.find(x => x.assignment_id === assignmentId)
+  const {submission_comments, assignment_url: assignmentUrl} = matchingSubmission
+  const attempts = submission_comments?.reduce((attemptsMessages, comment) => {
+    const currentAttempt = comment.attempt < 1 ? 1 : comment.attempt
+
+    if (attemptsMessages[currentAttempt]) {
+      attemptsMessages[currentAttempt].push(comment)
+    } else {
+      attemptsMessages[currentAttempt] = [comment]
+    }
+
+    return attemptsMessages
+  }, {})
+  return {
+    attempts,
+    assignmentUrl,
+  }
+}
+
+const handleSubmissionsCommentTray = assignmentId => {
+  const {submissionTrayAssignmentId, submissionTrayOpen} = useStore.getState()
+
+  if (submissionTrayAssignmentId === assignmentId && submissionTrayOpen) {
+    useStore.setState({submissionTrayOpen: false, submissionTrayAssignmentId: undefined})
+  } else {
+    const {attempts, assignmentUrl} = getSubmissionCommentsTrayProps(assignmentId)
+    useStore.setState({
+      submissionCommentsTray: {attempts},
+      submissionTrayOpen: true,
+      submissionTrayAssignmentId: assignmentId,
+      submissionTrayAssignmentUrl: assignmentUrl,
+    })
+  }
+}
 
 export const assignmentRow = (
   assignment,
   queryData,
   setShowTray,
-  setSelectedSubmission,
   handleReadStateChange,
+  handleRubricReadStateChange,
   setOpenAssignmentDetailIds,
-  openAssignmentDetailIds
+  openAssignmentDetailIds,
+  setSubmissionAssignmentId,
+  submissionAssignmentId,
+  setOpenRubricDetailIds,
+  openRubricDetailIds,
+  setActiveWhatIfScores,
+  activeWhatIfScores
 ) => {
   const handleAssignmentDetailOpen = () => {
     if (!openAssignmentDetailIds.includes(assignment._id)) {
@@ -54,6 +104,55 @@ export const assignmentRow = (
         setOpenAssignmentDetailIds(arr)
       }
     }
+  }
+
+  const handleRubricDetailOpen = () => {
+    if (assignment?.submissionsConnection?.nodes[0]?.hasUnreadRubricAssessment) {
+      handleRubricReadStateChange(assignment?.submissionsConnection?.nodes[0]?._id)
+    }
+    if (!openRubricDetailIds.includes(assignment._id)) {
+      setOpenRubricDetailIds([...openRubricDetailIds, assignment._id])
+    } else {
+      const arr = [...openRubricDetailIds]
+      const index = arr.indexOf(assignment._id)
+      if (index > -1) {
+        arr.splice(index, 1)
+        setOpenRubricDetailIds(arr)
+      }
+    }
+  }
+
+  const renderRubricButton = () => {
+    return assignment?.submissionsConnection?.nodes[0]?.hasUnreadRubricAssessment ? (
+      <Badge
+        type="notification"
+        formatOutput={() => (
+          <ScreenReaderContent>{I18n.t('Unread rubric assessment')}</ScreenReaderContent>
+        )}
+      >
+        <IconButton
+          data-testid="rubric_detail_button_with_badge"
+          margin="0 small"
+          screenReaderLabel="Rubric Results"
+          size="small"
+          onClick={handleRubricDetailOpen}
+          aria-expanded={openRubricDetailIds.includes(assignment._id)}
+        >
+          <IconRubricLine />
+        </IconButton>
+      </Badge>
+    ) : (
+      <IconButton
+        data-testid="rubric_detail_button"
+        margin="0 small"
+        screenReaderLabel="Rubric Results"
+        size="small"
+        onClick={handleRubricDetailOpen}
+        aria-expanded={openRubricDetailIds.includes(assignment._id)}
+      >
+        <IconRubricLine />
+      </IconButton>
+    )
   }
 
   return (
@@ -89,7 +188,52 @@ export const assignmentRow = (
           </Tooltip>
         ) : (
           <Flex justifyItems="center">
-            <Flex.Item>{getDisplayScore(assignment, queryData?.gradingStandard)}</Flex.Item>
+            <Flex.Item
+              onClick={() => {
+                if (
+                  !ENV.restrict_quantitative_data &&
+                  !activeWhatIfScores.includes(assignment._id)
+                ) {
+                  setActiveWhatIfScores([...activeWhatIfScores, assignment._id])
+                }
+              }}
+            >
+              <View as="div" position="relative">
+                {!ENV.restrict_quantitative_data &&
+                activeWhatIfScores.includes(assignment._id) &&
+                assignment?.gradingType !== 'not_graded' ? (
+                  <WhatIfGrade
+                    assignment={assignment}
+                    setActiveWhatIfScores={setActiveWhatIfScores}
+                    activeWhatIfScores={activeWhatIfScores}
+                  />
+                ) : (
+                  <View
+                    tabIndex="0"
+                    role="button"
+                    position="relative"
+                    onKeyDown={event => {
+                      if (event.key === 'Enter') {
+                        if (
+                          !ENV.restrict_quantitative_data &&
+                          !activeWhatIfScores.includes(assignment._id)
+                        ) {
+                          setActiveWhatIfScores([...activeWhatIfScores, assignment._id])
+                        }
+                      }
+                    }}
+                  >
+                    {ENV.restrict_quantitative_data ? (
+                      getDisplayScore(assignment, queryData?.gradingStandard)
+                    ) : (
+                      <Tooltip renderTip={I18n.t('Click to test a different score')}>
+                        {getDisplayScore(assignment, queryData?.gradingStandard)}
+                      </Tooltip>
+                    )}
+                  </View>
+                )}
+              </View>
+            </Flex.Item>
             {assignment?.submissionsConnection?.nodes.length > 0 &&
               assignment?.submissionsConnection?.nodes[0]?.readState !== 'read' && (
                 <Flex.Item>
@@ -119,27 +263,43 @@ export const assignmentRow = (
       <Table.Cell textAlign="end">
         <Flex justifyItems="end">
           <Flex.Item>
-            {!ENV.restrict_quantitative_data && assignment?.scoreStatistic && (
+            {!ENV.restrict_quantitative_data &&
+            assignment?.rubric &&
+            assignment?.submissionsConnection?.nodes[0]?.rubricAssessmentsConnection?.nodes.length >
+              0 ? (
+              renderRubricButton()
+            ) : (
+              <View as="div" width="52px" />
+            )}
+          </Flex.Item>
+          <Flex.Item>
+            {!ENV.restrict_quantitative_data && assignment?.scoreStatistic ? (
               <IconButton
                 margin="0 small"
-                screenReaderLabel="Assignment Details"
+                screenReaderLabel="Assignment Statistics"
                 size="small"
                 onClick={handleAssignmentDetailOpen}
+                aria-expanded={openAssignmentDetailIds.includes(assignment._id)}
               >
                 <IconAnalyticsLine />
               </IconButton>
+            ) : (
+              <View as="div" width="52px" />
             )}
           </Flex.Item>
           <Flex.Item>
             {submissionCommentsPresent(assignment) ? (
               <IconButton
+                data-testid={`submission_comment_tray_${assignment?._id}`}
                 margin="0 small"
                 screenReaderLabel="Submission Comments"
                 size="small"
                 onClick={() => {
-                  setShowTray(true)
-                  setSelectedSubmission(assignment?.submissionsConnection?.nodes[0])
+                  handleSubmissionsCommentTray(assignment?._id)
+                  setSubmissionAssignmentId(assignment?._id)
+                  setShowTray()
                 }}
+                aria-expanded={assignment?._id === submissionAssignmentId}
               >
                 <IconCommentLine />
                 <Text size="small">

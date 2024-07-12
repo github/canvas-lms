@@ -22,7 +22,7 @@ import {ConversationParticipant} from './ConversationParticipant'
 import {SubmissionComment} from './SubmissionComment'
 import {Course} from './Course'
 import {Enrollment} from './Enrollment'
-import {graphql} from 'msw'
+import {graphql, HttpResponse} from 'msw'
 import {Group} from './Group'
 import {User} from './User'
 import {PageInfo} from './PageInfo'
@@ -41,7 +41,7 @@ const mswAssign = (target, ...objects) => {
 }
 
 export const handlers = [
-  graphql.query('GetConversationsQuery', (req, res, ctx) => {
+  graphql.query('GetConversationsQuery', ({variables}) => {
     const data = {
       legacyNode: {
         _id: '9',
@@ -63,7 +63,7 @@ export const handlers = [
       },
     }
 
-    if (req.variables.scope === 'sent') {
+    if (variables.scope === 'sent') {
       data.legacyNode.conversationsConnection.nodes = [
         {
           ...ConversationParticipant.mock(),
@@ -111,7 +111,7 @@ export const handlers = [
             workflowState: 'unread',
           }),
         ]
-    } else if (req.variables.course) {
+    } else if (variables.course) {
       data.legacyNode.conversationParticipantsConnection.nodes = [
         {
           ...ConversationParticipant.mock({_id: '123', id: 'Q29udmVyc2F0aW9uUGFydGljaXBhbnQtMTA='}),
@@ -124,7 +124,7 @@ export const handlers = [
       ]
       data.legacyNode.conversationsConnection.nodes[0].conversation.conversationMessagesConnection.nodes =
         [ConversationMessage.mock({body: 'Course scoped conversation message'})]
-    } else if (req.variables.scope === 'null_nodes') {
+    } else if (variables.scope === 'null_nodes') {
       data.legacyNode.conversationsConnection.nodes[0].conversation = Conversation.mock({
         contextId: null,
         contextType: null,
@@ -147,7 +147,7 @@ export const handlers = [
         },
       ]
 
-      if (req.variables.scope === 'multipleConversations') {
+      if (variables.scope === 'multipleConversations') {
         data.legacyNode.conversationsConnection.nodes = [
           {
             ...ConversationParticipant.mock(
@@ -240,26 +240,32 @@ export const handlers = [
           }),
         ]
     }
-    return res(ctx.data(data))
+    return HttpResponse.json({data})
   }),
 
-  graphql.query('GetTotalRecipients', (req, res, ctx) => {
-    if (req.variables.context === null) {
-      return res(
-        ctx.data({legacyNode: {id: 'WXNlci0x', totalRecipients: null, __typename: 'User'}})
-      )
+  graphql.query('GetTotalRecipients', ({variables}) => {
+    if (variables.context === null) {
+      return HttpResponse.json({
+        data: {legacyNode: {id: 'VXNlci0x', totalRecipients: 2, __typename: 'User'}},
+      })
     }
-    return res(ctx.data({legacyNode: {id: 'VXNlci0x', totalRecipients: 2, __typename: 'User'}}))
+    return HttpResponse.json({
+      data: {legacyNode: {id: 'VXNlci0x', totalRecipients: 2, __typename: 'User'}},
+    })
   }),
 
-  graphql.query('GetConversationMessagesQuery', (req, res, ctx) => {
-    if (req.variables.conversationID === CONVERSATION_ID_WHERE_CAN_REPLY_IS_FALSE) {
-      return res(ctx.data({legacyNode: Conversation.mock({canReply: false})}))
+  graphql.query('GetConversationMessagesQuery', ({variables}) => {
+    if (variables.conversationID === CONVERSATION_ID_WHERE_CAN_REPLY_IS_FALSE) {
+      return HttpResponse.json({
+        data: {legacyNode: Conversation.mock({canReply: false})},
+      })
     }
-    return res(ctx.data({legacyNode: Conversation.mock()}))
+    return HttpResponse.json({
+      data: {legacyNode: Conversation.mock()},
+    })
   }),
 
-  graphql.query('GetSubmissionComments', (req, res, ctx) => {
+  graphql.query('GetSubmissionComments', () => {
     const data = {
       legacyNode: {
         _id: '1',
@@ -296,10 +302,10 @@ export const handlers = [
       },
     }
 
-    return res(ctx.data(data))
+    return HttpResponse.json({data})
   }),
 
-  graphql.query('ViewableSubmissionsQuery', (req, res, ctx) => {
+  graphql.query('ViewableSubmissionsQuery', () => {
     const data = {
       legacyNode: {
         _id: '9',
@@ -368,10 +374,10 @@ export const handlers = [
       },
     }
 
-    return res(ctx.data(data))
+    return HttpResponse.json({data})
   }),
 
-  graphql.query('GetUserCourses', (req, res, ctx) => {
+  graphql.query('GetUserCourses', () => {
     const data = {
       legacyNode: {
         id: 'VXNlci05',
@@ -434,10 +440,10 @@ export const handlers = [
         __typename: 'User',
       },
     }
-    return res(ctx.data(data))
+    return HttpResponse.json({data})
   }),
 
-  graphql.query('GetAddressBookRecipients', (req, res, ctx) => {
+  graphql.query('GetAddressBookRecipients', ({variables}) => {
     const data = {
       legacyNode: {
         id: 'VXNlci0x',
@@ -445,7 +451,7 @@ export const handlers = [
       },
     }
 
-    if (req.variables.context) {
+    if (variables.context) {
       const recipients = {
         sendMessagesAll: true,
         contextsConnection: {
@@ -460,6 +466,7 @@ export const handlers = [
               id: 'TWVzc2FnZWFibGVVc2VyLTQx',
               name: 'Frederick Dukes',
               shortName: 'Frederick Dukes',
+              pronouns: 'he/him',
               __typename: 'MessageableUser',
               commonCoursesConnection: {
                 nodes: [
@@ -488,7 +495,7 @@ export const handlers = [
         __typename: 'Recipients',
       }
       data.legacyNode.recipients = recipients
-    } else if (req.variables.search === 'Fred') {
+    } else if (variables.search === 'Fred') {
       const recipients = {
         sendMessagesAll: true,
         contextsConnection: {
@@ -503,6 +510,7 @@ export const handlers = [
               id: 'TWVzc2FnZWFibGVVc2VyLTQx',
               name: 'Frederick Dukes',
               shortName: 'Frederick Dukes',
+              pronouns: 'he/him',
               __typename: 'MessageableUser',
               commonCoursesConnection: {
                 nodes: [
@@ -553,6 +561,7 @@ export const handlers = [
               id: 'TWVzc2FnZWFibGVVc2VyLTQx',
               name: 'Frederick Dukes',
               shortName: 'Frederick Dukes',
+              pronouns: 'he/him',
               __typename: 'MessageableUser',
               commonCoursesConnection: {
                 nodes: [
@@ -579,6 +588,7 @@ export const handlers = [
               id: 'TWVzc2FnZWFibGVVc2VyLTY1',
               name: 'Trevor Fitzroy',
               shortName: 'Trevor Fitzroy',
+              pronouns: 'he/him',
               __typename: 'MessageableUser',
               commonCoursesConnection: {
                 nodes: [
@@ -605,6 +615,7 @@ export const handlers = [
               id: 'TWVzc2FnZWFibGVVc2VyLTMy',
               name: 'Null Forge',
               shortName: 'Null Forge',
+              pronouns: 'he/him',
               __typename: 'MessageableUser',
               commonCoursesConnection: {
                 nodes: [
@@ -634,10 +645,10 @@ export const handlers = [
       }
       data.legacyNode.recipients = recipients
     }
-    return res(ctx.data(data))
+    return HttpResponse.json({data})
   }),
 
-  graphql.query('GetRecipientsObservers', (req, res, ctx) => {
+  graphql.query('GetRecipientsObservers', ({variables}) => {
     const data = {
       legacyNode: {
         id: 'VXNlci0x',
@@ -646,7 +657,7 @@ export const handlers = [
       },
     }
 
-    if (req.variables.recipients.length > 0 && req.variables.contextCode) {
+    if (variables.recipients.length > 0 && variables.contextCode) {
       data.recipientsObservers = {
         nodes: [
           {
@@ -658,10 +669,10 @@ export const handlers = [
         ],
       }
     }
-    return res(ctx.data(data))
+    return HttpResponse.json({data})
   }),
 
-  graphql.query('ReplyConversationQuery', (req, res, ctx) => {
+  graphql.query('ReplyConversationQuery', () => {
     const data = {
       legacyNode: {
         ...Conversation.mock(),
@@ -670,15 +681,14 @@ export const handlers = [
     // Remove uneeded fields from response that are
     // automatically included through mocks
     delete data.legacyNode.contextId
-    delete data.legacyNode.contextType
     delete data.legacyNode.conversationParticipantsConnection
 
-    return res(ctx.data(data))
+    return HttpResponse.json({data})
   }),
 
-  graphql.mutation('CreateConversation', (req, res, ctx) => {
+  graphql.mutation('CreateConversation', ({variables}) => {
     let data
-    if (!req.variables.recipients || !req.variables.recipients.length) {
+    if (!variables.recipients || !variables.recipients.length) {
       data = {
         createConversation: null,
         errors: {
@@ -694,7 +704,7 @@ export const handlers = [
           conversations: [
             {
               ...ConversationParticipant.mock(),
-              conversation: Conversation.mock({subject: req.variables.subject}),
+              conversation: Conversation.mock({subject: variables.subject}),
             },
           ],
           errors: null,
@@ -703,23 +713,23 @@ export const handlers = [
       }
     }
 
-    return res(ctx.data(data))
+    return HttpResponse.json({data})
   }),
 
-  graphql.mutation('AddConversationMessage', (req, res, ctx) => {
+  graphql.mutation('AddConversationMessage', ({variables}) => {
     const CONV_ID_WITH_CONCLUDED_TEACHER_ERROR = '3'
     let data = {
       addConversationMessage: {
-        conversationMessage: ConversationMessage.mock({body: req.variables.body}),
+        conversationMessage: ConversationMessage.mock({body: variables.body}),
         errors: null,
         __typename: 'AddConversationMessagePayload',
       },
     }
 
-    if (req.variables.conversationId === CONV_ID_WITH_CONCLUDED_TEACHER_ERROR) {
+    if (variables.conversationId === CONV_ID_WITH_CONCLUDED_TEACHER_ERROR) {
       data = {
         addConversationMessage: {
-          conversationMessage: ConversationMessage.mock({body: req.variables.body}),
+          conversationMessage: ConversationMessage.mock({body: variables.body}),
           errors: [
             {
               attribute: 'message',
@@ -733,20 +743,20 @@ export const handlers = [
       }
     }
 
-    return res(ctx.data(data))
+    return HttpResponse.json({data})
   }),
 
-  graphql.mutation('CreateSubmissionComment', (req, res, ctx) => {
+  graphql.mutation('CreateSubmissionComment', ({variables}) => {
     const SUBMISSION_ID_THAT_RETURNS_ERROR = '440'
     const data = {
       createSubmissionComment: {
-        submissionComment: SubmissionComment.mock({comment: req.variables.body}),
+        submissionComment: SubmissionComment.mock({comment: variables.body}),
         errors: null,
         __typename: 'CreateSubmissionCommentPayload',
       },
     }
 
-    if (req.variables.submissionId === SUBMISSION_ID_THAT_RETURNS_ERROR) {
+    if (variables.submissionId === SUBMISSION_ID_THAT_RETURNS_ERROR) {
       data.submissionComment = null
       data.errors = [
         {
@@ -756,26 +766,84 @@ export const handlers = [
         },
       ]
     }
-    return res(ctx.data(data))
+    return HttpResponse.json({data})
   }),
 
-  graphql.mutation('UpdateConversationParticipants', (req, res, ctx) => {
-    return res(
-      ctx.data({
+  graphql.mutation('UpdateConversationParticipants', ({variables}) => {
+    return HttpResponse.json({
+      data: {
         updateConversationParticipants: {
           conversationParticipants: [
             mswAssign(
               {...ConversationParticipant.mock()},
               {
-                id: req.body.variables.conversationId,
-                read: req.body.variables.read,
+                id: variables.conversationId,
+                read: variables.read,
               }
             ),
           ],
           errors: null,
           __typename: 'UpdateConversationParticipantsPayload',
         },
-      })
-    )
+      },
+    })
+  }),
+]
+
+export const inboxSettingsHandlers = version => [
+  graphql.query('GetMyInboxSettings', () => {
+    const VERSION_THAT_RETURNS_INBOX_SETTINGS_WITH_OOO_ENABLED = 2
+    const data = {
+      myInboxSettings: {
+        _id: '1',
+        useSignature: false,
+        signature: 'My signature',
+        useOutOfOffice: false,
+        outOfOfficeFirstDate: null,
+        outOfOfficeLastDate: null,
+        outOfOfficeSubject: 'OOO Subject',
+        outOfOfficeMessage: 'OOO Message',
+        __typename: 'InboxSettings',
+      },
+    }
+
+    if (version === VERSION_THAT_RETURNS_INBOX_SETTINGS_WITH_OOO_ENABLED) {
+      data.myInboxSettings.useOutOfOffice = true
+    }
+
+    return HttpResponse.json({data})
+  }),
+
+  graphql.mutation('UpdateMyInboxSettings', () => {
+    const VERSION_THAT_RETURNS_INBOX_SETTINGS_MUTATION_ERROR = 1
+    const data = {
+      updateMyInboxSettings: {
+        myInboxSettings: {
+          _id: '1',
+          useSignature: true,
+          signature: 'My signature updated',
+          useOutOfOffice: true,
+          outOfOfficeFirstDate: null,
+          outOfOfficeLastDate: null,
+          outOfOfficeSubject: 'OOO Subject',
+          outOfOfficeMessage: 'OOO Message',
+          __typename: 'InboxSettings',
+        },
+        errors: null,
+        __typename: 'UpdateMyInboxSettingsPayload',
+      },
+    }
+
+    if (version === VERSION_THAT_RETURNS_INBOX_SETTINGS_MUTATION_ERROR) {
+      data.updateMyInboxSettings.errors = [
+        {
+          attribute: 'message',
+          message: 'GraphQL Error',
+          __typename: 'NetworkError',
+        },
+      ]
+    }
+
+    return HttpResponse.json({data})
   }),
 ]

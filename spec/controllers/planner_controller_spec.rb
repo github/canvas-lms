@@ -152,7 +152,7 @@ describe PlannerController do
         json = json_parse(response.body)
         event_ids = json.select { |thing| thing["plannable_type"] == "calendar_event" }.pluck("plannable_id")
 
-        my_event_id = @course.default_section.calendar_events.where(parent_calendar_event_id: event).pluck(:id).first
+        my_event_id = @course.default_section.calendar_events.where(parent_calendar_event_id: event).pick(:id)
         expect(event_ids).not_to include event.id
         expect(event_ids).to include my_event_id
 
@@ -178,6 +178,22 @@ describe PlannerController do
         a1 = @course.announcements.create!(message: "for the defaults", is_section_specific: true, course_sections: [@course.default_section])
         sec2 = @course.course_sections.create!
         @course.announcements.create!(message: "for my favorites", is_section_specific: true, course_sections: [sec2])
+
+        get :index
+        response_json = json_parse(response.body)
+        expect(response_json.select { |i| i["plannable_type"] == "announcement" }.pluck("plannable_id")).to eq [a1.id]
+      end
+
+      it "differentiated modules: only shows section specific announcements to students who can view them" do
+        Account.site_admin.enable_feature! :selective_release_backend
+        a1 = @course.announcements.create!(message: "for the defaults")
+        a1.update!(only_visible_to_overrides: true)
+        a1.assignment_overrides.create!(set: @course.default_section)
+        sec2 = @course.course_sections.create!
+        a2 = @course.announcements.create!(message: "for my favorites")
+        a2.update!(only_visible_to_overrides: true)
+
+        a2.assignment_overrides.create!(set: sec2)
 
         get :index
         response_json = json_parse(response.body)
@@ -383,6 +399,18 @@ describe PlannerController do
           expect(sub_account_event["plannable"]["title"]).to eq @sub_account_event.title
           expect(default_account_event["plannable"]["title"]).to eq @default_account_event.title
           expect(course_event["plannable"]["title"]).to eq course_ac_event.title
+        end
+
+        context "with sharding" do
+          specs_require_sharding
+
+          it "allows user to request trusted accounts on another shard" do
+            @account = Account.default
+            @shard2.activate do
+              get :index, params: { context_codes: ["account_#{@account.global_id}"] }
+              expect(response).to be_successful
+            end
+          end
         end
       end
 
@@ -1068,7 +1096,7 @@ describe PlannerController do
           assign_json = json_parse(response.body).find { |j| j["plannable_id"] == @assignment.id && j["plannable_type"] == "assignment" }
           expect(assign_json["new_activity"]).to be true
 
-          submission.mark_read(@student)
+          submission.mark_item_read("comment")
           get :index, params: { start_date: @start_date, end_date: @end_date }
           assign_json = json_parse(response.body).find { |j| j["plannable_id"] == @assignment.id && j["plannable_type"] == "assignment" }
           expect(assign_json["new_activity"]).to be false
@@ -1321,6 +1349,11 @@ describe PlannerController do
         other_course.enroll_student(@observer, enrollment_state: "active")
         get :index, params: { observed_user_id: @student.to_param, context_codes: [other_course.asset_string] }
         assert_unauthorized
+      end
+
+      it "does not require context_codes if all visible courses are requested" do
+        get :index, params: { observed_user_id: @student.to_param, include: %w[all_courses] }
+        expect(response).to be_successful
       end
 
       it "allows an observer to query their observed user's planner items for valid context_codes" do

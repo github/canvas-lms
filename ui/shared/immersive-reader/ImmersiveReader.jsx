@@ -20,6 +20,7 @@ import React from 'react'
 import ReactDOM from 'react-dom'
 import {Button, IconButton} from '@instructure/ui-buttons'
 import {SVGIcon} from '@instructure/ui-svg-images'
+import {TruncateText} from '@instructure/ui-truncate-text'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import {showFlashError} from '@canvas/alerts/react/FlashAlert'
 import {defaultFetchOptions} from '@canvas/util/xhr'
@@ -27,6 +28,7 @@ import {CookiePolicy} from '@microsoft/immersive-reader-sdk'
 import WithBreakpoints from '@canvas/with-breakpoints'
 import ContentChunker from './ContentChunker'
 import ContentUtils from './ContentUtils'
+import {captureException} from '@sentry/react'
 
 const I18n = useI18nScope('ImmersiveReader')
 
@@ -52,7 +54,7 @@ const LOGO = `
 function handleClick({title, content}, readerSDK) {
   ;(readerSDK || import('@microsoft/immersive-reader-sdk'))
     .then(({launchAsync}) => {
-      fetch('/api/v1/immersive_reader/authenticate', defaultFetchOptions)
+      fetch('/api/v1/immersive_reader/authenticate', defaultFetchOptions())
         .then(response => response.json())
         .then(({token, subdomain}) => {
           let htmlPayload = content()
@@ -79,12 +81,14 @@ function handleClick({title, content}, readerSDK) {
         .catch(e => {
           // eslint-disable-next-line no-console
           console.error('Getting authentication details failed', e)
+          captureException(e)
           showFlashError(I18n.t('Immersive Reader Failed to Load'))()
         })
     })
     .catch(e => {
       // eslint-disable-next-line no-console
       console.error('Loading the Immersive Reader SDK failed', e)
+      captureException(e)
       showFlashError(I18n.t('Immersive Reader Failed to Load'))()
     })
 }
@@ -99,7 +103,7 @@ export function ImmersiveReaderButton({content, readerSDK, breakpoints}) {
     </IconButton>
   ) : (
     <Button onClick={() => handleClick(content, readerSDK)} renderIcon={<SVGIcon src={LOGO} />}>
-      {I18n.t('Immersive Reader')}
+      <TruncateText>{I18n.t('Immersive Reader')}</TruncateText>
     </Button>
   )
 }

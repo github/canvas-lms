@@ -34,7 +34,8 @@ class Lti::LineItem < ApplicationRecord
              foreign_key: :lti_resource_link_id,
              class_name: "Lti::ResourceLink"
   belongs_to :assignment,
-             inverse_of: :line_items
+             inverse_of: :line_items,
+             class_name: "AbstractAssignment"
   belongs_to :root_account,
              class_name: "Account"
   has_many :results,
@@ -44,8 +45,6 @@ class Lti::LineItem < ApplicationRecord
            dependent: :destroy
 
   before_create :set_root_account_id
-  before_destroy :destroy_resource_link, if: :assignment_line_item? # assignment will destroy all the other line_items of a resourceLink
-  before_destroy :destroy_assignment
 
   AGS_EXT_PREFIX = "https://canvas.instructure.com/lti/"
   AGS_EXT_SUBMISSION_TYPE = "#{AGS_EXT_PREFIX}submission_type".freeze
@@ -59,6 +58,11 @@ class Lti::LineItem < ApplicationRecord
     assignment.line_items.order(:created_at).first.id == id
   end
 
+  def undestroy
+    results.find_each(&:undestroy)
+    super
+  end
+
   def launch_url_extension
     { AGS_EXT_LAUNCH_URL => assignment.external_tool_tag&.url }
   end
@@ -70,7 +74,8 @@ class Lti::LineItem < ApplicationRecord
         name: params[:label],
         points_possible: params[:score_maximum],
         submission_types: "none",
-        due_at: params[:end_date_time]
+        due_at: params[:end_date_time],
+        unlock_at: params[:start_date_time]
       }
 
       submission_type = params[AGS_EXT_SUBMISSION_TYPE]
@@ -131,19 +136,6 @@ class Lti::LineItem < ApplicationRecord
 
   def client_id_is_global?
     client_id.present? && client_id > Shard::IDS_PER_SHARD
-  end
-
-  # this is to prevent orphaned (ie undeleted state) line_items when an assignment is destroyed
-  def destroy_resource_link
-    resource_link&.destroy
-  end
-
-  # This is to delete assignments that were created with the line items API
-  # the API
-  def destroy_assignment
-    return unless assignment_line_item? && !coupled
-
-    assignment.destroy
   end
 
   def set_root_account_id

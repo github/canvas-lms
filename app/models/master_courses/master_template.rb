@@ -38,8 +38,8 @@ class MasterCourses::MasterTemplate < ActiveRecord::Base
 
   belongs_to :active_migration, class_name: "MasterCourses::MasterMigration"
 
-  serialize :default_restrictions, Hash
-  serialize :default_restrictions_by_type, Hash
+  serialize :default_restrictions, type: Hash
+  serialize :default_restrictions_by_type, type: Hash
   validate :require_valid_restrictions
 
   attr_accessor :child_course_count
@@ -240,14 +240,14 @@ class MasterCourses::MasterTemplate < ActiveRecord::Base
 
   def last_export_started_at
     unless defined?(@last_export_started_at)
-      @last_export_started_at = master_migrations.where(workflow_state: "completed").order("id DESC").limit(1).pluck(:exports_started_at).first
+      @last_export_started_at = master_migrations.where(workflow_state: "completed").order("id DESC").limit(1).pick(:exports_started_at)
     end
     @last_export_started_at
   end
 
   def last_export_completed_at
     unless defined?(@last_export_completed_at)
-      @last_export_completed_at = master_migrations.where(workflow_state: "completed").order("id DESC").limit(1).pluck(:imports_completed_at).first
+      @last_export_completed_at = master_migrations.where(workflow_state: "completed").order("id DESC").limit(1).pick(:imports_completed_at)
     end
     @last_export_completed_at
   end
@@ -308,7 +308,9 @@ class MasterCourses::MasterTemplate < ActiveRecord::Base
       if object.is_a?(Assignment) && (submittable = object.submittable_object)
         object = submittable
       end
-      default_restrictions_by_type[object.class.base_class.name] || {}
+      default_restrictions_by_type[object.class.base_class.name] ||
+        default_restrictions_by_type[object.class.name] ||
+        {}
     else
       default_restrictions
     end
@@ -365,7 +367,7 @@ class MasterCourses::MasterTemplate < ActiveRecord::Base
         MasterCourses::MasterMigration.start_new_migration!(template,
                                                             migrating_user,
                                                             retry_later: true,
-                                                            priority: Setting.get("sis_blueprint_sync_priority", "25").to_i)
+                                                            priority: Delayed::LOW_PRIORITY + 5)
       end
     end
   end

@@ -199,6 +199,9 @@ const locale = {
   "congruent_5a244acd": { "message": "Congruente" },
   "contains_311f37b7": { "message": "Contiene" },
   "content_1440204b": { "message": "Contenuto" },
+  "content_in_the_editor_will_be_changed_press_cancel_d5bf3357": {
+    "message": "Il contenuto nell’editor sarà modificato. Per mantenere il contenuto originale, premere Annulla."
+  },
   "content_is_still_being_uploaded_if_you_continue_it_8f06d0cb": {
     "message": "Il contenuto è ancora in fase di caricamento, se continui non sarà incorporato correttamente."
   },
@@ -340,6 +343,10 @@ const locale = {
   "enter_at_least_3_characters_to_search_4f037ee0": {
     "message": "Inserisci almeno 3 caratteri per la ricerca"
   },
+  "enter_replacement_text_17631bbc": {
+    "message": "inserisci testo di sostituzione"
+  },
+  "enter_search_text_26cb4459": { "message": "inserisci testo di ricerca" },
   "epsilon_54bb8afa": { "message": "Epsilon" },
   "epsilon_variant_d31f1e77": { "message": "Epsilon (variante)" },
   "equals_sign_c51bdc58": { "message": "Segno uguale" },
@@ -382,6 +389,8 @@ const locale = {
   },
   "files_c300e900": { "message": "File" },
   "files_index_af7c662b": { "message": "Indice file" },
+  "find_8d605019": { "message": "Trova" },
+  "find_and_replace_6e345933": { "message": "Trova e sostituisci" },
   "finish_bc343002": { "message": "Termina" },
   "fix_heading_hierarchy_f60884c4": {
     "message": "Correggi gerarchia intestazioni"
@@ -510,6 +519,7 @@ const locale = {
   "in_element_of_19ca2f33": { "message": "In (elemento di)" },
   "increase_indent_6af90f7c": { "message": "Aumenta rientro" },
   "indefinite_integral_6623307e": { "message": "Integrale indefinito" },
+  "index_of_max_80dcf7a5": { "message": "{ index } di { max }" },
   "indigo_2035fc55": { "message": "Indaco" },
   "inference_fed5c960": { "message": "Inferenza" },
   "infinity_7a10f206": { "message": "Infinità" },
@@ -687,6 +697,7 @@ const locale = {
   "nested_less_than_27d17e58": { "message": "Nidificato minore di" },
   "new_quiz_34aacba6": { "message": "Nuovo quiz" },
   "next_40e12421": { "message": "Successivo" },
+  "next_findtext_9d69f0fe": { "message": "Successivo { findText }" },
   "no_accessibility_issues_were_detected_f8d3c875": {
     "message": "Nessun problema di accessibilità rilevato."
   },
@@ -724,6 +735,7 @@ const locale = {
   },
   "no_quizzes_found_c80c537a": { "message": "Nessun quiz trovato." },
   "no_results_940393cf": { "message": "Nessun risultato." },
+  "no_results_found_58717065": { "message": "Nessun risultato trovato" },
   "no_results_found_for_filterterm_ad1b04c8": {
     "message": "Nessun risultato trovato per { filterTerm }"
   },
@@ -812,11 +824,16 @@ const locale = {
   "precedes_196b9aef": { "message": "Precede" },
   "precedes_equal_20701e84": { "message": "Precede uguale" },
   "preformatted_d0670862": { "message": "Preformattato" },
+  "prepend_findtext_append_8e0e769a": {
+    "message": "{ prepend }{ findText }{ append }"
+  },
   "prev_f82cbc48": { "message": "Precedente" },
   "preview_53003fd2": { "message": "Anteprima" },
   "preview_a3f8f854": { "message": "ANTEPRIMA" },
   "preview_in_overlay_ed772c46": { "message": "Anteprima in sovrapposizione" },
   "preview_inline_9787330": { "message": "Anteprima inline" },
+  "previous_bd2ac015": { "message": "Precedente" },
+  "previous_findtext_8dfbfd30": { "message": "Precedente { findText }" },
   "prime_917ea60e": { "message": "Primo" },
   "prime_numbers_13464f61": { "message": "Numeri primi" },
   "product_39cf144f": { "message": "Prodotto" },
@@ -847,11 +864,28 @@ const locale = {
   "religion_icon_246e0be1": { "message": "Icona Religione" },
   "remove_heading_style_5fdc8855": { "message": "Rimuovi stile intestazione" },
   "remove_link_d1f2f4d0": { "message": "Rimuovi link" },
+  "replace_all_d3d68b3": { "message": "Sostituisci tutto" },
+  "replace_all_findtext_with_replacetext_da574b32": {
+    "message": "Sostituisci tutto { findText } con { replaceText }"
+  },
   "replace_e61834a7": { "message": "Sostituisci" },
+  "replace_findtext_with_replacetext_7b5c7fb3": {
+    "message": "Sostituisci { findText } con { replaceText }"
+  },
+  "replace_with_eeff01ad": { "message": "Sostituisci con" },
+  "replaced_alertfindtext_with_alertreplacetext_de5c1795": {
+    "message": "{ alertFindText } sostituito con { alertReplaceText }"
+  },
+  "replaced_all_alertfindtext_with_alertreplacetext_83fdfe59": {
+    "message": "Tutto { alertFindText } sostituito con { alertReplaceText }"
+  },
   "reset_95a81614": { "message": "Reimposta" },
   "resize_ec83d538": { "message": "Ridimensiona" },
   "restore_auto_save_deccd84b": {
     "message": "Ripristinare salvataggio automatico?"
+  },
+  "result_index_of_max_7db5ad8b": {
+    "message": "Risultato { index } di { max }."
   },
   "reverse_turnstile_does_not_yield_7558be06": {
     "message": "Barra verticale con barra orizzontale inversa (non si piega)"

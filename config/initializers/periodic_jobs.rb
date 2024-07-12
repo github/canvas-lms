@@ -108,7 +108,7 @@ Rails.configuration.after_initialize do
     Delayed::Periodic.cron "ActiveRecord::SessionStore::Session.delete_all", "*/5 * * * *" do
       callback = -> { Canvas::Errors.capture_exception(:periodic_job, $ERROR_INFO) }
       Shard.with_each_shard(exception: callback) do
-        ActiveRecord::SessionStore::Session.where("updated_at < ?", expire_after.seconds.ago).delete_all
+        ActiveRecord::SessionStore::Session.where(updated_at: ...expire_after.seconds.ago).delete_all
       end
     end
   end
@@ -159,14 +159,14 @@ Rails.configuration.after_initialize do
   end
 
   Delayed::Periodic.cron "ErrorReport.destroy_error_reports", "2-59/5 * * * *" do
-    cutoff = Setting.get("error_reports_retain_for", 3.months.to_s).to_i
+    cutoff = 3.months
     if cutoff > 0
       with_each_shard_by_database(ErrorReport, :destroy_error_reports, cutoff.seconds.ago)
     end
   end
 
   Delayed::Periodic.cron "Delayed::Job::Failed.cleanup_old_jobs", "0 * * * *" do
-    cutoff = Setting.get("failed_jobs_retain_for", 3.months.to_s).to_i
+    cutoff = 3.months
     if cutoff > 0
       with_each_job_cluster(Delayed::Job::Failed, :cleanup_old_jobs, cutoff.seconds.ago)
     end
@@ -179,6 +179,16 @@ Rails.configuration.after_initialize do
 
   Delayed::Periodic.cron "Attachment.do_notifications", "*/10 * * * *", priority: Delayed::LOW_PRIORITY do
     with_each_shard_by_database(Attachment, :do_notifications)
+  end
+
+  unless ApplicationController.test_cluster?
+    Delayed::Periodic.cron "Attachment::GarbageCollector::ContentExportAndMigrationContextType.delete_content", "37 1 * * *" do
+      with_each_shard_by_database(Attachment::GarbageCollector::ContentExportAndMigrationContextType, :delete_content, jitter: 30.minutes, local_offset: true)
+    end
+
+    Delayed::Periodic.cron "Attachment::GarbageCollector::ContentExportContextType.delete_content", "37 3 * * *" do
+      with_each_shard_by_database(Attachment::GarbageCollector::ContentExportContextType, :delete_content, jitter: 30.minutes, local_offset: true)
+    end
   end
 
   Delayed::Periodic.cron "Ignore.cleanup", "45 23 * * *" do
@@ -293,6 +303,10 @@ Rails.configuration.after_initialize do
 
   Delayed::Periodic.cron "Assignment.clean_up_duplicating_assignments", "*/5 * * * *", priority: Delayed::LOW_PRIORITY do
     with_each_shard_by_database(Assignment, :clean_up_duplicating_assignments)
+  end
+
+  Delayed::Periodic.cron "Assignment.clean_up_cloning_alignments", "*/5 * * * *", priority: Delayed::LOW_PRIORITY do
+    with_each_shard_by_database(Assignment, :clean_up_cloning_alignments)
   end
 
   Delayed::Periodic.cron "Assignment.clean_up_importing_assignments", "*/5 * * * *", priority: Delayed::LOW_PRIORITY do

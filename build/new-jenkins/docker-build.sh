@@ -65,12 +65,12 @@ WEBPACK_RUNNER_DOCKERFILE_MD5=$(cat Dockerfile.jenkins.webpack-runner | md5sum)
 BASE_IMAGE_ID=$(docker images --filter=reference=starlord.inscloudgate.net/jenkins/ruby-passenger:$RUBY --format '{{.ID}}')
 
 BASE_RUNNER_BUILD_ARGS=(
-  --build-arg CANVAS_RAILS=${CANVAS_RAILS:-7.0}
+  --build-arg CANVAS_RAILS=${CANVAS_RAILS:-7.1}
   --build-arg POSTGRES_CLIENT="$POSTGRES_CLIENT"
   --build-arg RUBY="$RUBY"
 )
 WEBPACK_RUNNER_BUILD_ARGS=(
-  --build-arg JS_BUILD_NO_UGLIFY="$JS_BUILD_NO_UGLIFY"
+  --build-arg SKIP_SOURCEMAPS="$SKIP_SOURCEMAPS"
   --build-arg RAILS_LOAD_ALL_LOCALES="$RAILS_LOAD_ALL_LOCALES"
   --build-arg CRYSTALBALL_MAP="$CRYSTALBALL_MAP"
 )
@@ -124,6 +124,7 @@ WEBPACK_CACHE_ID_PARTS=(
   $WEBPACK_RUNNER_DOCKERFILE_MD5
   $WEBPACK_BUILDER_DOCKERFILE_MD5
   $WEBPACK_CACHE_DOCKERFILE_MD5
+  $CACHE_VERSION
 )
 WEBPACK_CACHE_ID=$(compute_hash ${WEBPACK_CACHE_ID_PARTS[@]})
 

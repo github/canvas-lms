@@ -95,12 +95,11 @@ interface PassedProps {
   readonly onClose: () => void
 }
 
-const {Item: FlexItem} = Flex as any
-
 type ComponentProps = PassedProps & DispatchProps & StoreProps
 
 type ResponsiveComponentProps = ComponentProps & {
   readonly outerResponsiveSize: ResponsiveSizes
+  responsiveSize: ResponsiveSizes
 }
 
 export const PaceModal = ({
@@ -163,7 +162,6 @@ export const PaceModal = ({
   return (
     <Modal
       open={props.isOpen}
-      onDismiss={handleClose}
       size="fullscreen"
       label={modalTitle()}
       shouldCloseOnDocumentClick={true}
@@ -172,12 +170,12 @@ export const PaceModal = ({
     >
       <Modal.Header>
         <Flex>
-          <FlexItem shouldGrow={true} shouldShrink={true} align="center">
+          <Flex.Item shouldGrow={true} shouldShrink={true} align="center">
             <Heading data-testid="course-pace-title" level="h2">
               <TruncateText>{modalTitle()}</TruncateText>
             </Heading>
-          </FlexItem>
-          <FlexItem>
+          </Flex.Item>
+          <Flex.Item>
             <IconButton
               data-testid="course-pace-edit-close-x"
               withBackground={false}
@@ -187,7 +185,7 @@ export const PaceModal = ({
               onClick={handleClose}
               elementRef={e => (closeButtonRef.current = e)}
             />
-          </FlexItem>
+          </Flex.Item>
         </Flex>
       </Modal.Header>
       <Modal.Body padding={props.responsiveSize === 'small' ? 'none small' : 'none large'}>
@@ -226,7 +224,7 @@ export const PaceModal = ({
               placement={outerResponsiveSize === 'small' ? 'bottom' : 'end'}
               shouldContainFocus={true}
               shouldReturnFocus={true}
-              shouldCloseOnDocumentClick={true}
+              shouldCloseOnDocumentClick={false}
             >
               <UnpublishedChangesTrayContents
                 handleTrayDismiss={handleTrayDismiss}
@@ -250,7 +248,7 @@ export const PaceModal = ({
           contextType={props.coursePace.context_type}
         />
       </Modal.Body>
-      <Modal.Footer theme={{padding: '0'}}>
+      <Modal.Footer themeOverride={{padding: '0'}}>
         <Footer
           handleCancel={handleClose}
           handleDrawerToggle={() => setTrayOpen(!trayOpen)}

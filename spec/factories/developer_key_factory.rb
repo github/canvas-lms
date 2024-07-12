@@ -23,6 +23,7 @@ module Factories
   def dev_key_model(opts = {})
     @dev_key = factory_with_protected_attributes(DeveloperKey, dev_key_valid_attributes(opts).merge(opts))
   end
+  alias_method :developer_key_model, :dev_key_model
 
   def dev_key_valid_attributes(opts = {})
     account = opts[:account].presence
@@ -37,6 +38,7 @@ module Factories
   end
 
   def dev_key_model_1_3(opts = {})
+    opts[:account] ||= Account.default
     opts = dev_key_valid_attributes({ is_lti_key: true,
                                       public_jwk_url: "http://example.com/jwks" }.merge(opts))
 

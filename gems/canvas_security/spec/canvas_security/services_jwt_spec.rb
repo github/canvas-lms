@@ -50,7 +50,7 @@ module CanvasSecurity
       let(:translate_token) do
         lambda do |jwt|
           decoded_crypted_token = CanvasSecurity.base64_decode(jwt)
-          return CanvasSecurity::ServicesJwt.decrypt(decoded_crypted_token)
+          CanvasSecurity::ServicesJwt.decrypt(decoded_crypted_token)
         end
       end
 
@@ -141,6 +141,12 @@ module CanvasSecurity
           it "errors if you try to pass data without a sub entry" do
             expect { ServicesJwt.generate(foo: "bar", bang: "baz") }
               .to raise_error(ArgumentError)
+          end
+
+          it "can generate a non-encrypted JWT" do
+            jwt = ServicesJwt.generate({ sub: 1, foo: "bar" }, false, encrypt: false)
+            body = JSON::JWT.decode(jwt, ServicesJwt::KeyStorage.public_keyset)
+            expect(body[:foo]).to eq "bar"
           end
         end
 

@@ -199,7 +199,7 @@ module CoursePacesPageObject
   end
 
   def show_hide_course_paces_selector
-    "[data-test-id='projections-text-button']"
+    "[data-testid='projections-text-button']"
   end
 
   def skip_weekends_checkbox_xpath_selector
@@ -818,7 +818,7 @@ module CoursePacesPageObject
   delegate :text, to: :assignment_due_date, prefix: true
 
   def calculate_saturday_date
-    current_date = Date.today
+    current_date = Time.zone.today
     current_date + ((6 - current_date.wday) % 7)
   end
 

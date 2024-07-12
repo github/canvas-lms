@@ -17,7 +17,6 @@
  */
 import React, {useEffect, useRef, useState} from 'react'
 import {useScope as useI18nScope} from '@canvas/i18n'
-// @ts-expect-error -- TODO: remove once we're on InstUI 8
 import {Modal} from '@instructure/ui-modal'
 import {Spinner} from '@instructure/ui-spinner'
 import {Button, CloseButton} from '@instructure/ui-buttons'
@@ -30,34 +29,35 @@ import {useGradingSchemeDelete} from '../hooks/useGradingSchemeDelete'
 import {useGradingScheme} from '../hooks/useGradingScheme'
 import {
   GradingSchemeInput,
-  GradingSchemeEditableData,
-  GradingSchemeInputHandle,
+  type GradingSchemeEditableData,
+  type GradingSchemeInputHandle,
 } from './form/GradingSchemeInput'
-import {
+import type {
   GradingScheme,
   GradingSchemeSummary,
   GradingSchemeTemplate,
 } from '../../gradingSchemeApiModel'
 import {defaultPointsGradingScheme} from '../../defaultPointsGradingScheme'
 import {useDefaultGradingScheme} from '../hooks/useDefaultGradingScheme'
+import {canManageAccountGradingSchemes} from '../helpers/gradingSchemePermissions'
 
 const I18n = useI18nScope('GradingSchemeManagement')
 
-export interface ComponentProps {
+export interface GradingSchemeViewEditModalProps {
   contextType: 'Account' | 'Course'
   contextId: string
   gradingSchemeId: string
-  pointsBasedGradingSchemesEnabled: boolean
+  archivedGradingSchemesEnabled: boolean
   onUpdate?: (gradingSchemeSummary: GradingSchemeSummary) => any
   onCancel: () => any
   onDelete?: () => any
 }
 
-export const GradingSchemeViewEditModal: React.FC<ComponentProps> = ({
+export const GradingSchemeViewEditModal: React.FC<GradingSchemeViewEditModalProps> = ({
   contextType,
   contextId,
   gradingSchemeId,
-  pointsBasedGradingSchemesEnabled,
+  archivedGradingSchemesEnabled,
   onUpdate,
   onCancel,
   onDelete,
@@ -119,7 +119,11 @@ export const GradingSchemeViewEditModal: React.FC<ComponentProps> = ({
       setGradingScheme(updatedGradingScheme)
       if (onUpdate) {
         // if parent supplied a callback method, inform parent that grading standard was updated
-        onUpdate({title: updatedGradingScheme.title, id: updatedGradingScheme.id})
+        onUpdate({
+          title: updatedGradingScheme.title,
+          id: updatedGradingScheme.id,
+          context_type: updatedGradingScheme.context_type,
+        })
       }
     } catch (error) {
       showFlashError(I18n.t('There was an error while updating the grading scheme'))(error as Error)
@@ -163,6 +167,9 @@ export const GradingSchemeViewEditModal: React.FC<ComponentProps> = ({
   function canManageScheme(scheme: GradingScheme | undefined) {
     if (!scheme) return false
     if (!scheme.permissions.manage) {
+      return false
+    }
+    if (!canManageAccountGradingSchemes(contextType, scheme.context_type)) {
       return false
     }
     return !scheme.assessed_assignment
@@ -213,11 +220,10 @@ export const GradingSchemeViewEditModal: React.FC<ComponentProps> = ({
                     },
                   }}
                   onSave={modifiedGradingScheme => handleUpdateScheme(modifiedGradingScheme)}
-                  pointsBasedGradingSchemesFeatureEnabled={pointsBasedGradingSchemesEnabled}
                 />
               ) : (
                 <GradingSchemeView
-                  pointsBasedGradingSchemesEnabled={pointsBasedGradingSchemesEnabled}
+                  archivedGradingSchemesEnabled={archivedGradingSchemesEnabled}
                   disableEdit={!canManageScheme(gradingScheme)}
                   disableDelete={!canManageScheme(gradingScheme)}
                   onEditRequested={toggleEditing}

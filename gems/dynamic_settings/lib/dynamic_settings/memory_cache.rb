@@ -26,11 +26,6 @@ module DynamicSettings
       clear
     end
 
-    def write_set(hash, ttl: nil)
-      opts = { expires_in: ttl }
-      hash.each { |k, v| write(k, v, opts) }
-    end
-
     # Everything from here down is actully a reimplementation
     # of some ideas that existed in the caching layer canvas proper.
     # That was a circular dependency, which we broke (kind of) by making this
@@ -48,7 +43,7 @@ module DynamicSettings
     private
 
     def write_entry(key, entry, **options)
-      super(key, entry, **options)
+      super
       forever_entry = entry.dup
       forever_entry.remove_instance_variable(:@expires_in)
       super(key + KEY_SUFFIX, forever_entry, **options.except(:expires_in))

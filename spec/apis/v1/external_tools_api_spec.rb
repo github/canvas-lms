@@ -27,6 +27,7 @@ describe ExternalToolsController, type: :request do
     before(:once) do
       course_with_teacher(active_all: true, user: user_with_pseudonym)
       @group = group_model(context: @course)
+      @tool_context = @course
     end
 
     it "shows an external tool" do
@@ -266,6 +267,7 @@ describe ExternalToolsController, type: :request do
       account_admin_user(active_all: true, user: user_with_pseudonym)
       @account = @user.account
       @group = group_model(context: @account)
+      @tool_context = @account
     end
 
     it "shows an external tool" do
@@ -341,90 +343,79 @@ describe ExternalToolsController, type: :request do
         allow(Setting).to receive(:set).with("allow_tc_access_").and_return("true")
       end
 
-      context "with feature flag enabled" do
-        before do
-          Account.site_admin.enable_feature! :dynamic_lti_environment_overrides
+      let(:domain) { "www.example-beta.com" }
+
+      def expect_domain_override(url)
+        expect(url).to include(domain)
+      end
+
+      def expect_no_override(url)
+        expect(url).not_to include(domain)
+      end
+
+      context "with domain override" do
+        let(:override_icon_url) { "https://www.example-beta.com/lti/icon" }
+        let(:tool) do
+          t = super()
+          t.settings[:environments] = {
+            domain:
+          }
+          t.save!
+          t
         end
 
-        let(:domain) { "www.example-beta.com" }
-
-        def expect_domain_override(url)
-          expect(url).to include(domain)
+        it "overrides base icon_url" do
+          expect_domain_override(subject["icon_url"])
         end
 
-        def expect_no_override(url)
-          expect(url).not_to include(domain)
+        it "overrides placement icon_url" do
+          expect_domain_override(subject.dig("editor_button", "icon_url"))
         end
 
-        context "with domain override" do
-          let(:override_icon_url) { "https://www.example-beta.com/lti/icon" }
-          let(:tool) do
-            t = super()
-            t.settings[:environments] = {
-              domain:
-            }
-            t.save!
-            t
-          end
-
-          it "overrides base icon_url" do
-            expect_domain_override(subject["icon_url"])
-          end
-
-          it "overrides placement icon_url" do
-            expect_domain_override(subject.dig("editor_button", "icon_url"))
-          end
-
-          it "overrides placement url" do
-            expect_domain_override(subject.dig("editor_button", "url"))
-          end
-
-          it "overrides url" do
-            expect_domain_override(subject["url"])
-          end
-
-          it "overrides domain" do
-            expect_domain_override(subject["domain"])
-          end
+        it "overrides placement url" do
+          expect_domain_override(subject.dig("editor_button", "url"))
         end
 
-        context "with launch_url override" do
-          let(:override_url) { "https://www.example-beta.com/lti/launch" }
-          let(:tool) do
-            t = super()
-            t.settings[:environments] = {
-              launch_url: override_url
-            }
-            t.save!
-            t
-          end
+        it "overrides url" do
+          expect_domain_override(subject["url"])
+        end
 
-          it "overrides url" do
-            expect(subject["url"]).to eq override_url
-          end
-
-          it "does not override placement url" do
-            expect_no_override(subject.dig("editor_button", "url"))
-          end
-
-          it "does not override placement icon_url" do
-            expect_no_override(subject.dig("editor_button", "icon_url"))
-          end
-
-          it "does not override icon url" do
-            expect_no_override(subject["icon_url"])
-          end
-
-          it "does not override domain" do
-            expect_no_override(subject["domain"])
-          end
+        it "overrides domain" do
+          expect_domain_override(subject["domain"])
         end
       end
 
-      # context "with feature flag disabled" do
-      #   see instructure_misc_plugin/spec_canvas/lib/api/v1/external_tools_api_spec.rb
-      #   (since existing environment overrides are defined there as part of beta refresh)
-      # end
+      context "with launch_url override" do
+        let(:override_url) { "https://www.example-beta.com/lti/launch" }
+        let(:tool) do
+          t = super()
+          t.settings[:environments] = {
+            launch_url: override_url
+          }
+          t.save!
+          t
+        end
+
+        it "overrides url" do
+          expect(subject["url"]).to eq override_url
+        end
+
+        it "does not override placement url" do
+          expect_no_override(subject.dig("editor_button", "url"))
+        end
+
+        it "does not override placement icon_url" do
+          expect_no_override(subject.dig("editor_button", "icon_url"))
+        end
+
+        it "does not override icon url" do
+          expect_no_override(subject["icon_url"])
+        end
+
+        it "does not override domain" do
+          expect_no_override(subject["domain"])
+        end
+      end
     end
 
     if Canvas.redis_enabled?
@@ -929,6 +920,7 @@ describe ExternalToolsController, type: :request do
     et.course_home_sub_navigation = { url: "http://www.example.com/ims/lti/resource", text: "course home sub navigation", display_type: "full_width", visibility: "admins" }
     et.course_settings_sub_navigation = { url: "http://www.example.com/ims/lti/resource", text: "course settings sub navigation", display_type: "full_width", visibility: "admins" }
     et.global_navigation = { url: "http://www.example.com/ims/lti/resource", text: "global navigation", display_type: "full_width", visibility: "admins" }
+    et.top_navigation = { url: "http://www.example.com/ims/lti/resource", text: "top navigation" }
     et.assignment_menu = { url: "http://www.example.com/ims/lti/resource", text: "assignment menu", display_type: "full_width", visibility: "admins" }
     et.assignment_index_menu = { url: "http://www.example.com/ims/lti/resource", text: "assignment index menu", display_type: "full_width", visibility: "admins" }
     et.assignment_group_menu = { url: "http://www.example.com/ims/lti/resource", text: "assignment group menu", display_type: "full_width", visibility: "admins" }
@@ -1114,6 +1106,14 @@ describe ExternalToolsController, type: :request do
         "url" => "http://www.example.com/ims/lti/resource",
         "visibility" => "admins",
         "display_type" => "full_width",
+        "selection_height" => 400,
+        "selection_width" => 800,
+      },
+      "top_navigation" => {
+        "enabled" => true,
+        "text" => "top navigation",
+        "label" => "top navigation",
+        "url" => "http://www.example.com/ims/lti/resource",
         "selection_height" => 400,
         "selection_width" => 800,
       },
@@ -1325,6 +1325,7 @@ describe ExternalToolsController, type: :request do
                                    end
     }
     example["is_rce_favorite"] = et.is_rce_favorite if et&.can_be_rce_favorite?
+    example["is_top_nav_favorite"] = et.top_nav_favorite_in_context?(@tool_context) if et&.can_be_top_nav_favorite?
     example
   end
 end

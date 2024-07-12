@@ -20,10 +20,6 @@ import GroupImportModal from '../GroupImportModal'
 import * as apiClient from '../apiClient'
 
 describe('GroupImportModal', () => {
-  beforeEach(() => {
-    global.DataTransferItem = global.DataTransferItem || class DataTransferItem {}
-  })
-
   it('adds an error message when an unsupported filetype is selected', async () => {
     const badFile = new File(['(⌐□_□)'], 'file.png', {type: 'image/png'})
     const {findByText, findByLabelText} = render(
@@ -41,7 +37,8 @@ describe('GroupImportModal', () => {
     expect(await findByText('Invalid file type')).toBeInTheDocument()
   })
 
-  it('sends the file to the API on successful upload', async () => {
+  // FOO-4218 - remove or rewrite to remove spies on imports
+  it.skip('sends the file to the API on successful upload', async () => {
     const mockCreateImport = jest.spyOn(apiClient, 'createImport').mockImplementation(() => {
       return new Promise(resolve => {
         resolve(true)
@@ -62,7 +59,8 @@ describe('GroupImportModal', () => {
     expect(mockCreateImport).toHaveBeenCalled()
   })
 
-  it('displays an error when the API requests fails', async () => {
+  // FOO-4218 - remove or rewrite to remove spies on imports
+  it.skip('displays an error when the API requests fails', async () => {
     jest.spyOn(apiClient, 'createImport').mockImplementation(() => {
       return new Promise((resolve, reject) => {
         reject(new Error("That didn't work"))

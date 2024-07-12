@@ -17,6 +17,7 @@
  */
 
 import $ from 'jquery'
+import '@canvas/jquery/jquery.ajaxJSON'
 import ready from '@instructure/ready'
 import '@canvas/context-modules'
 import WikiPage from '@canvas/wiki/backbone/models/WikiPage'
@@ -24,7 +25,6 @@ import WikiPageView from './backbone/views/WikiPageView'
 import MarkAsDone from '@canvas/util/jquery/markAsDone'
 import LockManager from '@canvas/blueprint-courses/react/components/LockManager/index'
 import '@canvas/module-sequence-footer'
-import {monitorLtiMessages} from '@canvas/lti/jquery/messages'
 
 $('body').addClass('show')
 
@@ -58,5 +58,3 @@ ready(() => {
 
   wikiPageView.render()
 })
-
-monitorLtiMessages()

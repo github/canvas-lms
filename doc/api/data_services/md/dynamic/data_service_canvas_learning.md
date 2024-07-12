@@ -357,10 +357,15 @@ Learning
     "root_account_uuid": "VicYj3cu5BIFpoZhDVU4DZumnlBrWi1grgJEzADs"
   },
   "body": {
+    "id": "1",
     "assessed_at": "2019-08-09T21:35:05Z",
     "attempt": 1,
     "created_at": "2019-08-09T21:35:05Z",
     "learning_outcome_id": "1",
+    "learning_outcome_context_uuid": "9dewFPr6uKGaiVxchQSsqV6YZy5HBtlq8O2vqp45",
+    "result_context_id": "1",
+    "result_context_type": "Course",
+    "result_context_uuid": "c3JwFPr6uKGaiVxchQSsqV6YZy5HBtlq8O2vqNNN",
     "mastery": true,
     "original_mastery": false,
     "original_possible": 5,
@@ -368,7 +373,11 @@ Learning
     "percent": 1,
     "possible": 5,
     "score": 5,
-    "title": "oxana Student 2, Test Outcome"
+    "user_uuid": "elXwFPr6uKGaiVxchQSsqV6YZy5HBtlq8O2vqMXM",
+    "artifact_id": "22",
+    "artifact_type": "RubricAssessment",
+    "associated_asset_id": "56",
+    "associated_asset_type": "Assignment"
   }
 }
 ```
@@ -380,10 +389,15 @@ Learning
 
 | Field | Description |
 |-|-|
+| **id** | The local Canvas ID of the learning outcome result. |
 | **assessed_at** | The date when the outcome was last assessed. |
 | **attempt** | The submission attempt number. |
 | **created_at** | Time when the result was created. |
 | **learning_outcome_id** | The local Canvas ID of the learning outcome. |
+| **learning_outcome_context_uuid** | The uuid of the context associated with the learning outcome. |
+| **result_context_id** | The local Canvas ID of the context associated with the learning outcome result. |
+| **result_context_type** | The type of the context associated with the learning outcome result. Value will be one of the following: Account or Course. |
+| **result_context_uuid** | The uuid of the context associated with the learning outcome result. |
 | **mastery** | True if student achieved mastery. |
 | **original_mastery** | True if student achieved mastery on the first attempt. |
 | **original_possible** | Possible points on the first attempt. |
@@ -391,7 +405,11 @@ Learning
 | **percent** | Percent of maximum points possible for an outcome, scaled to reflect any custom mastery levels that differ from the learning outcome. |
 | **possible** | Total number of points possible. |
 | **score** | The student's score. |
-| **title** | Title of the learning outcome. |
+| **user_uuid** | The unique identifier for the user that the outcome was assessed. |
+| **artifact_id** | The id of the artifact that contains the outcome assessment. Value will be an string representation of an integer or nil. |
+| **artifact_type** | The type of artifact that contains the outcome assessment.  Value will be one of the following: RubricAssessment, Submission, Quizzes::QuizSubmission, or LiveAssessments::Submission. |
+| **associated_asset_id** | The id of the asset that the outcome is aligned to. Value will be an string representation of an integer or nil. |
+| **associated_asset_type** | The type of the asset that the outcome is aligned to. Value will be one of the following: AssessmentQuestion, Assignment, Quizzes::Quiz, LiveAssessments::Assessment or nil. |
 
 
 
@@ -419,10 +437,15 @@ Learning
     "root_account_uuid": "VicYj3cu5BIFpoZhDVU4DZumnlBrWi1grgJEzADs"
   },
   "body": {
+    "id": "1",
     "assessed_at": "2019-08-09T21:35:05Z",
     "attempt": 1,
     "created_at": "2019-08-09T21:35:05Z",
     "learning_outcome_id": "1",
+    "learning_outcome_context_uuid": "9dewFPr6uKGaiVxchQSsqV6YZy5HBtlq8O2vqp45",
+    "result_context_id": "1",
+    "result_context_type": "Course",
+    "result_context_uuid": "c3JwFPr6uKGaiVxchQSsqV6YZy5HBtlq8O2vqNNN",
     "mastery": true,
     "original_mastery": false,
     "original_possible": 5,
@@ -430,8 +453,12 @@ Learning
     "percent": 1,
     "possible": 5,
     "score": 5,
-    "title": "oxana Student 2, Test Outcome",
-    "updated_at": "2019-11-01T00:21:24Z"
+    "updated_at": "2019-11-01T00:21:24Z",
+    "user_uuid": "elXwFPr6uKGaiVxchQSsqV6YZy5HBtlq8O2vqMXM",
+    "artifact_id": "22",
+    "artifact_type": "RubricAssessment",
+    "associated_asset_id": "56",
+    "associated_asset_type": "Assignment"
   }
 }
 ```
@@ -443,10 +470,15 @@ Learning
 
 | Field | Description |
 |-|-|
+| **id** | The local Canvas ID of the learning outcome result. |
 | **assessed_at** | The date when the outcome was last assessed. |
 | **attempt** | The submission attempt number. |
 | **created_at** | Time when the result was created. |
 | **learning_outcome_id** | The local Canvas ID of the learning outcome. |
+| **learning_outcome_context_uuid** | The uuid of the context associated with the learning outcome. |
+| **result_context_id** | The local Canvas ID of the context associated with the learning outcome result. |
+| **result_context_type** | The type of the context associated with the learning outcome result. Value will be one of the following: Account or Course. |
+| **result_context_uuid** | The uuid of the context associated with the learning outcome result. |
 | **mastery** | True if student achieved mastery. |
 | **original_mastery** | True if student achieved mastery on the first attempt. |
 | **original_possible** | Possible points on the first attempt. |
@@ -454,8 +486,12 @@ Learning
 | **percent** | Percent of maximum points possible for an outcome, scaled to reflect any custom mastery levels that differ from the learning outcome. |
 | **possible** | Total number of points possible. |
 | **score** | The student's score. |
-| **title** | Title of the learning outcome. |
 | **updated_at** | Time the learning outcome result was updated at. |
+| **user_uuid** | The uuid of the user that the outcome was assessed. |
+| **artifact_id** | The id of the artifact that contains the outcome assessment. Value will be an string representation of an integer or nil. |
+| **artifact_type** | The type of artifact that contains the outcome assessment.  Value will be one of the following: RubricAssessment, Submission, Quizzes::QuizSubmission, or LiveAssessments::Submission. |
+| **associated_asset_id** | The id of the asset that the outcome is aligned to. Value will be an string representation of an integer or nil. |
+| **associated_asset_type** | The type of the asset that the outcome is aligned to. Value will be one of the following: AssessmentQuestion, Assignment, Quizzes::Quiz, LiveAssessments::Assessment or nil. |
 
 
 

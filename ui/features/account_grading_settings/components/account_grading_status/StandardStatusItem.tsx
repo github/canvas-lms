@@ -20,7 +20,6 @@ import React, {useRef} from 'react'
 import {GradingStatusListItem} from '@canvas/grading-status-list-item'
 import type {GradeStatus, StandardStatusAllowedName} from '@canvas/grading/accountGradingStatus'
 import {useScope as useI18nScope} from '@canvas/i18n'
-// @ts-expect-error
 import {Grid} from '@instructure/ui-grid'
 import {Text} from '@instructure/ui-text'
 import {View} from '@instructure/ui-view'
@@ -30,12 +29,14 @@ import {statusesTitleMap} from '../../utils/accountStatusUtils'
 const I18n = useI18nScope('standard_grading_status')
 
 type StandardStatusItemProps = {
+  editable: boolean
   gradeStatus: GradeStatus
   isEditOpen: boolean
   handleEditSave: (color: string) => void
   handleEditStatusToggle: () => void
 }
 export const StandardStatusItem = ({
+  editable,
   gradeStatus,
   isEditOpen,
   handleEditSave,
@@ -46,26 +47,37 @@ export const StandardStatusItem = ({
 
   const statusName = statusesTitleMap[name as StandardStatusAllowedName]
   return (
-    <View as="div" margin="small 0 0 0" data-testid={`standard-status-${gradeStatus.id}`}>
+    <View
+      as="div"
+      margin="small 0 0 0"
+      data-testid={`standard-status-${gradeStatus.id}`}
+      id="standard-status"
+    >
       <GradingStatusListItem
         backgroundColor={color}
-        setElementRef={ref => (standardStatusRef.current = ref)}
+        setElementRef={ref => {
+          if (ref instanceof HTMLDivElement) {
+            standardStatusRef.current = ref
+          }
+        }}
       >
         <Grid vAlign="middle">
           <Grid.Row>
             <Grid.Col>
               <Text weight="bold">{statusName}</Text>
             </Grid.Col>
-            <Grid.Col width="auto">
-              <EditStatusPopover
-                currentColor={color}
-                editButtonLabel={`${I18n.t('Standard Status')} ${statusName}`}
-                isOpen={isEditOpen}
-                handleEditSave={handleEditSave}
-                handleEditStatusToggle={handleEditStatusToggle}
-                positionTarget={standardStatusRef.current}
-              />
-            </Grid.Col>
+            {editable && (
+              <Grid.Col width="auto">
+                <EditStatusPopover
+                  currentColor={color}
+                  editButtonLabel={`${I18n.t('Standard Status')} ${statusName}`}
+                  isOpen={isEditOpen}
+                  handleEditSave={handleEditSave}
+                  handleEditStatusToggle={handleEditStatusToggle}
+                  positionTarget={standardStatusRef.current}
+                />
+              </Grid.Col>
+            )}
           </Grid.Row>
         </Grid>
       </GradingStatusListItem>

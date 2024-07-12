@@ -176,6 +176,9 @@
   "congruent_5a244acd": { "message": "Congruent" },
   "contains_311f37b7": { "message": "Conté" },
   "content_1440204b": { "message": "Contingut" },
+  "content_in_the_editor_will_be_changed_press_cancel_d5bf3357": {
+    "message": "Es canviarà el contingut de l''editor. Premeu Cancel·la per mantenir el contingut original."
+  },
   "content_is_still_being_uploaded_if_you_continue_it_8f06d0cb": {
     "message": "Encara s''està penjant el contingut. Si continueu, no s''integrarà adequadament."
   },
@@ -323,6 +326,10 @@
   "enter_at_least_3_characters_to_search_4f037ee0": {
     "message": "Introduïu com a mínim 3 caràcters per cercar"
   },
+  "enter_replacement_text_17631bbc": {
+    "message": "introdueix el text substitutiu"
+  },
+  "enter_search_text_26cb4459": { "message": "introdueix el text de cerca" },
   "epsilon_54bb8afa": { "message": "Èpsilon" },
   "epsilon_variant_d31f1e77": { "message": "Èpsilon (variant)" },
   "equals_sign_c51bdc58": { "message": "Signe igual" },
@@ -365,6 +372,8 @@
   },
   "files_c300e900": { "message": "Fitxers" },
   "files_index_af7c662b": { "message": "Índex de fitxers" },
+  "find_8d605019": { "message": "Cerca" },
+  "find_and_replace_6e345933": { "message": "Cerca i substitueix" },
   "finish_bc343002": { "message": "Finalitza" },
   "fix_heading_hierarchy_f60884c4": {
     "message": "Corregiu la jerarquia de capçaleres"
@@ -495,6 +504,7 @@
   "in_element_of_19ca2f33": { "message": "A (un element de)" },
   "increase_indent_6af90f7c": { "message": "Augmenta la sagnia" },
   "indefinite_integral_6623307e": { "message": "Integral indefinida" },
+  "index_of_max_80dcf7a5": { "message": "{ index } de { max }" },
   "indigo_2035fc55": { "message": "Indi" },
   "inference_fed5c960": { "message": "Inferència" },
   "infinity_7a10f206": { "message": "Infinitat" },
@@ -674,6 +684,7 @@
   "nested_less_than_27d17e58": { "message": "Estructura imbricada inferior a" },
   "new_quiz_34aacba6": { "message": "Prova nova" },
   "next_40e12421": { "message": "Següent" },
+  "next_findtext_9d69f0fe": { "message": "Següent { findText }" },
   "no_accessibility_issues_were_detected_f8d3c875": {
     "message": "No s’ha detectat cap problema d’accessibilitat."
   },
@@ -713,6 +724,7 @@
   },
   "no_quizzes_found_c80c537a": { "message": "No s''ha trobat cap prova." },
   "no_results_940393cf": { "message": "Sense resultats." },
+  "no_results_found_58717065": { "message": "No s''ha trobat cap resultat" },
   "no_results_found_for_filterterm_ad1b04c8": {
     "message": "No s''ha trobat cap resultat per a { filterTerm }"
   },
@@ -805,6 +817,9 @@
   "precedes_196b9aef": { "message": "Precedeix a" },
   "precedes_equal_20701e84": { "message": "El precedent és igual que" },
   "preformatted_d0670862": { "message": "Amb format previ" },
+  "prepend_findtext_append_8e0e769a": {
+    "message": "{ prepend }{ findText }{ append }"
+  },
   "prev_f82cbc48": { "message": "Anterior" },
   "preview_53003fd2": { "message": "Visualització prèvia" },
   "preview_a3f8f854": { "message": "VISUALITZACIÓ PRÈVIA" },
@@ -812,6 +827,8 @@
     "message": "Visualització prèvia en superposició"
   },
   "preview_inline_9787330": { "message": "Visualització prèvia en línia" },
+  "previous_bd2ac015": { "message": "Anterior" },
+  "previous_findtext_8dfbfd30": { "message": "{ findText } anterior" },
   "prime_917ea60e": { "message": "Primer" },
   "prime_numbers_13464f61": { "message": "Números primers" },
   "product_39cf144f": { "message": "Producte" },
@@ -844,11 +861,28 @@
     "message": "Suprimeix l''estil de la capçalera"
   },
   "remove_link_d1f2f4d0": { "message": "Elimina l''enllaç" },
+  "replace_all_d3d68b3": { "message": "Substitueixo-ho tot" },
+  "replace_all_findtext_with_replacetext_da574b32": {
+    "message": "Substitueix tot { findText } amb { replaceText }"
+  },
   "replace_e61834a7": { "message": "Substitueix" },
+  "replace_findtext_with_replacetext_7b5c7fb3": {
+    "message": "Substitueix { findText } amb { replaceText }"
+  },
+  "replace_with_eeff01ad": { "message": "Substitueixo-ho per" },
+  "replaced_alertfindtext_with_alertreplacetext_de5c1795": {
+    "message": "S’ha substituït { alertFindText } amb { alertReplaceText }"
+  },
+  "replaced_all_alertfindtext_with_alertreplacetext_83fdfe59": {
+    "message": "S’ha substituït tot { alertFindText } amb { alertReplaceText }"
+  },
   "reset_95a81614": { "message": "Restableix" },
   "resize_ec83d538": { "message": "Canvia la mida" },
   "restore_auto_save_deccd84b": {
     "message": "Voleu restaurar el contingut desat automàticament?"
+  },
+  "result_index_of_max_7db5ad8b": {
+    "message": "Resultat { index } de { max }."
   },
   "reverse_turnstile_does_not_yield_7558be06": {
     "message": "Trinquet invers (no produeix)"

@@ -21,8 +21,8 @@ import {render, waitFor} from '@testing-library/react'
 
 import VideoOptionsTray from '..'
 import VideoOptionsTrayDriver from './VideoOptionsTrayDriver'
-import RCEGlobals from '../../../../RCEGlobals'
 import {createLiveRegion, removeLiveRegion} from '../../../../__tests__/liveRegionHelper'
+import RceApiSource from '../../../../../rcs/api'
 
 jest.useFakeTimers()
 
@@ -37,6 +37,7 @@ describe('RCE "Videos" Plugin > VideoOptionsTray', () => {
       onRequestClose: jest.fn(),
       onSave: jest.fn(),
       open: true,
+      requestSubtitlesFromIframe: jest.fn(),
       videoOptions: {
         $element: null,
         appliedHeight: 180,
@@ -60,6 +61,7 @@ describe('RCE "Videos" Plugin > VideoOptionsTray', () => {
 
   afterEach(() => {
     removeLiveRegion()
+    jest.resetAllMocks()
   })
 
   function renderComponent() {
@@ -201,6 +203,19 @@ describe('RCE "Videos" Plugin > VideoOptionsTray', () => {
     })
   })
 
+  describe('requestSubtitlesFromIframe', () => {
+    it('is not called when subtitles are present', () => {
+      renderComponent()
+      expect(props.requestSubtitlesFromIframe).not.toHaveBeenCalled()
+    })
+
+    it('is called when no subtitles present', () => {
+      props.videoOptions.tracks = null
+      renderComponent()
+      expect(props.requestSubtitlesFromIframe).toHaveBeenCalledTimes(1)
+    })
+  })
+
   describe('when clicked', () => {
     beforeEach(() => {
       renderComponent()
@@ -241,7 +256,7 @@ describe('RCE "Videos" Plugin > VideoOptionsTray', () => {
         expect(displayAs).toEqual('link')
       })
 
-      it.skip('includes the size to be applied', async () => {
+      it('includes the size to be applied', async () => {
         await tray.setSize('Large')
         tray.$doneButton.click()
         const [{appliedHeight, appliedWidth}] = props.onSave.mock.calls[0]
@@ -255,24 +270,38 @@ describe('RCE "Videos" Plugin > VideoOptionsTray', () => {
   })
 
   describe('Attachment Media Options Tray', () => {
-    it('does not have closed caption controls or title input for locked attachments', () => {
-      RCEGlobals.getConfig = jest.fn().mockReturnValue({lockedAttachments: {10: true}})
+    it('does not have closed caption controls or title input for locked attachments', async () => {
+      const getFileMock = jest
+        .spyOn(RceApiSource.prototype, 'getFile')
+        .mockImplementation(() => {
+          return Promise.resolve({
+            "id": "10",
+            "is_master_course_child_content": true,
+            "restricted_by_master_course": true,
+          })
+        })
       props.videoOptions = {attachmentId: 10}
-      const {queryByText} = render(<VideoOptionsTray {...props} />)
-      expect(queryByText('Closed Captions/Subtitles')).not.toBeInTheDocument()
-      expect(queryByText('Title')).not.toBeInTheDocument()
+      renderComponent()
+      await waitFor(() => {expect(getFileMock).toHaveBeenCalled()})
+      expect(tray.$closedCaptionPanel).not.toBeInTheDocument()
+      expect(tray.$titleTextField).not.toBeInTheDocument()
     })
 
     it('shows closed caption controls and title input for unlocked attachments', async () => {
-      RCEGlobals.getConfig = jest.fn().mockReturnValue({lockedAttachments: {9: true}})
+      const getFileMock = jest
+        .spyOn(RceApiSource.prototype, 'getFile')
+        .mockImplementation(() => {
+          return Promise.resolve({
+            "id": "10",
+            "is_master_course_master_content": true,
+            "restricted_by_master_course": true,
+          })
+        })
       props.videoOptions = {attachmentId: 10}
       renderComponent()
-      await waitFor(() => {
-        expect(tray.$closedCaptionPanel).toBeInTheDocument()
-      })
-      await waitFor(() => {
-        expect(tray.$titleTextField).toBeInTheDocument()
-      })
+      await waitFor(() => {expect(getFileMock).toHaveBeenCalled()})
+      expect(tray.$closedCaptionPanel).toBeInTheDocument()
+      expect(tray.$titleTextField).toBeInTheDocument()
     })
   })
 

@@ -49,8 +49,7 @@ describe OAuth2ProviderController do
           response_type: "code",
           scope: "not|valid"
         }
-        assert_status(302)
-        expect(response.body).to include "invalid_scope"
+        expect(response).to redirect_to(/invalid_scope/)
       end
 
       it "renders 302 when scopes empty" do
@@ -59,8 +58,7 @@ describe OAuth2ProviderController do
           redirect_uri: dev_key.redirect_uri,
           response_type: "code"
         }
-        assert_status(302)
-        expect(response.body).to include "invalid_scope"
+        expect(response).to redirect_to(/invalid_scope/)
       end
     end
 
@@ -140,12 +138,27 @@ describe OAuth2ProviderController do
         allow(Canvas).to receive_messages(redis:)
       end
 
-      it "redirects to the confirm url if the user has no token" do
-        get :auth,
-            params: { client_id: key.id,
-                      redirect_uri: Canvas::OAuth::Provider::OAUTH2_OOB_URI,
-                      response_type: "code" }
-        expect(response).to redirect_to(oauth2_auth_confirm_url)
+      context "if the user has no token" do
+        it "redirects to the confirm url if the user has no token" do
+          get :auth,
+              params: { client_id: key.id,
+                        redirect_uri: Canvas::OAuth::Provider::OAUTH2_OOB_URI,
+                        response_type: "code" }
+          expect(response).to redirect_to(oauth2_auth_confirm_url)
+        end
+
+        it "shows a confirm page that allows being embedded (as an iframe) by trusted tools" do
+          t = external_tool_model(context: Account.default)
+          t.update! url: "https://myschool.instructure.com", domain: "myschool.instructure.com", developer_key: DeveloperKey.create(account: Account.default, internal_service: true)
+
+          get :auth,
+              params: { client_id: key.id,
+                        redirect_uri: Canvas::OAuth::Provider::OAUTH2_OOB_URI,
+                        response_type: "code" }
+          get :confirm
+          expect(response).to have_http_status :ok
+          expect(response.headers["Content-Security-Policy"]).to include("https://myschool.instructure.com")
+        end
       end
 
       it "redirects to login_url with ?force_login=1" do
@@ -417,7 +430,10 @@ describe OAuth2ProviderController do
           let(:client_secret) { other_key.api_key }
 
           it do
-            skip "not valid for this grant_type" if grant_type == "client_credentials"
+            if grant_type == "client_credentials" && !key.site_admin_service_auth?
+              skip "not valid for this grant_type"
+            end
+
             expect(subject).to have_http_status(:unauthorized)
           end
         end
@@ -426,7 +442,10 @@ describe OAuth2ProviderController do
           let(:client_secret) { nil }
 
           it do
-            skip "not valid for this grant_type" if grant_type == "client_credentials"
+            if grant_type == "client_credentials" && !key.site_admin_service_auth?
+              skip "not valid for this grant_type"
+            end
+
             expect(subject).to have_http_status(:unauthorized)
           end
         end
@@ -486,12 +505,12 @@ describe OAuth2ProviderController do
       it_behaves_like "common oauth2 token checks" do
         let(:success_params) { { code: valid_code } }
         let(:success_setup) do
-          expect(redis).to receive(:del).with(valid_code_redis_key).at_least(:once)
+          expect(redis).to receive(:del).with(valid_code_redis_key).at_least(:once) # rubocop:disable RSpec/ExpectInLet
         end
         let(:success_token_keys) { %w[access_token refresh_token user expires_in token_type canvas_region] }
       end
 
-      it "renders a 302 if a code is not provided for an authorization_code grant" do
+      it "renders a 400 if a code is not provided for an authorization_code grant" do
         post :token, params: base_params
 
         assert_status(400)
@@ -573,6 +592,85 @@ describe OAuth2ProviderController do
       end
     end
 
+    context "with client_credentials grant type and service key" do
+      include_context "InstAccess setup"
+
+      let(:grant_type) { "client_credentials" }
+      let(:service_user) { user_model }
+
+      before do
+        Account.site_admin.enable_feature!(:site_admin_service_auth)
+        key.update!(service_user:, internal_service: true)
+      end
+
+      context "with valid parameters" do
+        before { post :token, params: base_params }
+
+        it { is_expected.to be_successful }
+
+        it "returns a token for the service user" do
+          token = AuthenticationMethods::InstAccessToken.parse(
+            subject.parsed_body["access_token"]
+          )
+
+          expect(token.user_uuid).to eq service_user.uuid
+        end
+      end
+
+      it_behaves_like "common oauth2 token checks" do
+        let(:success_params) { { grant_type: } }
+        let(:success_token_keys) { %w[access_token token_type expires_in] }
+
+        let(:success_setup) { key.update!(service_user:) }
+        let(:before_post) { key.update!(service_user:) }
+      end
+
+      context "when the service user is not present" do
+        before do
+          key.update!(service_user: nil)
+          post :token, params: base_params
+        end
+
+        it { is_expected.to be_bad_request }
+      end
+
+      context "whent the service user is not active" do
+        before do
+          service_user.destroy!
+          post :token, params: base_params
+        end
+
+        it { is_expected.to be_bad_request }
+
+        it "includes the error and description in the response" do
+          expect(subject.parsed_body).to eq(
+            {
+              "error" => "invalid_request",
+              "error_description" => "No active service"
+            }
+          )
+        end
+      end
+
+      context "when the developer key is not active" do
+        before do
+          key.destroy!
+          post :token, params: base_params
+        end
+
+        it { is_expected.to be_unauthorized }
+
+        it "includes the error and description in the response" do
+          expect(subject.parsed_body).to eq(
+            {
+              "error" => "invalid_client",
+              "error_description" => "unknown client"
+            }
+          )
+        end
+      end
+    end
+
     context "client_credentials" do
       let(:grant_type) { "client_credentials" }
       let(:aud) { Rails.application.routes.url_helpers.oauth2_token_url(host: "test.host") }
@@ -624,6 +722,16 @@ describe OAuth2ProviderController do
             expect(subject).to have_http_status :bad_request
             expect(response.body).to match(/invalid_request/)
           end
+        end
+
+        context "with aud as the Lti::Oidc auth domain" do
+          let(:aud) { "https://example.com" }
+
+          before do
+            allow(Lti::Oidc).to receive(:auth_domain).and_return(aud)
+          end
+
+          it { is_expected.to have_http_status :ok }
         end
 
         context "with aud as an array" do

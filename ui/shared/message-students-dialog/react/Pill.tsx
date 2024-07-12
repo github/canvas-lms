@@ -23,17 +23,15 @@ import {Text} from '@instructure/ui-text'
 import {Tooltip} from '@instructure/ui-tooltip'
 import {Flex} from '@instructure/ui-flex'
 import {IconAddSolid, IconXSolid} from '@instructure/ui-icons'
-import {ApplyTheme} from '@instructure/ui-themeable'
+import {InstUISettingsProvider} from '@instructure/emotion'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import {TruncateText} from '@instructure/ui-truncate-text'
 
-const themeOverride = {
-  [Tag.theme]: {
+const componentOverrides = {
+  Tag: {
     defaultBackground: 'white',
   },
 }
-
-const {Item: FlexItem} = Flex as any
 
 const I18n = useI18nScope('pill')
 const ellipsis = () => I18n.t('…')
@@ -58,7 +56,7 @@ function renderText(text, truncatedText, textColor) {
   }
 }
 
-function renderIcon(selected) {
+function renderIcon(selected: boolean) {
   if (selected) {
     return <IconXSolid data-testid="item-selected" />
   } else {
@@ -69,20 +67,29 @@ function renderIcon(selected) {
 const Pill = ({studentId, observerId = null, text, onClick, selected = false}) => {
   const textColor = selected ? 'primary' : 'secondary'
   const truncatedText = truncate(text)
+  const testId = observerId ? 'observer-pill' : 'student-pill'
+
+  const ariaLabel = selected ? I18n.t('Remove %{text}', {text}) : I18n.t('Add %{text}', {text})
 
   const contents = (
-    <Flex as="div" margin="0 xx-small 0 0" justifyItems="space-between">
-      <FlexItem size="0.75rem" shouldGrow={true} margin="0 xx-small 0 0" overflowX="hidden">
+    <Flex as="div" margin="0 xxx-small 0 0" justifyItems="space-between">
+      <Flex.Item
+        size="0.75rem"
+        shouldGrow={true}
+        margin="0 xx-small 0 0"
+        overflowX="hidden"
+        aria-label={ariaLabel}
+      >
         {renderText(text, truncatedText, textColor)}
-      </FlexItem>
-      <FlexItem>{renderIcon(selected)}</FlexItem>
+      </Flex.Item>
+      <Flex.Item padding="0 0 xxx-small 0">{renderIcon(selected)}</Flex.Item>
     </Flex>
   )
 
   return (
-    <ApplyTheme theme={themeOverride}>
-      <Tag text={contents} onClick={() => onClick(studentId, observerId)} />
-    </ApplyTheme>
+    <InstUISettingsProvider theme={{componentOverrides}}>
+      <Tag text={contents} data-testid={testId} onClick={() => onClick(studentId, observerId)} />
+    </InstUISettingsProvider>
   )
 }
 

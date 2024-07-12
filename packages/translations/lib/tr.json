@@ -161,6 +161,9 @@
     "content_type_2cf90d95": {
         "message": "İçerik Tipi"
     },
+    "copy_9748f9f": {
+        "message": "Kopyala"
+    },
     "copyright_holder_66ee111": {
         "message": "Telif Sahibi:"
     },
@@ -286,6 +289,9 @@
     },
     "files_index_af7c662b": {
         "message": "Dosya Başlıkları"
+    },
+    "find_8d605019": {
+        "message": "Ara"
     },
     "finish_bc343002": {
         "message": "Tamamla"
@@ -455,6 +461,9 @@
     "no_results_940393cf": {
         "message": "Sonuç yok."
     },
+    "no_results_found_58717065": {
+        "message": "Sonuç bulunamadı"
+    },
     "none_3b5e34d2": {
         "message": "Yok"
     },
@@ -485,6 +494,9 @@
     "preview_53003fd2": {
         "message": "Önizleme"
     },
+    "previous_bd2ac015": {
+        "message": "Önceki"
+    },
     "published_c944a23d": {
         "message": "yayınlandı"
     },
@@ -514,6 +526,9 @@
     },
     "reset_95a81614": {
         "message": "Sıfırla"
+    },
+    "retry_ebd5f8ba": {
+        "message": "Tekrar"
     },
     "rich_content_editor_2708ef21": {
         "message": "Zengin İçerik Editörü"
@@ -661,5 +676,8 @@
     },
     "your_webcam_may_already_be_in_use_6cd64c25": {
         "message": "Web kameranız kullanılıyor olabilir."
+    },
+    "zoom_f3e54d69": {
+        "message": "Zoom"
     }
 }

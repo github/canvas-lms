@@ -17,16 +17,10 @@ provided by a tool provider (i.e., the external tool).
 *   Providing a teacher the ability to select a customized LTI launch link from
 the tool and include grading information with it, which is used to create an assignment
 directly from the tool.
-> **This is a new feature currently being tested, and can be turned on for your**
-> **partner sandbox account by partner support, or for your**
-> **institution through your CSM.**
 
 *   Using an external tool to create multiple pieces of content directly from,
 the tool, whether ungraded (like module items), or graded (like assignments),
 and return them to Canvas in bulk.
-> **This is a new feature currently being tested, and can be turned on for your**
-> **partner sandbox account by partner support, or for your**
-> **institution through your CSM.**
 
 Deep Linking is supported in the LTI 1.1 Outcomes Service and LTI Advantage
 specifications. To see the full spec for content item and other code examples
@@ -66,9 +60,6 @@ launch to a tool, select a deep link, and return it as a module item.
 
 The following placements support deep linking with LTI 1.3/Advantage tools, but not
 with LTI 1.1 tools:
-> **These placements are part of a new feature currently being tested, and can be turned on for your**
-> **partner sandbox account by partner support, or for your**
-> **institution through your CSM.**
 
 * course_assignments_menu:
 Appears in the dropdown menu in the top right of the assignments page. Allows users that
@@ -126,16 +117,11 @@ Support for the following optional properties:
 - thumbnail
 - iframe
 - custom (allows for setting link-specific LTI launch parameters. See documentation <a href="https://www.imsglobal.org/spec/lti-dl/v2p0#lti-resource-link">here</a>.)
-- lineItem **(in testing)** (if present, requires `scoreMaximum`)
-- available **(in testing)**
-- submission **(in testing)** (except `startDateTime`)
+- lineItem
+- available
+- submission (except `startDateTime`)
 
 #### Line Items
-
-> **This is a new feature currently being tested, and can be turned on for your**
-> **partner sandbox account by partner support, or for your**
-> **institution through your CSM.**
-
 If a returned content item has the `lineItem` property, then it is used to create
 a new assignment, instead of a normal LTI link. The `available` and `submission`
 properties are also used for the assignment unlock, lock, and due dates. Note that
@@ -155,6 +141,18 @@ and they are added to it as new module items.
 - module_index_menu_modal: creates a new module and adds all given content items to it
 as either module items or assignments, based on the presence or absence of the `lineItem`
 property.
+
+#### Assignment Selection Deep Linking
+When a tool is launched from the `assignment_selection` placement, any previous
+LTI parameters (URL, iframe width, etc.) are overwritten with the information
+in the Deep Linking Response. In addition, if the following properties are
+present and non-empty in the content item in the Deep Linking Response, they
+will set the following fields, potentially overwriting user-inputted values:
+- `text` sets/overwrites the assignment description
+- `lineItem.scoreMaximum` sets/overwrites the maximum score for the assignment
+- `lineItem.label` or `title` sets the assignment name, and overwrites unless 
+  `"https://canvas.instructure.com/lti/preserveExistingAssignmentName": true`
+  is given in the content item.
 
 ### HTML fragment
 Full support for required properties.
@@ -184,19 +182,19 @@ installed that uses deep linking return items back to Canvas as an assignment or
 within the canvas Rich Content Editor:
 
 ```
-{  
+{
    "title":"Cool Deep Linking Tool ",
    "scopes":[],
-   "extensions":[  
-      {  
+   "extensions":[
+      {
          "domain":"deeplinkexample.com",
          "tool_id":"deep-linky",
          "platform":"canvas.instructure.com",
-         "settings":{  
+         "settings":{
             "text":"Cool Deep Linking Text",
             "icon_url":"https://some.icon.url",
-            "placements":[                 
-               {  
+            "placements":[
+               {
                   "text":"Embed Tool Content in Canvas RCE",
                   "enabled":true,
                   "icon_url":"https://some.icon.url",
@@ -204,7 +202,7 @@ within the canvas Rich Content Editor:
                   "message_type":"LtiDeepLinkingRequest",
                   "target_link_uri":"https://your.target_link_uri/deeplinkexample"
                },
-               {  
+               {
                   "text":"Embed Tool Content as a Canvas Assignment",
                   "enabled":true,
                   "icon_url":"https://some.icon.url",
@@ -216,7 +214,7 @@ within the canvas Rich Content Editor:
          }
       }
    ],
-   "public_jwk":{  
+   "public_jwk":{
       "kty":"RSA",
       "alg":"RS256",
       "e":"AQAB",

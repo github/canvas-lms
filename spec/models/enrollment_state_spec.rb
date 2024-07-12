@@ -204,6 +204,61 @@ describe EnrollmentState do
       expect(enroll_state.state_valid_until).to eq start_at
     end
 
+    context "temporary enrollments pairing" do
+      let_once(:start_at) { 1.day.ago }
+      let_once(:end_at) { 1.day.from_now }
+
+      before(:once) do
+        Account.default.enable_feature!(:temporary_enrollments)
+        @provider = user_factory(active_all: true)
+        @recipient = user_factory(active_all: true)
+        course = course_with_teacher(active_all: true, user: @provider).course
+        temporary_enrollment_pairing = TemporaryEnrollmentPairing.create!(root_account: Account.default,
+                                                                          created_by: account_admin_user)
+        @enrollment = course.enroll_user(
+          @recipient,
+          "TeacherEnrollment",
+          {
+            role: teacher_role,
+            temporary_enrollment_source_user_id: @provider.id,
+            temporary_enrollment_pairing_id: temporary_enrollment_pairing.id,
+            start_at:,
+            end_at:
+          }
+        )
+        @enrollment_state = @enrollment.enrollment_state
+      end
+
+      context "ending enrollment state" do
+        it "defaults to deleted when pairing ending enrollment state is nil" do
+          @enrollment.temporary_enrollment_pairing.update!(ending_enrollment_state: nil)
+          @enrollment.update!(end_at: 1.day.ago)
+          expect(@enrollment_state.reload.state).to eq "deleted"
+        end
+
+        it "sets 'completed' after end_date has been reached" do
+          @enrollment.temporary_enrollment_pairing.update!(ending_enrollment_state: "completed")
+          @enrollment.update!(end_at: 1.day.ago)
+          expect(@enrollment.reload.workflow_state).to eq "completed"
+          expect(@enrollment_state.reload.state).to eq "completed"
+        end
+
+        it "sets 'inactive' after end_date has been reached" do
+          @enrollment.temporary_enrollment_pairing.update!(ending_enrollment_state: "inactive")
+          @enrollment.update!(end_at: 1.day.ago)
+          expect(@enrollment.reload.workflow_state).to eq "inactive"
+          expect(@enrollment_state.reload.state).to eq "inactive"
+        end
+
+        it "sets 'deleted' after end_date has been reached" do
+          @enrollment.temporary_enrollment_pairing.update!(ending_enrollment_state: "deleted")
+          @enrollment.update!(end_at: 1.day.ago)
+          expect(@enrollment.reload.workflow_state).to eq "deleted"
+          expect(@enrollment_state.reload.state).to eq "deleted"
+        end
+      end
+    end
+
     it "doesn't recompute enrollment states due to course date truncation" do
       student_in_course(active_all: true)
       @course.restrict_enrollments_to_course_dates = true

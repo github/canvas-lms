@@ -77,6 +77,9 @@
     "content_type_2cf90d95": {
         "message": "Բովանդակության տեսակ"
     },
+    "copy_9748f9f": {
+        "message": "Պատճենել"
+    },
     "copyright_holder_66ee111": {
         "message": "Հեղինակային իրավունք ունեցող անձը՝"
     },
@@ -148,6 +151,9 @@
     },
     "files_index_af7c662b": {
         "message": "Ֆայլերի ցուցիչ"
+    },
+    "find_8d605019": {
+        "message": "Գտնել"
     },
     "format_4247a9c5": {
         "message": "Ֆորմատ"
@@ -284,6 +290,9 @@
     "no_results_940393cf": {
         "message": "No results."
     },
+    "no_results_found_58717065": {
+        "message": "Արդյունքներ չեն ստացվել"
+    },
     "none_3b5e34d2": {
         "message": "Ոչինչ չկա"
     },
@@ -314,6 +323,9 @@
     "preview_53003fd2": {
         "message": "Նախնական դիտում"
     },
+    "previous_bd2ac015": {
+        "message": "Նախորդը"
+    },
     "published_c944a23d": {
         "message": "հրապարակված"
     },
@@ -343,6 +355,9 @@
     },
     "reset_95a81614": {
         "message": "Սկզբնական Վիճակին Բերել"
+    },
+    "retry_ebd5f8ba": {
+        "message": "Փորձել կրկին"
     },
     "rich_content_editor_2708ef21": {
         "message": "Ֆորմատավորված տեքստի խմբագիր"

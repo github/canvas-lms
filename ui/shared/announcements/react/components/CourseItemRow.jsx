@@ -20,7 +20,7 @@
 // with the shared utilities created in g/something.
 import {useScope as useI18nScope} from '@canvas/i18n'
 import React, {Component} from 'react'
-import {bool, node, string, func, shape, arrayOf, oneOf} from 'prop-types'
+import {bool, node, string, func, shape, oneOf} from 'prop-types'
 import cx from 'classnames'
 
 import {Text} from '@instructure/ui-text'
@@ -41,7 +41,7 @@ const I18n = useI18nScope('shared_components')
 
 export default class CourseItemRow extends Component {
   static propTypes = {
-    actionsContent: arrayOf(node),
+    actionsContent: node,
     metaContent: node,
     masterCourse: shape({
       courseData: masterCourseDataShape,
@@ -185,7 +185,7 @@ export default class CourseItemRow extends Component {
       <a className="ic-item-row__content-link" ref={refFn} href={this.props.itemUrl}>
         <div
           className="ic-item-row__content-link-container"
-          data-testId="single-announcement-test-id"
+          data-testid="single-announcement-test-id"
         >
           {component}
         </div>

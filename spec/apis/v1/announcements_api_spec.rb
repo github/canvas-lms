@@ -269,6 +269,24 @@ describe "Announcements API", type: :request do
     end
   end
 
+  context "as observer" do
+    before :once do
+      @observer = observer_in_course(name: "bob's mom", course: @course, active_all: true).user
+      observer_in_course(user: @observer, associated_user_id: @student, course: @course1, active_all: true)
+      Account.site_admin.enable_feature!(:selective_release_backend)
+    end
+
+    it "orders by reverse chronological order" do
+      json = api_call_as_user(@observer,
+                              :get,
+                              "/api/v1/announcements",
+                              @params.merge(context_codes: ["course_#{@observer.enrollments.first.course_id}", "course_#{@observer.enrollments.second.course_id}"]))
+      expect(json.length).to eq 6
+      expect(json[0]["context_code"]).to eq "course_#{@course1.id}"
+      expect(json.pluck("id")).to eq @anns.map(&:id).reverse << @ann1.id
+    end
+  end
+
   context "as student" do
     it "excludes delayed-post announcements" do
       start_date = 10.days.ago.iso8601
@@ -322,6 +340,34 @@ describe "Announcements API", type: :request do
                                             start_date:,
                                             end_date:))
       expect(json).to be_empty
+    end
+  end
+
+  context "sharding" do
+    specs_require_sharding
+
+    before(:once) do
+      @shard2.activate do
+        course_with_teacher(active_course: true)
+        @announcement = @course.announcements.create!(user: @teacher, message: "hello from shard 2")
+      end
+    end
+
+    it "returns announcements across shards" do
+      @shard1.activate do
+        json = api_call_as_user(@teacher,
+                                :get,
+                                "/api/v1/announcements",
+                                {
+                                  controller: "announcements_api",
+                                  action: "index",
+                                  format: "json",
+                                  context_codes: ["course_#{@course.id}"]
+                                })
+        expect(json.count).to eq(1)
+        expect(json[0]["id"]).to eq(@announcement.id)
+        expect(json[0]["context_code"]).to eq("course_#{@course.id}")
+      end
     end
   end
 

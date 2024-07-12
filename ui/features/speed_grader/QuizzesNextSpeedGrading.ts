@@ -17,8 +17,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-// this is called by speed grader to enable communication
-// between quizzesNext LTI tool and speed grader
+// this is called by SpeedGrader to enable communication
+// between quizzesNext LTI tool and SpeedGrader
 // and modify normal speedGrader behavior to be more compatible
 // with our LTI tool
 
@@ -47,7 +47,7 @@ function setup(EG, $iframe_holder, registerCb, refreshGradesCb, speedGraderWindo
     if (submission && submission.submission_history) {
       const lastIndex = submission.submission_history.length - 1
       // set submission to selected in dropdown
-      $('#submission_to_view option:eq(' + lastIndex + ')').attr('selected', 'selected')
+      $('#submission_to_view option:eq(' + lastIndex + ')').prop('selected', true)
     }
     EG.showGrade()
     EG.showDiscussion()
@@ -62,7 +62,7 @@ function setup(EG, $iframe_holder, registerCb, refreshGradesCb, speedGraderWindo
     originalSubmission: Submission,
     numRequests: number
   ) {
-    const maxRequests = speedGraderWindow.ENV.speedgrader_grade_sync_max_attempts || 20
+    const maxRequests = 20
     if (numRequests >= maxRequests) return false
     if (!originalSubmission.graded_at) return !submission.graded_at
     if (!submission.graded_at) return true

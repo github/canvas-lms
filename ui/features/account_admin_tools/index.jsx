@@ -17,10 +17,13 @@
  */
 
 import CourseRestoreModel from './backbone/models/CourseRestore'
+import UserRestoreModel from './backbone/models/UserRestore'
 import AdminToolsView from './backbone/views/AdminToolsView'
 import RestoreContentPaneView from './backbone/views/RestoreContentPaneView'
 import CourseSearchFormView from './backbone/views/CourseSearchFormView'
 import CourseSearchResultsView from './backbone/views/CourseSearchResultsView'
+import UserSearchFormView from './backbone/views/UserSearchFormView'
+import UserSearchResultsView from './backbone/views/UserSearchResultsView'
 import LoggingContentPaneView from './backbone/views/LoggingContentPaneView'
 import InputFilterView from '@canvas/backbone-input-filter-view'
 import UserView from './backbone/views/UserView'
@@ -36,15 +39,19 @@ import React from 'react'
 import ReactDOM from 'react-dom'
 import BouncedEmailsView from './react/BouncedEmailsView'
 import ready from '@instructure/ready'
+import {initializeTopNavPortal} from '@canvas/top-navigation/react/TopNavPortal'
 
 // This is used by admin tools to display search results
-const restoreModel = new CourseRestoreModel({account_id: ENV.ACCOUNT_ID})
+const courseRestoreModel = new CourseRestoreModel({account_id: ENV.ACCOUNT_ID})
+const userRestoreModel = new UserRestoreModel({account_id: ENV.ACCOUNT_ID})
 
 const messages = new CommMessageCollection(null, {params: {perPage: 10}})
 const messagesUsers = new AccountUserCollection(null, {account_id: ENV.ACCOUNT_ID})
 const loggingUsers = new AccountUserCollection(null, {account_id: ENV.ACCOUNT_ID})
 
 ready(() => {
+  initializeTopNavPortal()
+
   const messagesContentView = new CommMessagesContentPaneView({
     searchForm: new UserDateRangeSearchFormView({
       formName: 'messages',
@@ -71,14 +78,17 @@ ready(() => {
   const app = new AdminToolsView({
     el: '#admin-tools-app',
     tabs: {
-      courseRestore: ENV.PERMISSIONS.restore_course,
+      contentRestore: ENV.PERMISSIONS.restore_course || ENV.PERMISSIONS.restore_user,
       viewMessages: ENV.PERMISSIONS.view_messages,
       logging: !!ENV.PERMISSIONS.logging,
       bouncedEmails: ENV.bounced_emails_admin_tool,
     },
     restoreContentPaneView: new RestoreContentPaneView({
-      courseSearchFormView: new CourseSearchFormView({model: restoreModel}),
-      courseSearchResultsView: new CourseSearchResultsView({model: restoreModel}),
+      permissions: ENV.PERMISSIONS,
+      courseSearchFormView: new CourseSearchFormView({model: courseRestoreModel}),
+      courseSearchResultsView: new CourseSearchResultsView({model: courseRestoreModel}),
+      userSearchFormView: new UserSearchFormView({model: userRestoreModel}),
+      userSearchResultsView: new UserSearchResultsView({model: userRestoreModel}),
     }),
     messageContentPaneView: messagesContentView,
     loggingContentPaneView: new LoggingContentPaneView({

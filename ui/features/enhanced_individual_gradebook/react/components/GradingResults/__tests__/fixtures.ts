@@ -16,11 +16,11 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {GradingResultsComponentProps} from '..'
+import type {GradingResultsComponentProps} from '..'
 import {
-  AssignmentConnection,
-  GradebookUserSubmissionDetails,
-  GradebookOptions,
+  type AssignmentConnection,
+  type GradebookUserSubmissionDetails,
+  type GradebookOptions,
   GradebookSortOrder,
 } from '../../../../types'
 
@@ -44,6 +44,8 @@ export const defaultStudentSubmissions: GradebookUserSubmissionDetails = {
   gradingPeriodId: '',
   deductedPoints: 0,
   enteredGrade: '95',
+  gradeMatchesCurrentSubmission: true,
+  customGradeStatus: '',
 }
 
 export const defaultAssignment: AssignmentConnection = {
@@ -68,6 +70,7 @@ export const defaultAssignment: AssignmentConnection = {
   published: true,
   workflowState: 'published',
   gradingPeriodId: '1',
+  inClosedGradingPeriod: false,
 }
 
 export const defaultGradebookOptions: GradebookOptions = {
@@ -84,7 +87,6 @@ export const defaultGradebookOptions: GradebookOptions = {
   },
   gradingStandardScalingFactor: 1,
   gradingStandardPointsBased: false,
-  pointsBasedGradingSchemesFeatureEnabled: false,
   proxySubmissionEnabled: false,
 }
 

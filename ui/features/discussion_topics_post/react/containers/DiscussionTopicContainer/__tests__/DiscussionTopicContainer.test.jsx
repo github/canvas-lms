@@ -57,6 +57,8 @@ describe('DiscussionTopicContainer', () => {
       PEER_REVIEWS_URL: 'this_is_the_peer_reviews_url',
       context_asset_string: 'course_1',
       course_id: '1',
+      context_type: 'Course',
+      context_id: '1',
       discussion_topic_menu_tools: [
         {
           base_url: 'example.com',
@@ -233,7 +235,7 @@ describe('DiscussionTopicContainer', () => {
   it('Should be able to open SpeedGrader', async () => {
     const {getByTestId, getByText} = setup({discussionTopic: Discussion.mock()})
     fireEvent.click(getByTestId('discussion-post-menu-trigger'))
-    fireEvent.click(getByText('Open in Speedgrader'))
+    fireEvent.click(getByText('Open in SpeedGrader'))
 
     await waitFor(() => {
       expect(openMock).toHaveBeenCalledWith(getSpeedGraderUrl(), '_blank')
@@ -391,6 +393,21 @@ describe('DiscussionTopicContainer', () => {
     expect(await container.findByText('288777.jpeg')).toBeInTheDocument()
   })
 
+  it('renders "discussion topic closed for comments" message if user has reply permission false', async () => {
+    const container = setup({
+      discussionTopic: Discussion.mock({permissions: DiscussionPermissions.mock({reply: false})}),
+    })
+
+    expect(await container.findByText('This is a Discussion Topic Message')).toBeInTheDocument()
+    expect(await container.findByTestId('discussion-topic-closed-for-comments')).toBeInTheDocument()
+  })
+
+  it('does not renders "discussion topic closed for comments" message if user has reply permission true', () => {
+    const container = setup({discussionTopic: Discussion.mock()})
+
+    expect(container.queryByTestId('discussion-topic-closed-for-comments')).toBeNull()
+  })
+
   it('renders a reply button if user has reply permission true', async () => {
     const container = setup({discussionTopic: Discussion.mock()})
 
@@ -459,7 +476,7 @@ describe('DiscussionTopicContainer', () => {
   it('Should find "Show Due Dates" link button', async () => {
     const props = {discussionTopic: Discussion.mock({})}
     const container = setup(props)
-    expect(await container.findByText('Show Due Dates (2)')).toBeTruthy()
+    expect(await container.findByText('View Due Dates')).toBeTruthy()
   })
 
   it('Should find due date text for "assignment override 3"', async () => {
@@ -653,7 +670,8 @@ describe('DiscussionTopicContainer', () => {
       }),
     }
     const container = setup(props)
-    expect(container.getByText(`Edited by Eddy Tor Apr 22, 2021 6:41pm`)).toBeInTheDocument()
+    const editedByTextElement = container.getByTestId('editedByText')
+    expect(editedByTextElement.textContent).toEqual('Edited by Eddy Tor Apr 22, 2021 6:41pm')
     expect(container.queryByTestId('created-tooltip')).toBeFalsy()
   })
 
@@ -795,6 +813,24 @@ describe('DiscussionTopicContainer', () => {
         })
         expect(queryByTestId('add_rubric_url')).toBeNull()
       })
+    })
+  })
+
+  describe('Discussion Summary', () => {
+    it('renders a summary', () => {
+      const {queryByTestId} = setup({
+        discussionTopic: Discussion.mock(),
+        isSummaryEnabled: true,
+      })
+      expect(queryByTestId('summary-loading')).toBeTruthy()
+    })
+
+    it('does not render a summary', () => {
+      const {queryAllByTestId} = setup({
+        discussionTopic: Discussion.mock(),
+        isSummaryEnabled: false,
+      })
+      expect(queryAllByTestId(/summary-.*/)).toEqual([])
     })
   })
 })

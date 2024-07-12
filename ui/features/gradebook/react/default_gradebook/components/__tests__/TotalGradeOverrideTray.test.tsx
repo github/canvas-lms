@@ -20,8 +20,8 @@ import React from 'react'
 import {render, fireEvent} from '@testing-library/react'
 
 import GradeOverrideEntry from '@canvas/grading/GradeEntry/GradeOverrideEntry'
-import {ApiCallStatus} from '@canvas/util/apiRequest'
-import {TotalGradeOverrideTray, TotalGradeOverrideTrayProps} from '../TotalGradeOverrideTray'
+import {ApiCallStatus} from '@canvas/do-fetch-api-effect/apiRequest'
+import {TotalGradeOverrideTray, type TotalGradeOverrideTrayProps} from '../TotalGradeOverrideTray'
 import useStore from '../../stores'
 import * as FinalGradeOverrideHooks from '../../hooks/useFinalGradeOverrideCustomStatus'
 
@@ -42,7 +42,6 @@ describe('TotalGradeOverrideTray Tests', () => {
       selectedGradingPeriodId: '0',
       navigateDown,
       navigateUp,
-      pointsBasedGradingSchemesFeatureEnabled: true,
       ...props,
     }
 
@@ -52,14 +51,11 @@ describe('TotalGradeOverrideTray Tests', () => {
   beforeEach(() => {
     const gradeEntry = new GradeOverrideEntry({
       gradingScheme: null,
-      pointsBasedGradingSchemesFeatureEnabled: true,
     })
-    const gradeInfo = gradeEntry.gradeInfoFromGrade({percentage: 88}, false)
 
     useStore.setState({
       finalGradeOverrideTrayProps: {
         gradeEntry,
-        gradeInfo,
         isFirstStudent: false,
         isLastStudent: false,
         isOpen: true,
@@ -148,7 +144,8 @@ describe('TotalGradeOverrideTray Tests', () => {
     })
   })
 
-  describe('radio input tests', () => {
+  // EVAL-3907 - remove or rewrite to remove spies on imports
+  describe.skip('radio input tests', () => {
     it('renders each radio input', () => {
       const {getByLabelText} = getComponent()
       const noneRadio = getByLabelText('None')
@@ -164,6 +161,19 @@ describe('TotalGradeOverrideTray Tests', () => {
       expect(radio2).not.toBeDisabled()
       expect(radio3).toBeInTheDocument()
       expect(radio3).not.toBeDisabled()
+    })
+
+    it('does not render radio inputs when there are no custom statuses', () => {
+      const {queryByLabelText} = getComponent({customGradeStatuses: []})
+      const noneRadio = queryByLabelText('None')
+      const radio1 = queryByLabelText('Custom Status 1')
+      const radio2 = queryByLabelText('Custom Status 2')
+      const radio3 = queryByLabelText('Custom Status 3')
+
+      expect(noneRadio).toBeNull()
+      expect(radio1).toBeNull()
+      expect(radio2).toBeNull()
+      expect(radio3).toBeNull()
     })
 
     it('renders the correct radio input as checked', () => {
@@ -187,27 +197,30 @@ describe('TotalGradeOverrideTray Tests', () => {
       expect(radio).toBeChecked()
     })
 
-    it('renders radio inputs disabled when gradeInfo & gradeEntry are not set', () => {
-      useStore.setState({
-        finalGradeOverrideTrayProps: {
-          ...useStore.getState().finalGradeOverrideTrayProps,
-          gradeInfo: undefined,
-          gradeEntry: undefined,
-        },
+    it('calls setFinalGradeOverride when a radio input is clicked', async () => {
+      const saveFinalOverrideCustomStatusMock = jest.fn()
+      jest.spyOn(FinalGradeOverrideHooks, 'useFinalGradeOverrideCustomStatus').mockReturnValue({
+        saveFinalOverrideCustomStatus: saveFinalOverrideCustomStatusMock,
+        saveCallStatus: ApiCallStatus.COMPLETED,
       })
-      const {getByLabelText} = getComponent()
-      const noneRadio = getByLabelText('None')
-      const radio1 = getByLabelText('Custom Status 1')
-      const radio2 = getByLabelText('Custom Status 2')
-      const radio3 = getByLabelText('Custom Status 3')
 
-      expect(noneRadio).toBeDisabled()
-      expect(radio1).toBeDisabled()
-      expect(radio2).toBeDisabled()
-      expect(radio3).toBeDisabled()
+      const {getByLabelText} = getComponent()
+      const radio = getByLabelText('Custom Status 3')
+
+      fireEvent.click(radio)
+
+      expect(saveFinalOverrideCustomStatusMock).toHaveBeenCalledWith('3', '1111', null)
+
+      await new Promise(resolve => setTimeout(resolve, 0))
+      const updatedFinalGradeOverrides = useStore.getState().finalGradeOverrides
+      expect(updatedFinalGradeOverrides['1'].courseGrade?.customGradeStatusId).toEqual('3')
     })
 
-    it('calls setFinalGradeOverride when a radio input is clicked', async () => {
+    it('calls setFinalGradeOverride when a radio input is clicked with null finalGradeOverride', async () => {
+      useStore.setState({
+        finalGradeOverrides: {},
+      })
+
       const saveFinalOverrideCustomStatusMock = jest.fn()
       jest.spyOn(FinalGradeOverrideHooks, 'useFinalGradeOverrideCustomStatus').mockReturnValue({
         saveFinalOverrideCustomStatus: saveFinalOverrideCustomStatusMock,
@@ -247,6 +260,63 @@ describe('TotalGradeOverrideTray Tests', () => {
       ).toEqual('1')
     })
 
+    it('calls setFinalGradeOverride when a radio input is clicked with selectedGradingPeriodId and null finalGradeOverride', async () => {
+      useStore.setState({
+        finalGradeOverrides: {},
+      })
+
+      const saveFinalOverrideCustomStatusMock = jest.fn()
+      jest.spyOn(FinalGradeOverrideHooks, 'useFinalGradeOverrideCustomStatus').mockReturnValue({
+        saveFinalOverrideCustomStatus: saveFinalOverrideCustomStatusMock,
+        saveCallStatus: ApiCallStatus.COMPLETED,
+      })
+
+      const {getByLabelText} = getComponent({selectedGradingPeriodId: '2'})
+      const radio = getByLabelText('Custom Status 1')
+
+      fireEvent.click(radio)
+
+      expect(saveFinalOverrideCustomStatusMock).toHaveBeenCalledWith('1', '1111', '2')
+
+      await new Promise(resolve => setTimeout(resolve, 0))
+      const updatedFinalGradeOverrides = useStore.getState().finalGradeOverrides
+      expect(
+        updatedFinalGradeOverrides['1'].gradingPeriodGrades?.['2']?.customGradeStatusId
+      ).toEqual('1')
+    })
+
+    it('calls setFinalGradeOverride when a radio input is clicked with selectedGradingPeriodId and null finalGradeOverride but valid course override', async () => {
+      useStore.setState({
+        finalGradeOverrides: {
+          '1': {
+            courseGrade: {
+              percentage: 0.5,
+              customGradeStatusId: '1',
+            },
+          },
+        },
+      })
+
+      const saveFinalOverrideCustomStatusMock = jest.fn()
+      jest.spyOn(FinalGradeOverrideHooks, 'useFinalGradeOverrideCustomStatus').mockReturnValue({
+        saveFinalOverrideCustomStatus: saveFinalOverrideCustomStatusMock,
+        saveCallStatus: ApiCallStatus.COMPLETED,
+      })
+
+      const {getByLabelText} = getComponent({selectedGradingPeriodId: '2'})
+      const radio = getByLabelText('Custom Status 1')
+
+      fireEvent.click(radio)
+
+      expect(saveFinalOverrideCustomStatusMock).toHaveBeenCalledWith('1', '1111', '2')
+
+      await new Promise(resolve => setTimeout(resolve, 0))
+      const updatedFinalGradeOverrides = useStore.getState().finalGradeOverrides
+      expect(
+        updatedFinalGradeOverrides['1'].gradingPeriodGrades?.['2']?.customGradeStatusId
+      ).toEqual('1')
+    })
+
     it('calls handleDismiss with true when the button is clicked', () => {
       const {getByText} = getComponent()
       const cancelButton = getByText('Close total grade override tray')
@@ -254,6 +324,41 @@ describe('TotalGradeOverrideTray Tests', () => {
       fireEvent.click(cancelButton)
 
       expect(handleDismiss).toHaveBeenCalledWith(true)
+    })
+
+    it('disables a radio input when custom status allow_final_grade_value is false and there is an override score', () => {
+      const {getByLabelText} = getComponent({
+        customGradeStatuses: [
+          {
+            id: '1',
+            color: '#000000',
+            name: 'Custom Status 1',
+            allow_final_grade_value: false,
+          },
+        ],
+      })
+      const radio = getByLabelText('Custom Status 1')
+
+      expect(radio).toBeDisabled()
+    })
+
+    it('does not disable a radio input when custom status allow_final_grade_value is false and there is no override score', () => {
+      useStore.setState({
+        finalGradeOverrides: {},
+      })
+      const {getByLabelText} = getComponent({
+        customGradeStatuses: [
+          {
+            id: '1',
+            color: '#000000',
+            name: 'Custom Status 1',
+            allow_final_grade_value: false,
+          },
+        ],
+      })
+      const radio = getByLabelText('Custom Status 1')
+
+      expect(radio).not.toBeDisabled()
     })
   })
 
@@ -277,6 +382,57 @@ describe('TotalGradeOverrideTray Tests', () => {
       const [studentId, gradeChanges] = args
       expect(studentId).toEqual('1')
       expect(gradeChanges.grade.percentage).toEqual(0.6)
+    })
+
+    it('disables textbox when selected custom status allow_final_grade_value is false', () => {
+      const {getByRole} = getComponent({
+        customGradeStatuses: [
+          {
+            id: '1',
+            color: '#000000',
+            name: 'Custom Status 1',
+            allow_final_grade_value: false,
+          },
+        ],
+      })
+      const textbox = getByRole('textbox')
+
+      expect(textbox).toBeDisabled()
+    })
+
+    it('does not disable textbox when selected custom status allow_final_grade_value is false and there is no override score', () => {
+      useStore.setState({
+        finalGradeOverrides: {},
+      })
+      const {getByRole} = getComponent({
+        customGradeStatuses: [
+          {
+            id: '1',
+            color: '#000000',
+            name: 'Custom Status 1',
+            allow_final_grade_value: false,
+          },
+        ],
+      })
+      const textbox = getByRole('textbox')
+
+      expect(textbox).not.toBeDisabled()
+    })
+
+    it('does not disabled textbox when selected custom status allow_final_grade_value is true', () => {
+      const {getByRole} = getComponent({
+        customGradeStatuses: [
+          {
+            id: '1',
+            color: '#000000',
+            name: 'Custom Status 1',
+            allow_final_grade_value: true,
+          },
+        ],
+      })
+      const textbox = getByRole('textbox')
+
+      expect(textbox).not.toBeDisabled()
     })
   })
 })

@@ -49,6 +49,7 @@ export default class WikiPageIndexItemView extends Backbone.View {
       'click .duplicate-wiki-page': 'duplicateWikiPage',
       'click .send-wiki-page-to': 'sendWikiPageTo',
       'click .copy-wiki-page-to': 'copyWikiPageTo',
+      'click .assign-wiki-page-to': 'assignWikiPageTo',
       'change .select-page-checkbox': 'changeSelectPageCheckbox',
     }
 
@@ -79,6 +80,7 @@ export default class WikiPageIndexItemView extends Backbone.View {
       DUPLICATE: !!this.WIKI_RIGHTS.create_page && this.contextName === 'courses',
       UPDATE: !!this.WIKI_RIGHTS.update,
       DELETE: !!this.WIKI_RIGHTS.delete_page,
+      MANAGE_ASSIGN_TO: !!this.WIKI_RIGHTS.manage_assign_to,
     }
 
     json.DIRECT_SHARE_ENABLED = ENV.DIRECT_SHARE_ENABLED
@@ -90,6 +92,7 @@ export default class WikiPageIndexItemView extends Backbone.View {
       json.cannot_edit_by_master_course = json.master_course_restrictions.content
     }
 
+    json.show_assign_to = !!ENV.FEATURES?.selective_release_ui_api && this.contextName === 'courses'
     json.wiki_page_menu_tools = ENV.wiki_page_menu_tools || []
     json.wiki_page_menu_tools.forEach(tool => {
       return (tool.url = tool.base_url + `&pages[]=${this.model.get('page_id')}`)
@@ -274,6 +277,11 @@ export default class WikiPageIndexItemView extends Backbone.View {
     this.indexView.setCopyToItem(this.model, this.$settingsMenu)
   }
 
+  assignWikiPageTo(ev) {
+    ev.preventDefault()
+    this.indexView.setAssignToItem(true, this.model, this.$settingsMenu)
+  }
+
   changeSelectPageCheckbox(ev) {
     if (ev) {
       ev.preventDefault()
@@ -285,7 +293,8 @@ export default class WikiPageIndexItemView extends Backbone.View {
         delete this.selectedPages[pageId]
       }
     }
-    $('.delete_pages').attr('disabled', Object.keys(this.selectedPages).length === 0)
+    $('.delete_pages').prop('disabled', Object.keys(this.selectedPages).length === 0)
   }
 }
+
 WikiPageIndexItemView.initClass()

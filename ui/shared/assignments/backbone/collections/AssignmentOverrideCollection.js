@@ -18,11 +18,8 @@
 
 import {extend} from '@canvas/backbone/utils'
 import Backbone from '@canvas/backbone'
-
-import _ from 'underscore'
-
+import {map, difference} from 'lodash'
 import AssignmentOverride from '../models/AssignmentOverride'
-
 import Section from '@canvas/sections/backbone/models/Section'
 
 extend(AssignmentOverrideCollection, Backbone.Collection)
@@ -37,6 +34,9 @@ function AssignmentOverrideCollection() {
   this.containsDefaultDueDate = this.containsDefaultDueDate.bind(this)
   this.getDefaultDueDate = this.getDefaultDueDate.bind(this)
   this.courseSectionIDs = this.courseSectionIDs.bind(this)
+  this.contextModuleIDs = this.contextModuleIDs.bind(this)
+  this.onlyContainsModuleOverrides = this.onlyContainsModuleOverrides.bind(this)
+  this.courseIDs = this.courseIDs.bind(this)
   return AssignmentOverrideCollection.__super__.constructor.apply(this, arguments)
 }
 
@@ -44,6 +44,14 @@ AssignmentOverrideCollection.prototype.model = AssignmentOverride
 
 AssignmentOverrideCollection.prototype.courseSectionIDs = function () {
   return this.pluck('course_section_id')
+}
+
+AssignmentOverrideCollection.prototype.courseIDs = function () {
+  return this.pluck('course_id')
+}
+
+AssignmentOverrideCollection.prototype.contextModuleIDs = function () {
+  return this.pluck('context_module_id').filter(id => id !== undefined)
 }
 
 AssignmentOverrideCollection.prototype.comparator = function (override) {
@@ -60,6 +68,10 @@ AssignmentOverrideCollection.prototype.containsDefaultDueDate = function () {
   return !!this.getDefaultDueDate()
 }
 
+AssignmentOverrideCollection.prototype.onlyContainsModuleOverrides = function () {
+  return this.contextModuleIDs().length > 0 && this.contextModuleIDs().length === this.models.length
+}
+
 AssignmentOverrideCollection.prototype.blank = function () {
   return this.select(function (override) {
     return override.isBlank()
@@ -70,7 +82,7 @@ AssignmentOverrideCollection.prototype.toJSON = function () {
   const json = this.reject(function (override) {
     return override.representsDefaultDueDate()
   })
-  return _.map(json, function (override) {
+  return map(json, function (override) {
     return override.toJSON().assignment_override
   })
 }
@@ -82,7 +94,7 @@ AssignmentOverrideCollection.prototype.datesJSON = function () {
 }
 
 AssignmentOverrideCollection.prototype.isSimple = function () {
-  return _.difference(this.courseSectionIDs(), [Section.defaultDueDateSectionID]).length === 0
+  return difference(this.courseSectionIDs(), [Section.defaultDueDateSectionID]).length === 0
 }
 
 export default AssignmentOverrideCollection

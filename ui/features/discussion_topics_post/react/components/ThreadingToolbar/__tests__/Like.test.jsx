@@ -66,11 +66,13 @@ describe('Like', () => {
   it('displays like count', () => {
     const {getByText} = setup({likeCount: 2})
     expect(getByText('Like count: 2')).toBeTruthy()
+    expect(getByText('2 Likes')).toBeTruthy()
   })
 
-  it('does not display a like count below 1', () => {
-    const {queryByTestId} = setup({likeCount: 0})
-    expect(queryByTestId('like-count')).toBeFalsy()
+  it('displays 1 like', () => {
+    const {getByText} = setup({likeCount: 1})
+    expect(getByText('Like count: 1')).toBeTruthy()
+    expect(getByText('1 Like')).toBeTruthy()
   })
 
   it('indicates like status', () => {
@@ -107,10 +109,9 @@ describe('Like', () => {
 
     it('uses mobile prop values', () => {
       const container = setup()
-      const outerHTML = container.getByTestId('like-button').outerHTML
-
-      const expectedMargin = `margin: 0px 1rem 0px 0px`
-      expect(outerHTML.includes(expectedMargin)).toBeTruthy()
+      expect(container.getByTestId('like-button').parentNode).toHaveStyle(
+        'margin: 0px 0.75rem 0px 0px'
+      )
     })
   })
 })

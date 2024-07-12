@@ -45,6 +45,22 @@ module CourseWikiPage
     ".delete_pages"
   end
 
+  def assign_to_btn_selector
+    ".assign-to-button"
+  end
+
+  def assign_to_link_selector
+    "[data-testid='manage-assign-to']"
+  end
+
+  def pending_changes_pill_selector
+    "[data-testid='pending_changes_pill']"
+  end
+
+  def editing_roles_input_selector
+    "#editing_roles"
+  end
+
   #------------------------------ Elements ------------------------------
   def publish_btn
     f(publish_btn_selector)
@@ -103,7 +119,7 @@ module CourseWikiPage
   end
 
   def edit_page_title_input
-    f("input#title")
+    f("input[data-testid='wikipage-title-input']")
   end
 
   def tiny_mce_input
@@ -114,14 +130,46 @@ module CourseWikiPage
     fj("a:contains('Home')")
   end
 
+  def assign_to_btn
+    f(assign_to_btn_selector)
+  end
+
+  def assign_to_link
+    f(assign_to_link_selector)
+  end
+
+  def pending_changes_pill
+    f(pending_changes_pill_selector)
+  end
+
+  def page_save_button
+    find_button("Save")
+  end
+
+  def editing_roles_input
+    f(editing_roles_input_selector)
+  end
+
   #------------------------------ Actions -------------------------------
 
   def visit_wiki_page_view(course_id, page_title)
     get "/courses/#{course_id}/pages/#{page_title}"
   end
 
+  def visit_group_wiki_page_view(group_id, page_title)
+    get "/groups/#{group_id}/pages/#{page_title}"
+  end
+
   def visit_wiki_edit_page(course_id, page_title)
     get "/courses/#{course_id}/pages/#{page_title}/edit"
+  end
+
+  def visit_group_wiki_edit_page(group_id, page_title)
+    get "/groups/#{group_id}/pages/#{page_title}/edit"
+  end
+
+  def replace_wiki_page_name(text)
+    edit_page_title_input.send_keys([:control, "a"], :backspace, text)
   end
 
   def publish_wiki_page
@@ -147,5 +195,13 @@ module CourseWikiPage
   def confirm_delete_pages
     confirm_delete_wiki_pages_btn.click
     wait_for_ajaximations
+  end
+
+  def pending_changes_pill_exists?
+    element_exists?(pending_changes_pill_selector)
+  end
+
+  def save_wiki_page
+    page_save_button.click
   end
 end

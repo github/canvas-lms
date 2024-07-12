@@ -69,7 +69,7 @@ const Ratings = ({
       points = 0.0
     }
     // when a rating is added, set the focusField value to the new rating's description field
-    onChangeRatings([...clearFocusFields(), createRating('', points, 'description', false)])
+    onChangeRatings([...clearFocusFields(), createRating('', points, false, 'description')])
   }
 
   const clearFocusFields = () => ratings.map(r => ({...r, focusField: null}))
@@ -222,29 +222,15 @@ const Ratings = ({
     </Flex>
   )
 
-  const renderRatingDescription = (description, position) => (
+  const renderRatingDescription = description => (
     <Text>
-      <ScreenReaderContent>
-        {I18n.t(`Description for mastery level %{position}: %{description}`, {
-          position,
-          description,
-        })}
-      </ScreenReaderContent>
-
       <PresentationContent>{description}</PresentationContent>
     </Text>
   )
 
-  const renderRatingsPoints = (points, position) => (
+  const renderRatingsPoints = points => (
     <div className={isMobileView ? '' : 'points'}>
       <View margin={isMobileView ? '0' : '0 0 0 small'}>
-        <ScreenReaderContent>
-          {I18n.t(`Points for mastery level %{position}: %{points}`, {
-            position,
-            points,
-          })}
-        </ScreenReaderContent>
-
         <PresentationContent>
           {I18n.n(points)}
 
@@ -258,37 +244,33 @@ const Ratings = ({
     <Flex width={isMobileView ? '100%' : '65%'} padding="x-small 0">
       <Table caption="Ratings table" layout="fixed" data-testid="outcome-management-ratings-table">
         <Table.Head>
-          <Table.Row theme={{borderColor: 'white'}}>
-            <Table.ColHeader id="rating" theme={{padding: '0.5rem 0rem'}}>
-              <div aria-hidden="true" className="header">
-                {I18n.t('Proficiency Rating')}
-              </div>
+          <Table.Row themeOverride={{borderColor: 'white'}}>
+            <Table.ColHeader id="rating" themeOverride={{padding: '0.5rem 0rem'}}>
+              <div className="header">{I18n.t('Proficiency Rating')}</div>
             </Table.ColHeader>
             {!isMobileView && (
-              <Table.ColHeader id="points" textAlign="end" theme={{padding: '0.5rem 0rem'}}>
-                <div aria-hidden="true" className="header">
-                  {I18n.t('Points')}
-                </div>
+              <Table.ColHeader id="points" textAlign="end" themeOverride={{padding: '0.5rem 0rem'}}>
+                <div className="header">{I18n.t('Points')}</div>
               </Table.ColHeader>
             )}
           </Table.Row>
         </Table.Head>
-        {ratings.map(({description, points, key}, index) => (
+        {ratings.map(({description, points, key}) => (
           <Table.Body key={key}>
-            <Table.Row theme={{borderColor: 'white'}}>
-              <Table.Cell theme={{padding: '0.5rem 0rem'}}>
-                {renderRatingDescription(description, index + 1)}
+            <Table.Row themeOverride={{borderColor: 'white'}}>
+              <Table.Cell themeOverride={{padding: '0.5rem 0rem'}}>
+                {renderRatingDescription(description)}
               </Table.Cell>
               {!isMobileView && (
-                <Table.Cell textAlign="end" theme={{padding: '0.5rem 1.25rem'}}>
-                  {renderRatingsPoints(points, index + 1)}
+                <Table.Cell textAlign="end" themeOverride={{padding: '0.5rem 1.25rem'}}>
+                  {renderRatingsPoints(points)}
                 </Table.Cell>
               )}
             </Table.Row>
             {isMobileView && (
-              <Table.Row theme={{borderColor: 'white', padding: '0rem 0rem'}}>
-                <Table.Cell theme={{padding: '0.5rem 0rem'}}>
-                  {renderRatingsPoints(points, index + 1)}
+              <Table.Row themeOverride={{borderColor: 'white', padding: '0rem 0rem'}}>
+                <Table.Cell themeOverride={{padding: '0.5rem 0rem'}}>
+                  {renderRatingsPoints(points)}
                 </Table.Cell>
               </Table.Row>
             )}
@@ -310,15 +292,11 @@ const Ratings = ({
         {canManage ? (
           <>
             <Flex.Item size={isMobileView ? '75%' : canManage ? '80%' : '60%'}>
-              <div aria-hidden="true" className="header">
-                {I18n.t('Proficiency Rating')}
-              </div>
+              <div className="header">{I18n.t('Proficiency Rating')}</div>
             </Flex.Item>
             {!isMobileView && (
               <Flex.Item size="10%">
-                <div aria-hidden="true" className="header">
-                  {I18n.t('Points')}
-                </div>
+                <div className="header">{I18n.t('Points')}</div>
               </Flex.Item>
             )}
           </>

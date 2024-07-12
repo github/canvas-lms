@@ -19,15 +19,9 @@
  */
 
 import React, {forwardRef, useState} from 'react'
-import {InferType} from 'prop-types'
 import formatMessage from '../format-message'
 import RCEWrapper from './RCEWrapper'
-import {
-  EditorOptionsPropType,
-  externalToolsConfigPropType,
-  LtiToolsPropType,
-} from './RCEWrapperProps'
-import {trayPropTypes} from './plugins/shared/CanvasContentTray'
+import {EditorOptionsPropType, type ExternalToolsConfig, LtiToolsPropType} from './RCEWrapperProps'
 import editorLanguage from './editorLanguage'
 import normalizeLocale from './normalizeLocale'
 import wrapInitCb from './wrapInitCb'
@@ -36,7 +30,7 @@ import getTranslations from '../getTranslations'
 import '@instructure/canvas-theme'
 import {Editor} from 'tinymce'
 
-if (!process?.env?.BUILD_LOCALE) {
+if (!process || !process.env || !process.env.BUILD_LOCALE) {
   formatMessage.setup({
     locale: 'en',
     generateId: require('format-message-generate-id/underscored_crc32'),
@@ -194,11 +188,6 @@ export interface RCEPropTypes {
   instRecordDisabled?: boolean
 
   /**
-   * key value pair telling which attachment ids are locked
-   */
-  lockedAttachments?: {[key: number]: boolean}
-
-  /**
    * locale of the user's language
    */
   language?: string
@@ -247,7 +236,24 @@ export interface RCEPropTypes {
    * properties necessary for the RCE to us the RCS
    * if missing, RCE features that require the RCS are omitted
    */
-  rcsProps?: InferType<typeof trayPropTypes>
+  rcsProps?: {
+    canUploadFiles: boolean
+    contextId: string
+    contextType: string
+    containingContext?: {
+      contextType: string
+      contextId: string
+      userId: string
+    }
+    filesTabDisabled?: boolean
+    host?: (props: any, propName: any, componentName: any) => void
+    jwt?: (props: any, propName: any, componentName: any) => void
+    refreshToken?: () => void
+    source?: {
+      fetchImages: () => void
+    }
+    themeUrl?: string
+  }
 
   /**
    * enable the custom icon maker feature (temporary until the feature is forced on)
@@ -279,7 +285,7 @@ export interface RCEPropTypes {
   onInit?: (editor: Editor) => void
   onContentChange?: (content: string) => void
 
-  externalToolsConfig?: InferType<typeof externalToolsConfigPropType>
+  externalToolsConfig?: ExternalToolsConfig
 }
 
 const defaultProps = {

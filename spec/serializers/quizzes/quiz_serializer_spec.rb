@@ -99,7 +99,7 @@ describe Quizzes::QuizSerializer do
     it "serializes description with a formatter if given" do
       @serializer = quiz_serializer(
         serializer_options: {
-          description_formatter: ->(_) { return "description from formatter" }
+          description_formatter: ->(_) { "description from formatter" }
         }
       )
       json = @serializer.as_json[:quiz]
@@ -525,6 +525,7 @@ describe Quizzes::QuizSerializer do
                                                               read_statistics: true,
                                                               view_answer_audits: true,
                                                               manage: true,
+                                                              manage_assign_to: true,
                                                               delete: true,
                                                               grade: true,
                                                               preview: true

@@ -24,15 +24,13 @@ import {Spinner} from '@instructure/ui-spinner'
 import {Flex} from '@instructure/ui-flex'
 import {Button} from '@instructure/ui-buttons'
 import {Table} from '@instructure/ui-table'
-import {ContentItem} from '@canvas/deep-linking/models/ContentItem'
-import {DeepLinkResponse} from '@canvas/deep-linking/DeepLinkResponse'
+import type {ContentItem} from '@canvas/deep-linking/models/ContentItem'
+import type {DeepLinkResponse} from '@canvas/deep-linking/DeepLinkResponse'
 import {Pill} from '@instructure/ui-pill'
 import {View} from '@instructure/ui-view'
 
 const I18n = useI18nScope('external_content.success')
 
-// Doing this to avoid TS2339 errors-- remove and rename once we're on InstUI 8
-const {Item: FlexItem} = Flex as any
 const {
   Head: TableHead,
   Row: TableRow,
@@ -155,8 +153,8 @@ export const RetrievingContent = ({environment, parentWindow}: RetrievingContent
   if (hasErrors) {
     return (
       <Flex justifyItems="center" direction="column">
-        <FlexItem>{header()}</FlexItem>
-        <FlexItem margin="medium 0">
+        <Flex.Item>{header()}</Flex.Item>
+        <Flex.Item margin="medium 0">
           <Table caption={I18n.t('Content Items with Errors')}>
             <TableHead>
               <TableRow>
@@ -170,8 +168,8 @@ export const RetrievingContent = ({environment, parentWindow}: RetrievingContent
             </TableHead>
             <TableBody>{contentItems.map(item => renderContentItem(item))}</TableBody>
           </Table>
-        </FlexItem>
-        <FlexItem overflowY="hidden">
+        </Flex.Item>
+        <Flex.Item overflowY="hidden">
           <Button
             margin="none small"
             color="primary"
@@ -182,7 +180,7 @@ export const RetrievingContent = ({environment, parentWindow}: RetrievingContent
           >
             {I18n.t('I Understand, Continue')}
           </Button>
-        </FlexItem>
+        </Flex.Item>
       </Flex>
     )
   }
@@ -191,16 +189,16 @@ export const RetrievingContent = ({environment, parentWindow}: RetrievingContent
   return (
     <div>
       <Flex justifyItems="center" margin="x-large 0 large 0">
-        <FlexItem>
+        <Flex.Item>
           <Spinner renderTitle={message} size="large" />
-        </FlexItem>
+        </Flex.Item>
       </Flex>
       <Flex justifyItems="center" margin="0 0 large">
-        <FlexItem>
+        <Flex.Item>
           <Text size="x-large" fontStyle="italic">
             {message}
           </Text>
-        </FlexItem>
+        </Flex.Item>
       </Flex>
     </div>
   )

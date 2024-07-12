@@ -43,7 +43,7 @@ module Lti
 
     def self.register_expansion(name, permission_groups, expansion_proc, *guards, **kwargs)
       @expansions ||= {}
-      @expansions["$#{name}".to_sym] = VariableExpansion.new(
+      @expansions[:"$#{name}"] = VariableExpansion.new(
         name,
         permission_groups,
         expansion_proc,
@@ -53,7 +53,7 @@ module Lti
     end
 
     def self.deregister_expansion(name)
-      @expansions.delete "$#{name}".to_sym
+      @expansions.delete :"$#{name}"
     end
 
     def self.expansions
@@ -87,7 +87,12 @@ module Lti
       @context.is_a?(Course) && @context.enrollment_term &&
         @context.enrollment_term.start_at
     end
+    TERM_END_DATE_GUARD = lambda do
+      @context.is_a?(Course) && @context.enrollment_term &&
+        @context.enrollment_term.end_at
+    end
     TERM_NAME_GUARD = -> { @context.is_a?(Course) && @context.enrollment_term&.name }
+    TERM_ID_GUARD = -> { @context.is_a?(Course) && @context.enrollment_term_id }
     USER_GUARD = -> { @current_user }
     SIS_USER_GUARD = -> { sis_pseudonym&.sis_user_id }
     PSEUDONYM_GUARD = -> { sis_pseudonym }
@@ -116,7 +121,7 @@ module Lti
       @context = context
       @controller = controller
       @request = controller.request if controller
-      opts.each { |opt, val| instance_variable_set("@#{opt}", val) }
+      opts.each { |opt, val| instance_variable_set(:"@#{opt}", val) }
 
       # This will provide the most accurate version of the actual launch
       # url used, whether directly provided from a resource link or
@@ -153,10 +158,10 @@ module Lti
                    v
                  end
 
-        if @root_account&.feature_enabled?(:variable_substitution_numeric_to_string) &&
-           @tool.is_a?(ContextExternalTool) && @tool.use_1_3? &&
-           output.is_a?(Numeric)
+        if @tool.is_a?(ContextExternalTool) && @tool.use_1_3? && output.is_a?(Numeric)
           output&.to_s
+        elsif Account.site_admin.feature_enabled?(:disallow_null_custom_variables)
+          output.nil? ? v : output
         else
           output
         end
@@ -165,7 +170,7 @@ module Lti
 
     def enabled_capability_params(enabled_capabilities)
       enabled_capabilities.each_with_object({}) do |capability, hash|
-        if (expansion = capability.respond_to?(:to_sym) && self.class.expansions["$#{capability}".to_sym])
+        if (expansion = capability.respond_to?(:to_sym) && self.class.expansions[:"$#{capability}"])
           value = expansion.expand(self)
           hash[expansion.default_name] = value if expansion.default_name.present? && value != "$#{capability}"
         end
@@ -226,8 +231,8 @@ module Lti
     # Returns "$ResourceLink.title" otherwise
     register_expansion "ResourceLink.title",
                        [],
-                       -> { @assignment.title },
-                       -> { @assignment && @assignment.title.present? },
+                       -> { @resource_link&.title || @assignment&.title || lti_helper.tag_from_resource_link(@resource_link)&.title || @context.name },
+                       -> { @resource_link || (@assignment && @assignment.title.present?) },
                        default_name: "resourcelink_title"
 
     # LTI - Custom parameter substitution: ResourceLink.available.startDateTime
@@ -276,8 +281,9 @@ module Lti
     register_expansion "com.instructure.User.observees",
                        [],
                        lambda {
-                         observed_users = ObserverEnrollment.observed_students(@context, @current_user)
-                                                            .keys
+                         observed_users =
+                           ObserverEnrollment.observed_students(@context, @current_user)
+                                             .keys
                          if @tool.use_1_3?
                            observed_users.map { |u| u.lookup_lti_id(@context) }.join(",")
                          else
@@ -288,7 +294,8 @@ module Lti
                        default_name: "com_instructure_user_observees"
 
     # Returns an array of the section names in a JSON-escaped format that the user is enrolled in, if the
-    # context of the tool launch is within a course.
+    # context of the tool launch is within a course. The names are sorted by the course_section_id, so that
+    # they are useful in conjunction with the Canvas.course.sectionIds substitution.
     #
     # @example
     #   ```
@@ -296,7 +303,7 @@ module Lti
     #   ```
     register_expansion "com.instructure.User.sectionNames",
                        [],
-                       -> { @context.enrollments.active.joins(:course_section).where(user_id: @current_user.id).pluck(:name)&.to_json },
+                       -> { @context.enrollments.active.joins(:course_section).where(user_id: @current_user.id).order(:course_section_id).pluck(:name)&.to_json },
                        ENROLLMENT_GUARD,
                        default_name: "com_instructure_user_section_names"
 
@@ -313,8 +320,22 @@ module Lti
                        },
                        default_name: "com_instructure_rcs_app_host"
 
+    # Returns true if the user is launching from student view.
+    #
+    # @example
+    #   ```
+    #   "true"
+    #   "false"
+    #   ```
+    register_expansion "com.instructure.User.student_view",
+                       [],
+                       -> { @current_user.fake_student? || false },
+                       USER_GUARD,
+                       default_name: "com_instructure_user_student_view"
+
     # Returns the RCS Service JWT for the current user
     #
+    # @internal
     # @example
     #   ```
     #   "base64-encoded-service-jwt"
@@ -329,6 +350,20 @@ module Lti
                        INTERNAL_TOOL_GUARD,
                        default_name: "com_instructure_rcs_service_jwt"
 
+    # Returns instui_nav release flag state
+    #
+    # @internal
+    # @example
+    #   ```
+    #   "true"
+    #   "false"
+    #   ```
+    register_expansion "com.instructure.instui_nav",
+                       [],
+                       -> { @root_account.feature_enabled?(:instui_nav) },
+                       INTERNAL_TOOL_GUARD,
+                       default_name: "com_instructure_instui_nav"
+
     # returns all observee ids linked to this observer as an String separated by `,`
     # @launch_parameter com_instructure_observee_ids
     # @example
@@ -339,7 +374,7 @@ module Lti
                        [],
                        lambda {
                          observed_users = ObserverEnrollment.observed_students(@context, @current_user).keys
-                         observed_users&.collect { |user| find_sis_user_id_for(user) }&.compact&.join(",")
+                         observed_users&.filter_map { |user| find_sis_user_id_for(user) }&.join(",")
                        },
                        COURSE_GUARD,
                        default_name: "com_instructure_observee_sis_ids"
@@ -513,6 +548,25 @@ module Lti
                        [],
                        -> { Lti::Asset.opaque_identifier_for(@context) },
                        default_name: "context_id"
+
+    # The Canvas global identifier for the launch context
+    # @example
+    #   ```
+    #   10000000000070
+    #   ```
+    register_expansion "com.instructure.Context.globalId",
+                       [],
+                       -> { @context&.global_id }
+
+    # The Canvas UUID for the launch context
+    # @example
+    #   ```
+    #   4TVeERS266frWLG5RVK0L8BbSC831mUZHaYpK4KP
+    #   ```
+    register_expansion "com.instructure.Context.uuid",
+                       [],
+                       -> { @context.uuid },
+                       -> { @context&.respond_to?(:uuid) }
 
     # If the context is a Course, returns sourced Id of the context
     # @example
@@ -756,7 +810,6 @@ module Lti
                        -> { Shard.current.id }
 
     # returns the root account's global id for the current context.
-    # @duplicates Canvas.user.globalId
     # @example
     #   ```
     #   123400000000123
@@ -900,6 +953,16 @@ module Lti
                        -> { @context.enrollment_term.start_at },
                        TERM_START_DATE_GUARD
 
+    # returns the current course's term end date.
+    # @example
+    #   ```
+    #   2018-01-12 00:00:00 -0700
+    #   ```
+    register_expansion "Canvas.term.endAt",
+                       [],
+                       -> { @context.enrollment_term.end_at },
+                       TERM_END_DATE_GUARD
+
     # returns the current course's term name.
     # @example
     #   ```
@@ -910,6 +973,17 @@ module Lti
                        -> { @context.enrollment_term.name },
                        TERM_NAME_GUARD,
                        default_name: "canvas_term_name"
+
+    # returns the current course's term numerical id.
+    # @example
+    #   ```
+    #   123
+    #   ```
+    register_expansion "Canvas.term.id",
+                       [],
+                       -> { @context.enrollment_term_id },
+                       TERM_ID_GUARD,
+                       default_name: "canvas_term_id"
 
     # returns the current course sis source id
     # to return the section source id use Canvas.course.sectionIds
@@ -1292,7 +1366,6 @@ module Lti
                        -> { lti_helper.all_roles("lti1_3") }
 
     # Returns the Canvas global user_id of the launching user.
-    # @duplicates Canvas.root_account.global_id
     # @example
     #   ```
     #   420000000000042
@@ -1310,6 +1383,26 @@ module Lti
     register_expansion "Canvas.user.isRootAccountAdmin",
                        [],
                        -> { @current_user.roles(@root_account).include? "root_admin" },
+                       USER_GUARD
+
+    # Returns a string with a comma-separated list of the (local) account IDs
+    # that a user has admin rights in, which fall under the root account that
+    # the tool was launched under. This list includes the IDs of
+    # all subaccounts of these accounts (and their subaccounts, etc.), since
+    # the admin privileges carry from an account to all its subaccounts.
+    #
+    # Will show a limit of 40000 characters. If the account IDs list is too big
+    # to fit into 40000 characters, 'truncated' will show at the end of the
+    # list.
+    #
+    # @example
+    #   ```
+    #   123,456,798
+    #   123,456,789,1234,truncated
+    #   ```
+    register_expansion "Canvas.user.adminableAccounts",
+                       [],
+                       -> { lti_helper.adminable_account_ids_recursive_truncated },
                        USER_GUARD
 
     # Username/Login ID for the primary pseudonym for the user for the account.
@@ -1398,17 +1491,29 @@ module Lti
                        -> { @controller.logged_in_user.id },
                        MASQUERADING_GUARD
 
-    # Returns the 40 character opaque user_id for masquerading user.
-    # This is the pseudonym the user is actually logged in as.
-    # It may not hold all the sis info needed in other launch substitutions.
+    # Returns the opaque user_id for the masquerading user. This is the
+    # pseudonym the user is actually logged in as. It may not hold all the sis
+    # info needed in other launch substitutions.
+    #
+    # For LTI 1.3 tools, the opaque user IDs are UUIDv4 values (also used in
+    # the "sub" claim in LTI 1.3 launches), while for other LTI versions, the
+    # user ID will be the user's 40 character opaque LTI id.
     #
     # @example
     #   ```
-    #   "da12345678cb37ba1e522fc7c5ef086b7704eff9"
+    #    LTI 1.3: "8b9f8327-aa32-fa90-9ea2-2fa8ef79e0f9",
+    #    All Others: "da12345678cb37ba1e522fc7c5ef086b7704eff9"
     #   ```
     register_expansion "Canvas.masqueradingUser.userId",
                        [],
-                       -> { @tool.opaque_identifier_for(@controller.logged_in_user, context: @context) },
+                       lambda {
+                         u = @controller.logged_in_user
+                         if lti_1_3?
+                           u.lookup_lti_id(@context)
+                         else
+                           @tool.opaque_identifier_for(u, context: @context)
+                         end
+                       },
                        MASQUERADING_GUARD
 
     # Returns the xapi url for the user.
@@ -1616,8 +1721,15 @@ module Lti
                        -> { @assignment.lock_at.utc.iso8601 },
                        -> { @assignment && @assignment.lock_at.present? }
 
-    # Returns the `due_at` date of the assignment that was launched.
-    # Only available when launched as an assignment with a `due_at` set.
+    # Returns the `due_at` date of the assignment that was launched. Only
+    # available when launched as an assignment with a `due_at` set. If the tool
+    # is launched as a student, this will be the date that assignment is due
+    # for that student (or unexpanded -- "$Canvas.assignment.dueAt.iso8601" --
+    # if there is no due date for the student). If the tool is launched as an
+    # instructor and there are multiple possible due dates (i.e., there are
+    # multiple sections and at least one has a due date override), this will be
+    # the LATEST effective due date of any section or student (or unexpanded if
+    # there is at least one section or student with no effective due date).
     #
     # @example
     #   ```
@@ -1627,6 +1739,26 @@ module Lti
                        [],
                        -> { @assignment.due_at.utc.iso8601 },
                        -> { @assignment && @assignment.due_at.present? }
+
+    # Returns the `due_at` date of the assignment that was launched.
+    # If the tool is launched as a student, this will be the date that
+    # assignment is due for that student (or an empty string if there is no due
+    # date for the student). If the tool is launched as an instructor and different
+    # students are assigned multiple due dates (i.e., there are students in sections
+    # with overrides / different effective due dates), this will be the
+    # EARLIEST due date of any enrollment (or an empty string if there are no
+    # enrollments with due dates). Note than like allDueAts, but unlike the dueAt
+    # expansion, there must be at least one enrollment in a section for its due
+    # date to be considered.
+    #
+    # @example
+    #   ```
+    #   2018-02-19:00:00Z
+    #   ```
+    register_expansion "Canvas.assignment.earliestEnrollmentDueAt.iso8601",
+                       [],
+                       -> { earliest_due_at&.utc&.iso8601.to_s },
+                       ASSIGNMENT_GUARD
 
     # In Canvas, users, sections and groups can have distinct due dates for the same assignment.
     # This returns all possible `due_at` dates of the assignment that was launched.
@@ -1642,7 +1774,7 @@ module Lti
     register_expansion "Canvas.assignment.allDueAts.iso8601",
                        [],
                        -> { unique_submission_dates.map { |d| d.present? ? d.utc.iso8601 : "" }.join(",") },
-                       -> { @assignment }
+                       ASSIGNMENT_GUARD
 
     # Returns true if the assignment that was launched is published.
     # Only available when launched as an assignment.
@@ -1663,7 +1795,7 @@ module Lti
     #   ```
     register_expansion "Canvas.assignment.lockdownEnabled",
                        [],
-                       -> { @assignment.settings&.dig("lockdown_browser", "require_lockdown_browser") || false },
+                       -> { !!@controller && @current_user == @controller.logged_in_user && (@assignment.settings&.dig("lockdown_browser", "require_lockdown_browser") || false) },
                        ASSIGNMENT_GUARD
 
     # Returns the allowed number of submission attempts.
@@ -1859,6 +1991,18 @@ module Lti
                        [],
                        -> { @request.parameters["com_instructure_course_canvas_resource_type"] }
 
+    # Returns the target resource id for the current page, forwarded from the request. Only functional when
+    # `com_instructure_course_canvas_resource_type` is included as a query param. Currently, this is not
+    # supported generally, and is only implemented for specific use cases.
+    #
+    # @example
+    #   ```
+    #   123123
+    #   ```
+    register_expansion "com.instructure.Course.canvas_resource_id",
+                       [],
+                       -> { @request.parameters["com_instructure_course_canvas_resource_id"] }
+
     # Returns whether a content can be imported into a specific group on the page, forwarded from the request.
     # True for Modules page and Assignment Groups page. False for other content index pages.
     #
@@ -1913,6 +2057,19 @@ module Lti
 
     def unique_submission_dates
       @assignment.submissions.pluck(:cached_due_date).uniq
+    end
+
+    def earliest_due_at
+      context = @assignment.context
+      # Mirrors logic in AssignmentOverrideApplicator to determine if user is a student or teacher.
+      # If a user is a student, we return their due date. Otherwise, in our case here, we return
+      # the earliest of all due dates for the assignment.
+      if context.user_has_been_admin?(current_user) || (context.user_has_no_enrollments?(current_user) &&
+                                               context.grants_any_right?(current_user, *RoleOverride::GRANULAR_MANAGE_ASSIGNMENT_PERMISSIONS))
+        @assignment.submissions.minimum(:cached_due_date)
+      else
+        @assignment.due_at
+      end
     end
 
     def sis_pseudonym

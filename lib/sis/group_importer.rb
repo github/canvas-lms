@@ -57,41 +57,46 @@ module SIS
         context = nil
         if account_id
           context = @accounts_cache[account_id]
-          context ||= @root_account.all_accounts.active.where(sis_source_id: account_id).take
+          context ||= @root_account.all_accounts.active.find_by(sis_source_id: account_id)
           raise ImportError, "Account with sis id #{account_id} didn't exist for group #{group_id}." unless context
 
           @accounts_cache[context.sis_source_id] = context
         end
 
         if course_id
-          context = @root_account.all_courses.active.where(sis_source_id: course_id).take
+          context = @root_account.all_courses.active.find_by(sis_source_id: course_id)
           raise ImportError, "Course with sis id #{course_id} didn't exist for group #{group_id}." unless context
         end
 
         # if the account_id is present and didn't error then look for group_category in account
         if account_id && group_category_id
-          group_category = context.group_categories.where(sis_source_id: group_category_id).take
+          group_category = context.group_categories.find_by(sis_source_id: group_category_id)
           raise ImportError, "Group Category #{group_category_id} didn't exist in account #{account_id} for group #{group_id}." unless group_category
         elsif course_id && group_category_id
-          group_category = context.group_categories.where(sis_source_id: group_category_id).take
+          group_category = context.group_categories.find_by(sis_source_id: group_category_id)
           raise ImportError, "Group Category #{group_category_id} didn't exist in course #{course_id} for group #{group_id}." unless group_category
         # look for group_category, account and course don't exist
         elsif group_category_id.present?
-          group_category = @root_account.all_group_categories.where(deleted_at: nil, sis_source_id: group_category_id).take
+          group_category = @root_account.all_group_categories.find_by(deleted_at: nil, sis_source_id: group_category_id)
           raise ImportError, "Group Category #{group_category_id} didn't exist for group #{group_id}." unless group_category
         end
 
-        group = @root_account.all_groups.where(sis_source_id: group_id).take
+        group = @root_account.all_groups.find_by(sis_source_id: group_id)
 
         # if the group_category exists it is in the correct context or the
         # context is blank, but it should be consistent with the
         # group_category's context, so assign context
         if group_category
           context = group_category.context
-          group ? group.group_category = group_category : group = group_category.groups.new(name:, sis_source_id: group_id)
+          if group
+            group.group_category = group_category
+          else
+            group = group_category.groups.new(name:, sis_source_id: group_id)
+          end
         end
-        # no account_id, course_id, or group_category, assign context to root_account
-        context ||= @root_account
+        # no account_id, course_id, or group_category, use the group's existing context if present,
+        # otherwise assign context to root_account
+        context ||= group&.context || @root_account
 
         if group&.group_memberships&.exists? &&
            !(context.id == group.context_id && context.class.base_class.name == group.context_type) &&
@@ -108,7 +113,9 @@ module SIS
 
         # ensure that the assigned group.group_category corresponds to the same context_id as the group
         # in the case of an SIS import, the group.group_category may not be set (unless group_category_id was passed)
-        if group&.group_category && group.group_category.context_id != context.id
+        if group&.group_category &&
+           group.group_category.context_id != context.id &&
+           group.group_category.context_type == context.class_name
           group.group_category.update!(context_id: context.id)
         end
 

@@ -19,10 +19,16 @@
 
 require_relative "../helpers/context_modules_common"
 require_relative "../helpers/public_courses_context"
+require_relative "page_objects/modules_index_page"
+require_relative "page_objects/modules_settings_tray"
+require_relative "../../helpers/selective_release_common"
 
 describe "context modules" do
   include_context "in-process server selenium tests"
   include ContextModulesCommon
+  include ModulesIndexPage
+  include ModulesSettingsTray
+  include SelectiveReleaseCommon
 
   context "as a teacher", priority: "1" do
     before(:once) do
@@ -208,7 +214,7 @@ describe "context modules" do
       @course.context_modules.create!(name: "Quiz")
       get "/courses/#{@course.id}/modules"
 
-      add_new_module_item("#quizs_select", "Quiz", "[ Create Quiz ]", "New Quiz") do
+      add_new_module_item_and_yield("#quizs_select", "Quiz", "[ Create Quiz ]", "New Quiz") do
         click_option("select[name='quiz[assignment_group_id]']", @ag2.name)
       end
       expect(@ag2.assignments.length).to eq 1
@@ -277,6 +283,7 @@ describe "context modules" do
     end
 
     it "does not have a prerequisites section when creating the first module" do
+      Account.site_admin.disable_feature! :selective_release_ui_api
       get "/courses/#{@course.id}/modules"
 
       form = new_module_form
@@ -307,7 +314,9 @@ describe "context modules" do
       expect(m2.position).to eq 1
     end
 
-    it "validates locking a module item display functionality" do
+    it "validates locking a module item display functionality without differentiated modules" do
+      Account.site_admin.disable_feature! :selective_release_ui_api
+
       get "/courses/#{@course.id}/modules"
       add_form = new_module_form
       lock_check_click
@@ -317,6 +326,23 @@ describe "context modules" do
       lock_check_click
       wait_for_ajaximations
       expect(add_form.find_element(:css, ".unlock_module_at_details")).not_to be_displayed
+    end
+
+    it "validates locking a module item display functionality with differentiated modules" do
+      differentiated_modules_on
+      m1 = @course.context_modules.create!(name: "module 1")
+
+      go_to_modules
+      manage_module_button(m1).click
+      module_index_menu_tool_link("Edit").click
+
+      click_lock_until_checkbox
+      expect(element_exists?(lock_until_input_selector)).to be_truthy
+
+      # verify unlock
+      click_lock_until_checkbox
+      wait_for_ajaximations
+      expect(element_exists?(lock_until_input_selector)).to be_falsey
     end
 
     it "properly changes indent of an item with arrows" do
@@ -536,7 +562,7 @@ describe "context modules" do
     it "adds a discussion item to a module", priority: "1" do
       @course.context_modules.create!(name: "New Module")
       get "/courses/#{@course.id}/modules"
-      add_new_module_item("#discussion_topics_select", "Discussion", "[ Create Topic ]", "New Discussion Title")
+      add_new_module_item_and_yield("#discussion_topics_select", "Discussion", "[ Create Topic ]", "New Discussion Title")
       verify_persistence("New Discussion Title")
     end
 
@@ -588,6 +614,22 @@ describe "context modules" do
       tag = mod.add_item({ id: page.id, type: "wiki_page" })
       get "/courses/#{@course.id}/modules"
       expect(f("#context_module_item_#{tag.id}")).to contain_css(".item_link")
+    end
+
+    it "duplicates a module" do
+      module1 = @course.context_modules.create(name: "My Module")
+      get "/courses/#{@course.id}/modules"
+
+      expect(all_modules.length).to eq 1
+      manage_module_button(module1).click
+      duplicate_module_button(module1).click
+      wait_for_ajaximations
+      expect(all_modules.length).to eq 2
+      expect(f("#flash_screenreader_holder")).not_to include_text("Error")
+      # test that the duplicated module's buttons are functional
+      module2 = @course.context_modules.reload.last
+      add_module_item_button(module2).click
+      expect(f("body")).to contain_jqcss('.ui-dialog:contains("Add Item to"):visible')
     end
 
     context "expanding/collapsing modules" do
@@ -712,7 +754,7 @@ describe "context modules" do
         @course.disable_feature! :new_quizzes_by_default
         get "/courses/#{@course.id}/modules"
 
-        add_new_module_item("#quizs_select", "Quiz", "[ Create Quiz ]", "A Classic Quiz") do
+        add_new_module_item_and_yield("#quizs_select", "Quiz", "[ Create Quiz ]", "A Classic Quiz") do
           expect(f("#quizs_select")).to contain_css("input[name=quiz_engine_selection]")
           expect(f("#quizs_select .new")).to include_text("New Quizzes")
           expect(f("#quizs_select .new")).to include_text("Classic Quizzes")
@@ -725,7 +767,20 @@ describe "context modules" do
         @course.enable_feature! :new_quizzes_by_default
         get "/courses/#{@course.id}/modules"
 
-        add_new_module_item("#quizs_select", "Quiz", "[ Create Quiz ]", "A New Quiz") do
+        add_new_module_item_and_yield("#quizs_select", "Quiz", "[ Create Quiz ]", "A New Quiz") do
+          expect(f("#quizs_select")).not_to contain_css("input[name=quiz_engine_selection]")
+          expect(f("#quizs_select .new")).not_to include_text("New Quizzes")
+          expect(f("#quizs_select .new")).not_to include_text("Classic Quizzes")
+        end
+        expect(ContentTag.last.content.is_a?(Assignment)).to be_truthy
+      end
+
+      it "creates a new quiz by default when both new_quizzes_by_default and require_migration is enabled" do
+        @course.enable_feature! :new_quizzes_by_default
+        @course.root_account.enable_feature! :require_migration_to_new_quizzes
+        get "/courses/#{@course.id}/modules"
+
+        add_new_module_item_and_yield("#quizs_select", "Quiz", "[ Create Quiz ]", "A New Quiz") do
           expect(f("#quizs_select")).not_to contain_css("input[name=quiz_engine_selection]")
           expect(f("#quizs_select .new")).not_to include_text("New Quizzes")
           expect(f("#quizs_select .new")).not_to include_text("Classic Quizzes")

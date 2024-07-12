@@ -47,6 +47,13 @@ describe User do
     end
   end
 
+  context "relationships" do
+    subject { User.new }
+
+    it { is_expected.to have_many(:created_lti_registrations).class_name("Lti::Registration").with_foreign_key("created_by_id") }
+    it { is_expected.to have_many(:updated_lti_registrations).class_name("Lti::Registration").with_foreign_key("updated_by_id") }
+  end
+
   describe "notifications" do
     describe "#daily_notification_time" do
       it "returns the users 6pm local time" do
@@ -474,19 +481,9 @@ describe User do
 
     let(:user) { user_model }
 
-    let(:root_account_association) do
-      user.user_account_associations.create!(account: root_account)
-      user.user_account_associations.find_by(account: root_account)
-    end
-
-    let(:sub_account_association) do
-      user.user_account_associations.create!(account: sub_account)
-      user.user_account_associations.find_by(account: sub_account)
-    end
-
     before do
-      root_account_association
-      sub_account_association
+      user.user_account_associations.create!(account: root_account)
+      user.user_account_associations.create!(account: sub_account)
     end
 
     context "when there is a single root account association" do
@@ -496,6 +493,15 @@ describe User do
         end.to change {
           user.root_account_ids
         }.from([]).to([root_account.global_id])
+      end
+
+      it "includes soft deleted associations" do
+        user.user_account_associations.scope.delete_all
+        p = user.pseudonyms.create!(account: root_account, unique_id: "p")
+        p.destroy
+        user.update_root_account_ids
+        expect(user.user_account_associations).not_to exist
+        expect(user.root_account_ids).to eq [root_account.global_id]
       end
 
       context "and communication channels for the user exist" do
@@ -1318,6 +1324,18 @@ describe User do
       @fake_student = @course.student_view_student
       expect(@fake_student.can_masquerade?(@teacher, Account.default)).to be_truthy
     end
+
+    it "doesn't allow teacher to become student view of random student" do
+      course_with_teacher(active_all: true)
+      @fake_student = user_factory
+      expect(@fake_student.can_masquerade?(@teacher, Account.default)).to be_falsey
+    end
+
+    it "doesn't allow fake student to become teacher" do
+      course_with_teacher(active_all: true)
+      @fake_student = @course.student_view_student
+      expect(@teacher.can_masquerade?(@fake_student, Account.default)).to be_falsey
+    end
   end
 
   describe "#has_subset_of_account_permissions?" do
@@ -1663,7 +1681,7 @@ describe User do
       expect(tool.has_placement?(:user_navigation)).to be false
       user_model
       tabs = @user.profile.tabs_available(@user, root_account: Account.default)
-      expect(tabs.pluck(:id)).not_to be_include(tool.asset_string)
+      expect(tabs.pluck(:id)).not_to include(tool.asset_string)
     end
 
     it "includes configured external tools" do
@@ -1673,7 +1691,7 @@ describe User do
       expect(tool.has_placement?(:user_navigation)).to be true
       user_model
       tabs = @user.profile.tabs_available(@user, root_account: Account.default)
-      expect(tabs.pluck(:id)).to be_include(tool.asset_string)
+      expect(tabs.pluck(:id)).to include(tool.asset_string)
       tab = tabs.detect { |t| t[:id] == tool.asset_string }
       expect(tab[:href]).to eq :user_external_tool_path
       expect(tab[:args]).to eq [@user.id, tool.id]
@@ -1773,21 +1791,42 @@ describe User do
       expect(User.avatar_fallback_url("http://somedomain:3000/path")).to eq(
         "http://somedomain:3000/path"
       )
-      expect(User.avatar_fallback_url(nil, OpenObject.new(host: "foo", protocol: "http://"))).to eq(
-        "http://foo/images/messages/avatar-50.png"
-      )
-      expect(User.avatar_fallback_url("/somepath", OpenObject.new(host: "bar", protocol: "https://"))).to eq(
-        "https://bar/somepath"
-      )
-      expect(User.avatar_fallback_url("//somedomain/path", OpenObject.new(host: "bar", protocol: "https://"))).to eq(
-        "https://somedomain/path"
-      )
-      expect(User.avatar_fallback_url("http://somedomain/path", OpenObject.new(host: "bar", protocol: "https://"))).to eq(
-        "http://somedomain/path"
-      )
-      expect(User.avatar_fallback_url("http://localhost/path", OpenObject.new(host: "bar", protocol: "https://"))).to eq(
-        "https://bar/path"
-      )
+      expect(User.avatar_fallback_url(nil, instance_double("ActionDispatch::Request",
+                                                           host: "foo",
+                                                           protocol: "http://",
+                                                           port: 80,
+                                                           scheme: "http"))).to eq(
+                                                             "http://foo/images/messages/avatar-50.png"
+                                                           )
+      expect(User.avatar_fallback_url("/somepath", instance_double("ActionDispatch::Request",
+                                                                   host:
+                                                                         "bar",
+                                                                   protocol: "https://",
+                                                                   port: 443,
+                                                                   scheme: "https"))).to eq(
+                                                                     "https://bar/somepath"
+                                                                   )
+      expect(User.avatar_fallback_url("//somedomain/path", instance_double("ActionDispatch::Request",
+                                                                           host: "bar",
+                                                                           protocol: "https://",
+                                                                           port: 443,
+                                                                           scheme: "https"))).to eq(
+                                                                             "https://somedomain/path"
+                                                                           )
+      expect(User.avatar_fallback_url("http://somedomain/path", instance_double("ActionDispatch::Request",
+                                                                                host: "bar",
+                                                                                protocol: "https://",
+                                                                                port: 443,
+                                                                                scheme: "https"))).to eq(
+                                                                                  "http://somedomain/path"
+                                                                                )
+      expect(User.avatar_fallback_url("http://localhost/path", instance_double("ActionDispatch::Request",
+                                                                               host: "bar",
+                                                                               protocol: "https://",
+                                                                               port: 443,
+                                                                               scheme: "https"))).to eq(
+                                                                                 "https://bar/path"
+                                                                               )
     end
 
     describe "#clear_avatar_image_url_with_uuid" do
@@ -2645,7 +2684,7 @@ describe User do
     it "sums up associated root account quotas" do
       @user.associated_root_accounts << Account.create! << (a = Account.create!)
       a.update_attribute :default_user_storage_quota_mb, a.default_user_storage_quota_mb + 10
-      expect(@user.quota).to eql((2 * User.default_storage_quota) + 10.megabytes)
+      expect(@user.quota).to eql((2 * User.default_storage_quota) + 10.decimal_megabytes)
     end
   end
 
@@ -3234,7 +3273,7 @@ describe User do
       specs_require_sharding
 
       it "checks for associated accounts on shards the user shares with the seeker" do
-        # create target user on defualt shard
+        # create target user on default shard
         target = user_factory
         # create account on another shard
         account = @shard1.activate { Account.create! }
@@ -3620,6 +3659,12 @@ describe User do
       expect(@user.roles(@account)).to eq %w[user admin root_admin]
     end
 
+    it "does not include 'root_admin' if the user's root account admin user record is deleted" do
+      au = @account.account_users.create!(user: @user, role: admin_role)
+      au.destroy
+      expect(@user.roles(@account)).to eq %w[user]
+    end
+
     it "caches results" do
       enable_cache do
         sub_account = @account.sub_accounts.create!
@@ -3661,6 +3706,12 @@ describe User do
     it "returns true if the user an admin in a root account" do
       @account.account_users.create!(user: @user, role: admin_role)
       expect(@user.root_admin_for?(@account)).to be true
+    end
+
+    it "returns false if the user *was* an admin in a root account" do
+      au = @account.account_users.create!(user: @user, role: admin_role)
+      au.destroy
+      expect(@user.root_admin_for?(@account)).to be false
     end
   end
 
@@ -3711,33 +3762,6 @@ describe User do
       f.submission_context_code = @course.asset_string
       f.save!
       expect(@user.submissions_folder(@course)).to eq f
-    end
-  end
-
-  describe "submittable_attachments" do
-    before(:once) do
-      student_in_course
-      group_model
-      @other_group = @group
-      group_model
-      @group.add_user @student
-      @a1 = attachment_with_context(@student)
-      @a2 = attachment_with_context(@group)
-      @a3 = attachment_with_context(@other_group)
-    end
-
-    it "matches non-deleted attachments in user or group context" do
-      expect(@student.submittable_attachments.pluck(:id)).to match_array [@a1, @a2].map(&:id)
-    end
-
-    it "excludes deleted files" do
-      @a1.destroy
-      expect(@student.submittable_attachments.pluck(:id)).to eq [@a2.id]
-    end
-
-    it "excludes deleted group memberships" do
-      @student.group_memberships.where(group_id: @group.id).take.destroy
-      expect(@student.submittable_attachments.pluck(:id)).to eq [@a1.id]
     end
   end
 
@@ -4238,7 +4262,7 @@ describe User do
     end
 
     it "returns nil for AccountUsers without :manage_courses" do
-      account_admin_user_with_role_changes(user: @user, role_changes: { manage_courses: false })
+      account_admin_user_with_role_changes(user: @user, role_changes: { manage_courses_add: false })
       expect(@user.create_courses_right(@account)).to be_nil
     end
 
@@ -4508,6 +4532,66 @@ describe User do
 
     it "if there are no pseudonyms then the user is not suspended" do
       expect(@user.suspended?).to be_falsey
+    end
+  end
+
+  describe "#adminable_accounts_recursive and #adminable_account_ids_recursive" do
+    let(:root_account) { Account.create!(name: "Root Account") }
+    let(:account) { Account.create!(name: "Account", parent_account: root_account) }
+    let(:sub_account_a) { Account.create!(name: "Account", parent_account: account) }
+    let(:sub_account_b) { Account.create!(name: "Account", parent_account: account) }
+    let(:sub_account_b_1) { Account.create!(name: "Account", parent_account: sub_account_b) }
+    let(:sub_account_a_1) { Account.create!(name: "Account", parent_account: sub_account_a) }
+
+    let(:root_account2) { Account.create!(name: "Root Account 2") }
+    let(:ra2_subaccount) { Account.create!(name: "Account", parent_account: root_account2) }
+
+    let(:user) { User.create! }
+
+    let(:expected_adminable) { [sub_account_b_1, sub_account_a, sub_account_a_1] }
+
+    before do
+      # Create all accounts:
+      sub_account_b_1
+      sub_account_a_1
+      ra2_subaccount
+
+      AccountUser.create!(account: sub_account_b_1, user:)
+      AccountUser.create!(account: sub_account_a, user:)
+      AccountUser.create!(account: ra2_subaccount, user:)
+    end
+
+    describe "#adminable_accounts_recursive" do
+      subject { user.adminable_accounts_recursive(starting_root_account: root_account) }
+
+      it "returns a scope with all subaccounts" do
+        expect(subject).to be_an ActiveRecord::Relation
+        expect(subject.to_a).to contain_exactly(*expected_adminable)
+      end
+    end
+
+    describe "#adminable_accounts_ids_recursive" do
+      subject { user.adminable_account_ids_recursive(starting_root_account: root_account) }
+
+      it "returns all subaccount ids" do
+        expect(subject).to contain_exactly(*expected_adminable.map(&:id))
+      end
+    end
+  end
+
+  describe "learning_object_visibilities" do
+    before :once do
+      student_in_course(active_all: true)
+    end
+
+    it "includes assignment and quiz ids with the selective_release_backend flag disabled" do
+      Account.site_admin.disable_feature!(:selective_release_backend)
+      expect(@user.learning_object_visibilities(@course).keys).to contain_exactly(:assignment_ids, :quiz_ids)
+    end
+
+    it "includes all learning object ids with the selective_release_backend flag enabled" do
+      Account.site_admin.enable_feature!(:selective_release_backend)
+      expect(@user.learning_object_visibilities(@course).keys).to contain_exactly(:assignment_ids, :quiz_ids, :context_module_ids, :discussion_topic_ids, :wiki_page_ids)
     end
   end
 end

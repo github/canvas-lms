@@ -20,10 +20,16 @@
 require_relative "../common"
 require_relative "../helpers/assignment_overrides"
 require_relative "page_objects/assignment_page"
+require_relative "../../helpers/selective_release_common"
 
 describe "assignment groups" do
   include AssignmentOverridesSeleniumHelper
+  include SelectiveReleaseCommon
   include_context "in-process server selenium tests"
+
+  before(:once) do
+    differentiated_modules_off
+  end
 
   context "as a teacher" do
     let(:due_at) { Time.zone.now }
@@ -81,7 +87,7 @@ describe "assignment groups" do
       assign = @course.assignments.create!(title: "due tomorrow", due_at: 2.days.from_now)
       get "/courses/#{@course.id}/assignments/#{assign.id}/edit"
 
-      fj(".date_field:first[data-date-type='due_at']").clear
+      fj(".date_field[data-date-type='due_at']:first").clear
       expect_new_page_load { submit_form("#edit_assignment_form") }
 
       expect(assign.reload.due_at).to be_nil

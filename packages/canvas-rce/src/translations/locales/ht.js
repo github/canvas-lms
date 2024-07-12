@@ -176,6 +176,9 @@ const locale = {
   "congruent_5a244acd": { "message": "Kongriyan" },
   "contains_311f37b7": { "message": "Kontni" },
   "content_1440204b": { "message": "Kontni" },
+  "content_in_the_editor_will_be_changed_press_cancel_d5bf3357": {
+    "message": "Kontni ki nan editè a ap chanje. Peze Cancel pou w ka konsève kontni orijinal la."
+  },
   "content_is_still_being_uploaded_if_you_continue_it_8f06d0cb": {
     "message": "Kontni an ap transfere toujou, si w kontinye li pa p entegre jan li ta dwe a."
   },
@@ -313,6 +316,8 @@ const locale = {
   "enter_at_least_3_characters_to_search_4f037ee0": {
     "message": "Antre omwen 3 karaktè pou ka chèche"
   },
+  "enter_replacement_text_17631bbc": { "message": "Antre tèks ranplasman an" },
+  "enter_search_text_26cb4459": { "message": "Antre tèks rechèch la" },
   "epsilon_54bb8afa": { "message": "Epsilon" },
   "epsilon_variant_d31f1e77": { "message": "Epsilon (Varyan)" },
   "equals_sign_c51bdc58": { "message": "Siy Egal" },
@@ -349,6 +354,8 @@ const locale = {
   "filename_text_preview_e41ca2d8": { "message": "{ filename } apèsi tèks" },
   "files_c300e900": { "message": "Fichye" },
   "files_index_af7c662b": { "message": "Endis Fichye" },
+  "find_8d605019": { "message": "Jwenn" },
+  "find_and_replace_6e345933": { "message": "Jwenn epi Ranplase" },
   "finish_bc343002": { "message": "Fini" },
   "fix_heading_hierarchy_f60884c4": { "message": "Fikse yerachi antèt" },
   "flat_music_76d5a5c3": { "message": "Plat (Mizik)" },
@@ -469,6 +476,7 @@ const locale = {
   "in_element_of_19ca2f33": { "message": "Nan (Eleman de)" },
   "increase_indent_6af90f7c": { "message": "Ogmante Endantasyon" },
   "indefinite_integral_6623307e": { "message": "Entegral Endefini" },
+  "index_of_max_80dcf7a5": { "message": "{ index } de { max }" },
   "indigo_2035fc55": { "message": "Indigo" },
   "inference_fed5c960": { "message": "Enferans" },
   "infinity_7a10f206": { "message": "Enfinite" },
@@ -632,6 +640,7 @@ const locale = {
   "nested_less_than_27d17e58": { "message": "Enferyè Enbrike" },
   "new_quiz_34aacba6": { "message": "Nouvo Quiz" },
   "next_40e12421": { "message": "Pwochen" },
+  "next_findtext_9d69f0fe": { "message": "Pwochen { findText }" },
   "no_accessibility_issues_were_detected_f8d3c875": {
     "message": "Nou pa t detekte okenn pwoblèm aksesibilite."
   },
@@ -661,6 +670,7 @@ const locale = {
   "no_quizzes_created_yet_1a2370b9": { "message": "Poko gen quiz ki kreye." },
   "no_quizzes_found_c80c537a": { "message": "Yo pa jwenn quiz." },
   "no_results_940393cf": { "message": "Okenn rezilta." },
+  "no_results_found_58717065": { "message": "Nou pa jwenn rezilta" },
   "no_results_found_for_filterterm_ad1b04c8": {
     "message": "Nou pa jwenn rezilta pou { filterTerm }"
   },
@@ -747,11 +757,16 @@ const locale = {
   "precedes_196b9aef": { "message": "Presedan" },
   "precedes_equal_20701e84": { "message": "Presedan Egalite" },
   "preformatted_d0670862": { "message": "Prefòmate" },
+  "prepend_findtext_append_8e0e769a": {
+    "message": "{ prepend }{ findText }{ append }"
+  },
   "prev_f82cbc48": { "message": "Anvan" },
   "preview_53003fd2": { "message": "Apèsi" },
   "preview_a3f8f854": { "message": "APÈSI" },
   "preview_in_overlay_ed772c46": { "message": "Apèsi an sipèpozisyon" },
   "preview_inline_9787330": { "message": "Apèsi an liy" },
+  "previous_bd2ac015": { "message": "Anvan" },
+  "previous_findtext_8dfbfd30": { "message": "Anvan { findText }" },
   "prime_917ea60e": { "message": "Premye" },
   "prime_numbers_13464f61": { "message": "Nonm Premye" },
   "product_39cf144f": { "message": "Pwodwi" },
@@ -780,11 +795,28 @@ const locale = {
   "religion_icon_246e0be1": { "message": "Ikòn Relijyon" },
   "remove_heading_style_5fdc8855": { "message": "Elimine stil antèt" },
   "remove_link_d1f2f4d0": { "message": "Elimine Lyen" },
+  "replace_all_d3d68b3": { "message": "Ranplase Tout" },
+  "replace_all_findtext_with_replacetext_da574b32": {
+    "message": "Ranplase tout { findText } pa { replaceText }"
+  },
   "replace_e61834a7": { "message": "Ranplase" },
+  "replace_findtext_with_replacetext_7b5c7fb3": {
+    "message": "Ranplase { findText } pa { replaceText }"
+  },
+  "replace_with_eeff01ad": { "message": "Ranplase ak" },
+  "replaced_alertfindtext_with_alertreplacetext_de5c1795": {
+    "message": "te ranplase { alertFindText } pa { alertReplaceText }"
+  },
+  "replaced_all_alertfindtext_with_alertreplacetext_83fdfe59": {
+    "message": "Te ranplase tout { alertFindText } pa { alertReplaceText }"
+  },
   "reset_95a81614": { "message": "Reinisyalize" },
   "resize_ec83d538": { "message": "Redimansyone" },
   "restore_auto_save_deccd84b": {
     "message": "Restore anrejistreman otomatik?"
+  },
+  "result_index_of_max_7db5ad8b": {
+    "message": "Rezilta { index } sou { max }."
   },
   "reverse_turnstile_does_not_yield_7558be06": {
     "message": "Tounikè Envèse (pa sede)"

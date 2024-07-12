@@ -246,6 +246,7 @@ export const AddressBookContainer = props => {
         _id: u._id,
         id: u.id,
         name: u.shortName,
+        pronouns: u.pronouns,
         commonCoursesInfo: props.includeCommonCourses
           ? getCommonCoursesInformation(u.commonCoursesConnection)
           : [],
@@ -297,6 +298,7 @@ export const AddressBookContainer = props => {
       addFilterHistory({
         context: {contextID: item.id, contextName: item.name, totalRecipientCount: item.userCount},
       })
+      setInputValue('')
     } else if (isSubmenu) {
       addFilterHistory({
         context: null,
@@ -338,6 +340,7 @@ export const AddressBookContainer = props => {
       addressBookMessages={props.addressBookMessages}
       isOnObserverSubmenu={isOnObserverSubmenu()}
       placeholder={props.placeholder}
+      addressBookLabel={props.addressBookLabel}
     />
   )
 }
@@ -383,6 +386,7 @@ AddressBookContainer.propTypes = {
    * placeholder text for AddressBook search text input
    */
   placeholder: PropTypes.string,
+  addressBookLabel: PropTypes.string,
 }
 
 AddressBookContainer.defaultProps = {

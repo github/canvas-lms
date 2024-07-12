@@ -355,7 +355,7 @@ class SubmissionsApiController < ApplicationController
   #   Determines whether ordered results are returned in ascending or descending
   #   order.  Defaults to "ascending".  Doesn't affect results for "grouped" mode.
   #
-  # @argument include[] [String, "submission_history"|"submission_comments"|"rubric_assessment"|"assignment"|"total_scores"|"visibility"|"course"|"user"]
+  # @argument include[] [String, "submission_history"|"submission_comments"|"rubric_assessment"|"assignment"|"total_scores"|"visibility"|"course"|"user"|"sub_assignment_submissions"]
   #   Associations to include with the group. `total_scores` requires the
   #   `grouped` argument.
   #
@@ -418,7 +418,7 @@ class SubmissionsApiController < ApplicationController
       end
     end
 
-    if student_ids.is_a?(Array) && student_ids.length > Api.max_per_page
+    if student_ids.is_a?(Array) && student_ids.length > Api::MAX_PER_PAGE
       return render json: { error: "too many students" }, status: :bad_request
     end
 
@@ -451,6 +451,10 @@ class SubmissionsApiController < ApplicationController
     includes = Array(params[:include])
 
     assignment_scope = @context.assignments.published.preload(:quiz, :discussion_topic, :post_policy)
+    if includes.include?("sub_assignment_submissions") && @context.root_account.feature_enabled?(:discussion_checkpoints)
+      assignment_scope = assignment_scope.preload(:sub_assignments)
+    end
+
     assignment_scope = assignment_scope.where(post_to_sis: true) if value_to_boolean(params[:post_to_sis])
     requested_assignment_ids = Array(params[:assignment_ids]).map(&:to_i)
     if requested_assignment_ids.present?
@@ -470,7 +474,14 @@ class SubmissionsApiController < ApplicationController
     end
 
     assignment_visibilities = {}
-    assignment_visibilities = AssignmentStudentVisibility.users_with_visibility_by_assignment(course_id: @context.id, user_id: student_ids, assignment_id: assignments.map(&:id))
+    assignment_visibilities = if Account.site_admin.feature_enabled?(:selective_release_backend)
+                                unless student_ids.is_a?(Array)
+                                  student_ids = student_ids.pluck(:user_id)
+                                end
+                                AssignmentVisibility::AssignmentVisibilityService.users_with_visibility_by_assignment_for_users(course_id: @context.id, user_ids: student_ids, assignment_ids: assignments.map(&:id))
+                              else
+                                AssignmentStudentVisibility.users_with_visibility_by_assignment(course_id: @context.id, user_id: student_ids, assignment_id: assignments.map(&:id))
+                              end
 
     # unless teacher, filter assignments down to only assignments current user can see
     unless @context.grants_any_right?(@current_user, :read_as_admin, :manage_grades)
@@ -837,7 +848,7 @@ class SubmissionsApiController < ApplicationController
     end
 
     @user ||= get_user_considering_section(params[:user_id])
-    unless @assignment.assigned?(@user)
+    unless @assignment.assigned?(@user) || @assignment.students_with_visibility.include?(@user)
       render_unauthorized_action
       return
     end
@@ -850,6 +861,8 @@ class SubmissionsApiController < ApplicationController
                  end
 
     if authorized
+      track_update_metrics(@submission, params)
+
       submission = { grader: @current_user }
       if params[:submission].is_a?(ActionController::Parameters)
         submission[:grade] = params[:submission].delete(:posted_grade)
@@ -866,6 +879,10 @@ class SubmissionsApiController < ApplicationController
 
         if params[:submission].key?(:sticker)
           submission[:sticker] = params[:submission].delete(:sticker)
+        end
+
+        if params.key?(:sub_assignment_tag) && @domain_root_account&.feature_enabled?(:discussion_checkpoints)
+          submission[:sub_assignment_tag] = params.delete(:sub_assignment_tag)
         end
 
         submission[:provisional] = value_to_boolean(params[:submission][:provisional])
@@ -980,13 +997,17 @@ class SubmissionsApiController < ApplicationController
       bulk_load_attachments_and_previews([@submission])
 
       includes = %w[submission_comments]
-      includes.concat(Array.wrap(params[:include]) & ["visibility"])
+      includes.concat(Array.wrap(params[:include]) & %w[visibility sub_assignment_submissions])
       includes << "provisional_grades" if submission[:provisional]
 
       visiblity_included = includes.include?("visibility")
       if visiblity_included
         user_ids = @submissions.map(&:user_id)
-        users_with_visibility = AssignmentStudentVisibility.where(course_id: @context, assignment_id: @assignment, user_id: user_ids).pluck(:user_id).to_set
+        users_with_visibility = if Account.site_admin.feature_enabled?(:selective_release_backend)
+                                  AssignmentVisibility::AssignmentVisibilityService.assignment_visible_to_students_in_course(course_ids: [@context], assignment_ids: [@assignment.id], user_ids:).map(&:user_id)
+                                else
+                                  AssignmentStudentVisibility.where(course_id: @context, assignment_id: @assignment, user_id: user_ids).pluck(:user_id).to_set
+                                end
       end
       json = submission_json(
         @submission,
@@ -1223,23 +1244,34 @@ class SubmissionsApiController < ApplicationController
       assignment_ids = Array(params[:assignment_ids])
 
       student_scope = context.students_visible_to(@current_user, include: :inactive)
-      student_scope = student_scope
-                      .preload(:assignment_student_visibilities)
-                      .joins(:assignment_student_visibilities)
-                      .where(assignment_student_visibilities: {
-                               assignment_id: assignment_ids,
-                               course_id: @context.id
-                             })
-                      .distinct
-                      .order(:id)
 
+      if Account.site_admin.feature_enabled?(:selective_release_backend)
+        visible_assignment_user_ids = AssignmentVisibility::AssignmentVisibilityService.assignments_visible_in_course(assignment_ids:, course_id: context.id).map(&:user_id)
+        student_scope = student_scope.where(id: visible_assignment_user_ids).distinct.order(:id)
+      else
+        student_scope = student_scope
+                        .preload(:assignment_student_visibilities)
+                        .joins(:assignment_student_visibilities)
+                        .where(assignment_student_visibilities: {
+                                 assignment_id: assignment_ids,
+                                 course_id: @context.id
+                               })
+                        .distinct
+                        .order(:id)
+      end
       students = Api.paginate(student_scope, self, api_v1_multiple_assignments_gradeable_students_url(@context))
 
       student_displays = students.map do |student|
         user_display = user_display_json(student, @context)
-        user_display["assignment_ids"] = student.assignment_student_visibilities
-                                                .select { |visibility| assignment_ids.include?(visibility.assignment_id.to_s) }
-                                                .map(&:assignment_id)
+        if Account.site_admin.feature_enabled?(:selective_release_backend)
+          visible_assignment_ids = AssignmentVisibility::AssignmentVisibilityService.assignments_visible_to_student_by_assignment(assignment_ids:, user_id: student.id).map(&:assignment_id)
+          user_display["assignment_ids"] = visible_assignment_ids
+        else
+          user_display["assignment_ids"] = student.assignment_student_visibilities
+                                                  .select { |visibility| assignment_ids.include?(visibility.assignment_id.to_s) }
+                                                  .map(&:assignment_id)
+        end
+
         user_display
       end
 
@@ -1428,6 +1460,7 @@ class SubmissionsApiController < ApplicationController
     user = User.find(user_id)
     course = Course.find(course_id)
     submissions = course.submissions.where(user:)
+    ContentParticipation.add_missing_content_participation_items(course, user)
     ids = ContentParticipation.mark_all_as_read_for_user(user, submissions, course)
 
     opts = { type: :submissions_clear_unread }
@@ -1634,11 +1667,19 @@ class SubmissionsApiController < ApplicationController
     submissions_scope.find_in_batches(batch_size: 100) do |submission_batch|
       bulk_load_attachments_and_previews(submission_batch)
       user_ids = submission_batch.map(&:user_id)
-      users_with_visibility = AssignmentStudentVisibility.where(
-        course_id: @context,
-        assignment_id: @assignment,
-        user_id: user_ids
-      ).pluck(:user_id).to_set
+      users_with_visibility = if Account.site_admin.feature_enabled?(:selective_release_backend)
+                                AssignmentVisibility::AssignmentVisibilityService.assignment_visible_to_students_in_course(
+                                  course_ids: [@context.id],
+                                  assignment_ids: [@assignment.id],
+                                  user_ids:
+                                ).map(&:user_id)
+                              else
+                                AssignmentStudentVisibility.where(
+                                  course_id: @context,
+                                  assignment_id: @assignment,
+                                  user_id: user_ids
+                                ).pluck(:user_id).to_set
+                              end
 
       submission_array = submission_batch.map do |submission|
         submission.visible_to_user = users_with_visibility.include?(submission.user_id)
@@ -1655,5 +1696,20 @@ class SubmissionsApiController < ApplicationController
     @assignment = api_find(@context.assignments.active, params[:assignment_id])
     @user = get_user_considering_section(params[:user_id])
     @submission = @assignment.submission_for_student(@user)
+  end
+
+  def track_update_metrics(submission, params)
+    custom_grade_status_id = params.dig(:submission, :custom_grade_status_id).to_s
+    if !custom_grade_status_id.empty? && custom_grade_status_id != submission.custom_grade_status_id.to_s
+      InstStatsd::Statsd.increment("custom_grade_status.applied_to.submission")
+    end
+
+    if params.dig(:submission, :posted_grade)
+      if params["originator"] == "individual_gradebook"
+        InstStatsd::Statsd.increment("individual_gradebook.submission.posted_grade")
+      elsif params["originator"] == "gradebook"
+        InstStatsd::Statsd.increment("gradebook.submission.posted_grade")
+      end
+    end
   end
 end

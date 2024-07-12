@@ -17,7 +17,9 @@
  */
 
 import React from 'react'
+import DateHelper from '@canvas/datetime/dateHelper'
 import {ASSIGNMENT_SORT_OPTIONS, ASSIGNMENT_NOT_APPLICABLE, ASSIGNMENT_STATUS} from './constants'
+import GradeFormatHelper from '@canvas/grading/GradeFormatHelper'
 import {IconCheckLine, IconXLine} from '@instructure/ui-icons'
 import {Pill} from '@instructure/ui-pill'
 
@@ -39,7 +41,11 @@ export const getGradingPeriodID = () => {
   return fromUrl || ENV.current_grading_period_id
 }
 
-export const filteredAssignments = (data, calculateOnlyGradedAssignments = false) => {
+export const filteredAssignments = (
+  data,
+  calculateOnlyGradedAssignments = false,
+  activeWhatIfScores = []
+) => {
   let assignments =
     data?.assignmentsConnection?.nodes.filter(assignment => {
       return !assignment?.submissionsConnection?.nodes[0]?.hideGradeFromStudent
@@ -52,7 +58,9 @@ export const filteredAssignments = (data, calculateOnlyGradedAssignments = false
 
   if (calculateOnlyGradedAssignments) {
     assignments = assignments.filter(assignment => {
-      const status = getAssignmentStatus(assignment)
+      const status = activeWhatIfScores.includes(assignment._id)
+        ? getAssignmentStatus({submissionsConnection: {nodes: [{gradingStatus: 'graded'}]}})
+        : getAssignmentStatus(assignment)
       return status.shouldConsiderAsGraded
     })
   }
@@ -130,26 +138,40 @@ export const submissionCommentsPresent = assignment => {
 }
 
 export const getAssignmentStatus = assignment => {
-  if (assignment?.submissionsConnection?.nodes[0]?.gradingStatus === 'excused') {
-    return ASSIGNMENT_STATUS.EXCUSED
-  } else if (assignment?.dropped) {
-    return ASSIGNMENT_STATUS.DROPPED
-  } else if (assignment?.gradingType === 'not_graded') {
-    return ASSIGNMENT_STATUS.NOT_GRADED
-  } else if (assignment?.submissionsConnection?.nodes?.length === 0) {
-    return getAssignmentNoSubmissionStatus(assignment?.dueAt)
-  } else if (assignment?.submissionsConnection?.nodes[0]?.late) {
-    const gradingStatus = assignment?.submissionsConnection?.nodes[0]?.gradingStatus
+  const {submissionsConnection, dropped, gradingType, dueAt} = assignment || {}
+
+  const latestSubmission = submissionsConnection?.nodes?.[0]
+  const {gradingStatus, late, customGradeStatus, state, submittedAt} = latestSubmission || {}
+
+  let status = null
+
+  if (gradingStatus === 'excused') {
+    status = ASSIGNMENT_STATUS.EXCUSED
+  } else if (dropped) {
+    status = ASSIGNMENT_STATUS.DROPPED
+  } else if (gradingType === 'not_graded') {
+    status = ASSIGNMENT_STATUS.NOT_GRADED
+  } else if (state === 'unsubmitted') {
+    status = getAssignmentNoSubmissionStatus(dueAt)
+  } else if (late) {
     if (gradingStatus === 'graded') {
-      return ASSIGNMENT_STATUS.LATE_GRADED
+      status = ASSIGNMENT_STATUS.LATE_GRADED
     } else {
-      return ASSIGNMENT_STATUS.LATE_NOT_GRADED
+      status = ASSIGNMENT_STATUS.LATE_NOT_GRADED
     }
-  } else if (assignment?.submissionsConnection?.nodes[0]?.gradingStatus === 'graded') {
-    return ASSIGNMENT_STATUS.GRADED
+  } else if (gradingStatus === 'graded') {
+    status = ASSIGNMENT_STATUS.GRADED
+  } else if (state === 'submitted') {
+    status = {id: 'submitted', label: submittedAt}
   } else {
-    return ASSIGNMENT_STATUS.NOT_GRADED
+    status = ASSIGNMENT_STATUS.NOT_SUBMITTED
   }
+
+  if (customGradeStatus) {
+    status = {...status, label: customGradeStatus, color: 'primary'}
+  }
+
+  return status
 }
 
 export const getAssignmentNoSubmissionStatus = dueDate => {
@@ -164,6 +186,11 @@ export const getAssignmentNoSubmissionStatus = dueDate => {
 
 export const getDisplayStatus = assignment => {
   const status = getAssignmentStatus(assignment)
+
+  if (status.id === 'submitted') {
+    return DateHelper.formatDatetimeForDisplay(status.label)
+  }
+
   return <Pill color={status.color}>{status.label}</Pill>
 }
 
@@ -179,7 +206,7 @@ export const getDisplayScore = (assignment, gradingStandard) => {
   const total = getAssignmentTotalPoints(assignment)
 
   if (
-    assignment?.submissionsConnection?.nodes?.length === 0 ||
+    assignment?.submissionsConnection?.nodes[0]?.state === 'unsubmitted' ||
     assignment?.submissionsConnection?.nodes[0]?.gradingStatus === 'needs_grading' ||
     assignment?.submissionsConnection?.nodes[0]?.gradingStatus === 'excused'
   ) {
@@ -193,12 +220,17 @@ export const getDisplayScore = (assignment, gradingStandard) => {
       assignment?.gradingType === 'percent' ||
       assignment?.gradingType === 'points')
   ) {
-    return getAssignmentLetterGrade(assignment, gradingStandard)
+    const letterGrade = getAssignmentLetterGrade(assignment, gradingStandard)
+    return GradeFormatHelper.replaceDashWithMinus(letterGrade)
   } else if (
     assignment?.gradingType === 'letter_grade' ||
     assignment?.gradingType === 'gpa_scale'
   ) {
-    return getAssignmentLetterGrade(assignment, gradingStandard)
+    const letterGrade = getAssignmentLetterGrade(
+      assignment,
+      assignment?.gradingStandard ? assignment?.gradingStandard : gradingStandard
+    )
+    return GradeFormatHelper.replaceDashWithMinus(letterGrade)
   } else if (assignment?.gradingType === 'percentage') {
     return `${getAssignmentPercentage(assignment)}%`
   } else if (assignment?.gradingType === 'pass_fail') {
@@ -229,7 +261,7 @@ export const scorePercentageToLetterGrade = (score, gradingStandard) => {
       letter = gradeLevel.letterGrade
     }
   })
-  return letter
+  return GradeFormatHelper.replaceDashWithMinus(letter)
 }
 
 // **************************** DROP ASSIGNMENT FROM ASSIGNMENT GROUP ****************************
@@ -324,7 +356,7 @@ export const getAssignmentPercentage = assignment => {
 export const getAssignmentLetterGrade = (assignment, gradingStandard) => {
   if (
     assignment?.submissionsConnection?.nodes === undefined ||
-    assignment?.submissionsConnection?.nodes.length === 0
+    assignment?.submissionsConnection?.nodes[0]?.state === 'unsubmitted'
   )
     return null
 
@@ -483,7 +515,7 @@ export const getCourseTotalPoints = assignments => {
     assignments?.reduce((total, assignment) => {
       if (
         !(assignment?.submissionsConnection?.nodes[0]?.gradingStatus === 'excused') &&
-        assignment?.submissionsConnection?.nodes.length > 0
+        assignment?.submissionsConnection?.nodes[0]?.state !== 'unsubmitted'
       ) {
         total += getAssignmentTotalPoints(assignment)
       }
@@ -497,7 +529,7 @@ export const getCourseEarnedPoints = (assignments = []) => {
     assignments?.reduce((total, assignment) => {
       if (
         !(assignment?.submissionsConnection?.nodes[0]?.gradingStatus === 'excused') &&
-        assignment?.submissionsConnection?.nodes.length > 0
+        assignment?.submissionsConnection?.nodes[0]?.state !== 'unsubmitted'
       ) {
         total += getAssignmentEarnedPoints(assignment)
       }

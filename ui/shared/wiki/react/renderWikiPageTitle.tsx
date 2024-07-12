@@ -16,9 +16,10 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, {ReactNode, useEffect, useRef, useState} from 'react'
+import React, {useEffect, useRef, useState} from 'react'
 import ReactDOM from 'react-dom'
-import {TextInput, TextInputProps} from '@instructure/ui-text-input'
+import {TextInput} from '@instructure/ui-text-input'
+import type {TextInputProps} from '@instructure/ui-text-input'
 import {Text} from '@instructure/ui-text'
 import {View} from '@instructure/ui-view'
 import {Heading} from '@instructure/ui-heading'
@@ -37,8 +38,8 @@ interface ComponentProps {
 }
 
 export interface Message {
-  text: ReactNode | string
-  type: string
+  text: React.ReactNode
+  type: 'error' | 'hint' | 'success' | 'screenreader-only'
 }
 
 interface FormDataError {
@@ -59,11 +60,11 @@ const EditableContent = (props: Props) => {
   useEffect(() => {
     const handleSubmit = (evt?: JQuery.Event) => {
       evt?.stopPropagation()
-      const data = props.viewElement.getFormData()
+      const data = props.viewElement.getFormData<Record<string, unknown>>()
       const dataErrors = props.validationCallback(data)
       const titleErrors = dataErrors?.title || []
       if (titleErrors.length > 0) {
-        const parsedErrors = titleErrors.map((error: FormDataError) => ({
+        const parsedErrors: Message[] = titleErrors.map((error: FormDataError) => ({
           text: error.message,
           type: 'error',
         }))
@@ -103,6 +104,7 @@ const EditableContent = (props: Props) => {
   ) : (
     <View as="div" maxWidth="356px">
       <TextInput
+        id="wikipage-title-input"
         data-testid="wikipage-title-input"
         inputRef={(ref: HTMLInputElement | null) => (inputRef.current = ref)}
         messages={messages}
@@ -119,13 +121,15 @@ const EditableContent = (props: Props) => {
 }
 
 const renderWikiPageTitle = (props: Props) => {
-  const readOnlyContent = (
-    <Heading data-testid="wikipage-readonly-title" level="h2">
-      {props.defaultValue}
-    </Heading>
-  )
+  const readOnlyContent = () => {
+    return (
+      <Heading data-testid="wikipage-readonly-title" level="h2">
+        {props.defaultValue}
+      </Heading>
+    )
+  }
 
-  const titleComponent = props.canEdit ? <EditableContent {...props} /> : readOnlyContent
+  const titleComponent = props.canEdit ? <EditableContent {...props} /> : readOnlyContent()
   const wikiPageTitleContainer = document.getElementById('edit_wikipage_title_container')
   if (wikiPageTitleContainer) {
     ReactDOM.render(titleComponent, wikiPageTitleContainer)

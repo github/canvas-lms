@@ -101,7 +101,7 @@ describe "editing a quiz" do
         expect { @quiz.quiz_questions.count }.to become(1)
       end
 
-      it "shows the speed grader link" do
+      it "shows the SpeedGrader link" do
         get "/courses/#{@course.id}/quizzes/#{@quiz.id}/edit"
         f(".al-trigger").click
         expect(f(".speed-grader-link-quiz")).to be_displayed
@@ -213,6 +213,18 @@ describe "editing a quiz" do
       expect(f("#quiz_edit_actions #cancel_button").attribute("href")).to eq(course_quiz_url(@course, @quiz))
     end
 
+    it "doesn't allow XSS via the return_to query param on Save" do
+      # NOTE: the _=1 is required because the deparam method does not correctly parse the first query param
+      # canvas-lms/packages/deparam/index.js
+      get "/courses/#{@course.id}/quizzes/#{@quiz.id}/edit?_=1&return_to=javascript%3Aalert('sadness')"
+
+      test_text = "changed description for XSS test"
+      type_in_tiny "#quiz_description", test_text, clear: true
+
+      click_save_settings_button
+      expect(alert_present?).to be_falsey
+    end
+
     context "in a paced course" do
       before(:once) do
         @course.enable_course_paces = true
@@ -234,7 +246,13 @@ describe "editing a quiz" do
         item = add_quiz_to_module
 
         get "/courses/#{@course.id}/quizzes/#{item.content_id}/edit"
-        expect(f(quiz_edit_form)).to contain_css(due_date_container)
+
+        if Account.site_admin.feature_enabled?(:selective_release_ui_api)
+          expect(manage_assign_to_button).to be_displayed
+        else
+          expect(f(quiz_edit_form)).to contain_css(due_date_container)
+        end
+
         expect(f(quiz_edit_form)).not_to contain_css(course_pacing_notice)
       end
     end

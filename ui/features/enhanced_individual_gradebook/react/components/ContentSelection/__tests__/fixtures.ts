@@ -15,8 +15,8 @@
  * You should have received a copy of the GNU Affero General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-import {SortableAssignment} from 'features/enhanced_individual_gradebook/types'
-import {ContentSelectionComponentProps} from '..'
+import type {SortableAssignment} from 'features/enhanced_individual_gradebook/types'
+import type {ContentSelectionComponentProps} from '..'
 import {defaultGradebookOptions} from '../../__tests__/fixtures'
 
 export const defaultContentSelectionProps: ContentSelectionComponentProps = {
@@ -55,6 +55,7 @@ export const defaultSortableAssignments: SortableAssignment[] = [
     assignmentGroupPosition: 1,
     sortableName: 'assignment 1',
     sortableDueDate: 20230704,
+    inClosedGradingPeriod: false,
   },
   {
     id: '2',
@@ -81,6 +82,7 @@ export const defaultSortableAssignments: SortableAssignment[] = [
     assignmentGroupPosition: 2,
     sortableName: 'assignment 2',
     sortableDueDate: 20230705,
+    inClosedGradingPeriod: false,
   },
   {
     id: '3',
@@ -107,6 +109,7 @@ export const defaultSortableAssignments: SortableAssignment[] = [
     assignmentGroupPosition: 3,
     sortableName: 'assignment 3',
     sortableDueDate: 20230705,
+    inClosedGradingPeriod: false,
   },
 ]
 

@@ -167,7 +167,12 @@ CancelAttemptButton.propTypes = {
   submission: PropTypes.object.isRequired,
 }
 
-const SubmissionManager = ({assignment, submission, reviewerSubmission, onSuccessfulPeerReview}) => {
+const SubmissionManager = ({
+  assignment,
+  submission,
+  reviewerSubmission,
+  onSuccessfulPeerReview,
+}) => {
   const [draftStatus, setDraftStatus] = useState(null)
   const [editingDraft, setEditingDraft] = useState(false)
   const [focusAttemptOnInit, setFocusAttemptOnInit] = useState(false)
@@ -187,6 +192,7 @@ const SubmissionManager = ({assignment, submission, reviewerSubmission, onSucces
   const [peerReviewHeaderMargin, setPeerReviewHeaderMargin] = useState(null)
 
   const displayedAssessment = useStore(state => state.displayedAssessment)
+  const isSavingRubricAssessment = useStore(state => state.isSavingRubricAssessment)
 
   const {setOnSuccess, setOnFailure} = useContext(AlertManagerContext)
   const {
@@ -277,6 +283,16 @@ const SubmissionManager = ({assignment, submission, reviewerSubmission, onSucces
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [submission.attempt])
+
+  useEffect(() => {
+    if (isSavingRubricAssessment && ENV.FEATURES.enhanced_rubrics) {
+      if (isRubricComplete(displayedAssessment)) {
+        handleSubmitPeerReviewButton()
+      } else {
+        setOnFailure(I18n.t('Invalid Rubric Submission'))
+      }
+    }
+  }, [isSavingRubricAssessment])
 
   const isRubricComplete = assessment => {
     return (
@@ -454,7 +470,8 @@ const SubmissionManager = ({assignment, submission, reviewerSubmission, onSucces
       assignment.env.peerReviewModeEnabled &&
       assignment.env.peerReviewAvailable &&
       hasRubrics &&
-      !hasSubmittedAssessment()
+      !hasSubmittedAssessment() &&
+      !ENV.FEATURES.enhanced_rubrics
     )
   }
 
@@ -555,6 +572,7 @@ const SubmissionManager = ({assignment, submission, reviewerSubmission, onSucces
       setOnFailure(I18n.t('Error submitting rubric'))
     }
     setIsSubmitting(false)
+    useStore.setState({isSavingRubricAssessment: false})
   }
 
   const handleSuccess = (message = I18n.t('Submission sent')) => {

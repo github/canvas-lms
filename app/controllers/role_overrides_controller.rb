@@ -74,6 +74,11 @@
 #       "id": "Role",
 #       "description": "",
 #       "properties": {
+#         "id": {
+#           "description": "The id of the role",
+#           "example": 1,
+#           "type": "integer"
+#          },
 #         "label": {
 #           "description": "The label of the role.",
 #           "example": "New Role",
@@ -89,8 +94,13 @@
 #           "example": "AccountMembership",
 #           "type": "string"
 #         },
+#         "is_account_role": {
+#           "description": "Whether this role applies to account memberships (i.e., not linked to an enrollment in a course).",
+#           "example": true,
+#           "type": "boolean"
+#         },
 #         "account": {
-#           "description": "JSON representation of the account the role is in.",
+#           "description": "JSON representation of the account the role is defined in.",
 #           "example": {"id": 1019, "name": "CGNU", "parent_account_id": 73, "root_account_id": 1, "sis_account_id": "cgnu"},
 #           "type": "object",
 #           "$ref": "Account"
@@ -99,6 +109,16 @@
 #           "description": "The state of the role: 'active', 'inactive', or 'built_in'",
 #           "example": "active",
 #           "type": "string"
+#         },
+#         "created_at": {
+#           "description": "The date and time the role was created.",
+#           "example": "2020-12-01T16:20:00-06:00",
+#           "type": "datetime"
+#         },
+#         "last_updated_at": {
+#           "description": "The date and time the role was last updated.",
+#           "example": "2023-10-31T23:59:00-06:00",
+#           "type": "datetime"
 #         },
 #         "permissions": {
 #           "description": "A dictionary of permissions keyed by name (see permissions input parameter in the 'Create a role' API).",
@@ -151,16 +171,14 @@ class RoleOverridesController < ApplicationController
   def index
     if authorized_action(@context, @current_user, :manage_role_overrides)
 
-      account_role_data = []
       preloaded_overrides = RoleOverride.preload_overrides(@context, @context.available_account_roles)
-      @context.available_account_roles.each do |role|
-        account_role_data << role_json(@context, role, @current_user, session, preloaded_overrides:)
+      account_role_data = @context.available_account_roles.map do |role|
+        role_json(@context, role, @current_user, session, preloaded_overrides:)
       end
 
-      course_role_data = []
       preloaded_overrides = RoleOverride.preload_overrides(@context, @context.available_course_roles)
-      @context.available_course_roles.each do |role|
-        course_role_data << role_json(@context, role, @current_user, session, preloaded_overrides:)
+      course_role_data = @context.available_course_roles.map do |role|
+        role_json(@context, role, @current_user, session, preloaded_overrides:)
       end
 
       js_env({
@@ -172,9 +190,11 @@ class RoleOverridesController < ApplicationController
                ACCOUNT_ENABLE_ALERTS: @context.settings[:enable_alerts]
              })
 
+      add_crumb t "Permissions"
       js_bundle :permissions
       css_bundle :permissions
       set_active_tab "permissions"
+      page_has_instui_topnav
     end
   end
 
@@ -277,6 +297,7 @@ class RoleOverridesController < ApplicationController
   #     import_outcomes                  -- [ TaDo] Learning Outcomes - import
   #     lti_add_edit                     -- [ TAD ] LTI - add / edit / delete
   #     manage_account_banks             -- [ td  ] Item Banks - manage account
+  #     share_banks_with_subaccounts     -- [ tad ] Item Banks - share with subaccounts
   #     manage_assignments               -- [ TADo] Assignments and Quizzes - add / edit / delete (deprecated)
   #     Manage Assignments and Quizzes granular permissions
   #         manage_assignments_add       -- [ TADo] Assignments and Quizzes - add

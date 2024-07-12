@@ -16,11 +16,10 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 %>
 
-<% add_crumb t(:page_title, "Authentication Settings") %>
 <% set_active_tab "authentication" %>
 <%- css_bundle(:federated_attributes) %>
 <% provide :page_title do %>
-  <%= t(:page_title, "Authentication Settings")%>
+  <%= @page_title %>
 <% end %>
 
 <% provide :right_side do %>
@@ -65,17 +64,6 @@
          friendlyname: @current_user.last_name_first_or_unnamed,
          url: context_url(@account, :context_user_url, @current_user)) %>
 </p>
-
-<% if @presenter.ips_configured? %>
-  <p>
-    <%= t(:ip_address_list_description,
-        "If you are using an authentication service that requires the Canvas "\
-        "servers to contact your servers directly, such as LDAP, you'll need "\
-        "to make sure that your servers can accept connections from these "\
-        "IP addresses:") %>
-    <pre> <%= @presenter.ip_list %> </pre>
-  </p>
-<% end %>
 
 <%= render partial: 'sso_settings_form',
            locals: { presenter: @presenter, account: @account }%>

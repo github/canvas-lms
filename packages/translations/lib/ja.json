@@ -60,7 +60,7 @@
         "message": "アルファ"
     },
     "alphabetical_55b5b4e0": {
-        "message": "アルファベットで"
+        "message": "名前順"
     },
     "alt_attribute_text_should_not_contain_more_than_12_e21d4040": {
         "message": "代替属性テキストは120文字を超えてはなりません。"
@@ -359,6 +359,9 @@
     "content_1440204b": {
         "message": "コンテンツ"
     },
+    "content_in_the_editor_will_be_changed_press_cancel_d5bf3357": {
+        "message": "エディタ内のコンテンツは変更されます。「キャンセル」を押すとオリジナルのコンテンツが保持されます。"
+    },
     "content_is_still_being_uploaded_if_you_continue_it_8f06d0cb": {
         "message": "コンテンツはまだアップロード中です。続行すると適切に埋め込まれません。"
     },
@@ -459,13 +462,13 @@
         "message": "デンマーク語"
     },
     "date_added_ed5ad465": {
-        "message": "追加された日付"
+        "message": "追加された日付順"
     },
     "decorative_icon_9a7f3fc3": {
         "message": "装飾アイコン"
     },
     "decorative_image_fde98579": {
-        "message": "装飾の画像"
+        "message": "飾りの画像"
     },
     "decorative_type_upper_f2c95e3": {
         "message": "装飾的{ TYPE_UPPER }"
@@ -686,6 +689,12 @@
     "enter_at_least_3_characters_to_search_4f037ee0": {
         "message": "検索する語を3文字以上入力してください"
     },
+    "enter_replacement_text_17631bbc": {
+        "message": "代替テキストを入力する"
+    },
+    "enter_search_text_26cb4459": {
+        "message": "検索テキストを入力する"
+    },
     "epsilon_54bb8afa": {
         "message": "エプシロン"
     },
@@ -782,8 +791,14 @@
     "filipino_33339264": {
         "message": "フィリピン語"
     },
+    "find_8d605019": {
+        "message": "検索"
+    },
+    "find_and_replace_6e345933": {
+        "message": "検索して置換"
+    },
     "finish_bc343002": {
-        "message": "フィニッシュ"
+        "message": "完了"
     },
     "finnish_4df2923d": {
         "message": "フィンランド語"
@@ -1026,7 +1041,7 @@
         "message": "画像"
     },
     "image_filenames_should_not_be_used_as_the_alt_attr_bcfd7780": {
-        "message": "画像ファイル名は、画像コンテンツを記述する alt 属性として使用しないでください。"
+        "message": "画像ファイル名を、画像の代替テキストとして使用しないでください。"
     },
     "image_options_5412d02c": {
         "message": "画像オプション"
@@ -1057,6 +1072,9 @@
     },
     "indefinite_integral_6623307e": {
         "message": "不定積分"
+    },
+    "index_of_max_80dcf7a5": {
+        "message": "{ index } / { max }"
     },
     "indigo_2035fc55": {
         "message": "インディゴ"
@@ -1430,6 +1448,9 @@
     "next_40e12421": {
         "message": "次へ"
     },
+    "next_findtext_9d69f0fe": {
+        "message": "次{ findText }"
+    },
     "no_accessibility_issues_were_detected_f8d3c875": {
         "message": "アクセシビリティの問題は検出されませんでした。"
     },
@@ -1486,6 +1507,9 @@
     },
     "no_results_940393cf": {
         "message": "結果がありません。"
+    },
+    "no_results_found_58717065": {
+        "message": "結果が見つかりませんでした"
     },
     "no_results_found_for_filterterm_ad1b04c8": {
         "message": "{ filterTerm }の結果が見つかりませんでした"
@@ -1685,6 +1709,9 @@
     "preformatted_d0670862": {
         "message": "フォーマット済み"
     },
+    "prepend_findtext_append_8e0e769a": {
+        "message": "{ prepend }{ findText }{ append }"
+    },
     "prev_f82cbc48": {
         "message": "前へ"
     },
@@ -1699,6 +1726,12 @@
     },
     "preview_inline_9787330": {
         "message": "インラインでのプレビュー"
+    },
+    "previous_bd2ac015": {
+        "message": "前"
+    },
+    "previous_findtext_8dfbfd30": {
+        "message": "前{ findText }"
     },
     "prime_917ea60e": {
         "message": "素数"
@@ -1772,8 +1805,26 @@
     "remove_link_d1f2f4d0": {
         "message": "リンクの削除"
     },
+    "replace_all_d3d68b3": {
+        "message": "すべて置換する"
+    },
+    "replace_all_findtext_with_replacetext_da574b32": {
+        "message": "すべての{ findText }を{ replaceText }に置き換える"
+    },
     "replace_e61834a7": {
         "message": "置換"
+    },
+    "replace_findtext_with_replacetext_7b5c7fb3": {
+        "message": "{ findText }を{ replaceText }に置き換える"
+    },
+    "replace_with_eeff01ad": {
+        "message": "（）と置換する"
+    },
+    "replaced_alertfindtext_with_alertreplacetext_de5c1795": {
+        "message": "{ alertFindText }を{ alertReplaceText }に置き換えた"
+    },
+    "replaced_all_alertfindtext_with_alertreplacetext_83fdfe59": {
+        "message": "すべての{ alertFindText }を{ alertReplaceText }に置き換えた"
     },
     "reset_95a81614": {
         "message": "リセット"
@@ -1783,6 +1834,9 @@
     },
     "restore_auto_save_deccd84b": {
         "message": "自動保存したものを復元しますか？"
+    },
+    "result_index_of_max_7db5ad8b": {
+        "message": "{ index } / { max }の結果。"
     },
     "reverse_turnstile_does_not_yield_7558be06": {
         "message": "逆向きの回転式改札(イールドなし)"
@@ -2313,7 +2367,7 @@
         "message": "ユニオン"
     },
     "unpublished_dfd8801": {
-        "message": "未公開"
+        "message": "非公開"
     },
     "untitled_16aa4f2b": {
         "message": "無題"
@@ -2436,7 +2490,7 @@
         "message": "スクリーンリーダーで使用される{ TYPE }"
     },
     "used_by_screen_readers_to_describe_the_content_of__b1e76d9e": {
-        "message": "スクリーンリーダーが画像のコンテンツを説明するのに使用します"
+        "message": "読み上げ機能で使用される代替テキスト"
     },
     "used_by_screen_readers_to_describe_the_video_37ebad25": {
         "message": "ビデオを説明する際にスクリーンリーダーが使用"

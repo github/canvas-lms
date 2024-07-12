@@ -16,11 +16,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 %>
 <%
-  # this is superficial and should be fine, since this is only showing data, not saving data
-  entered_grade = @assignment.restrict_quantitative_data?(@current_user) ?
-    @assignment.score_to_grade(@submission.score, nil, true)
-    : @submission.entered_grade
-
   presenter = Submission::ShowPresenter.new(
     submission: @submission,
     current_user: @current_user,
@@ -46,26 +41,28 @@
   show_updated_plagiarism_icons = @assignment.context.root_account.feature_enabled?(:new_gradebook_plagiarism_indicator)
 
   js_env({
-    :RUBRIC_ASSESSMENT => {
+    GRADING_TYPE: @assignment.grading_type,
+    RUBRIC_ASSESSMENT: {
       assessment_type: assessment_type,
       assessor_id: @current_user ? @current_user.id : "null",
       **rubric_assessment_user_param
     },
-
-    :SUBMISSION => {
+    SUBMISSION: {
       assignment_id: @assignment.id,
       # don't leak grades if submission is not posted
       points_possible: @assignment.points_possible, # score below is useless without points possible
       submission: if @submission.user_can_read_grade?(@current_user, session)
         @submission.attributes.merge(
-          entered_grade: entered_grade,
+          entered_grade: presenter.entered_grade,
           entered_score: @submission.entered_score
         )
       else
         {}
       end,
       **submission_owner_param
-    }
+    },
+
+    :CUSTOM_GRADE_STATUSES => @assignment.course.custom_grade_statuses.as_json(include_root: false)
   })
   provide :page_title, join_title(@assignment.title, submission_author_name_for(@assessment_request))
   provide_blank :right_side
@@ -101,12 +98,12 @@
                     <% if @submission.excused? %>
                       <%= t "Excused" %>
                     <% else %>
-                        <%= i18n_grade(round_if_whole(entered_grade), @submission.grading_type) %>
+                      <%= i18n_grade(round_if_whole(presenter.entered_grade), @submission.grading_type) %>
                     <% end %>
                   </span>
                 <% end %>
                 <% if !@submission.excused? &&  @assignment.grading_type == 'points' && @assignment.points_possible && !@assignment.restrict_quantitative_data?(@current_user) %>
-                    <%= t('/ %{points_possible}', points_possible: I18n.n(round_if_whole @assignment.points_possible))%>
+                  <%= t('/ %{points_possible}', points_possible: I18n.n(round_if_whole @assignment.points_possible))%>
                 <% end %>
               </td>
             </tr>
@@ -214,7 +211,9 @@
             <span><%= I18n.t("Submitted by: %{name}", name: @submission.proxy_submitter.short_name) %></span>
           <% end %>
           </div>
-          <% if @submission.late? %>
+          <% if @submission.custom_grade_status %>
+            <span class="submission-custom-grade-status-pill-<%= @submission.custom_grade_status_id %>" %>
+          <% elsif @submission.late? %>
             <span class="submission-late-pill"></span>
           <% elsif @submission.missing? %>
             <span class="submission-missing-pill"></span>
@@ -237,7 +236,7 @@
         <% if can_do(@context, @current_user, :grade) %>
           <a class="Button" href="<%= context_url(@context, :speed_grader_context_gradebook_url, assignment_id: @assignment.id, student_id: @submission.user_id) %>">
             <i class="icon-speed-grader" aria-hidden="true"></i>
-            <%= t('speedgrader', 'SpeedGrader™') %>
+            <%= t('speedgrader', 'SpeedGrader') %>
           </a>
         <% end %>
         <% if @assignment.expects_submission? && can_do(@assignment, @current_user, :submit) && @current_user == @submission.user %>
@@ -327,8 +326,8 @@
             <% unless @submission.user_can_read_grade?(@current_user, session) %>
               <% if @submission.hide_grade_from_student? %>
                 <i><%= t('only_see_your_own_comments_muted', "You may not see all comments right now because the assignment is currently being graded") %></i>
-              <% else %>
-                <i><%= t('only_see_your_own_comments_peer', "As a peer reviewing student, you will only see comments written by you.") %></i>
+              <% elsif @submission.peer_reviewer?(@current_user)%>
+                  <i><%= t('only_see_your_own_comments_peer', "As a peer reviewing student, you will only see comments written by you.") %></i>
               <% end %>
               <br/><br/>
             <% end %>
@@ -345,7 +344,7 @@
                     <div class="comment_media">
                       <%= t(
                         "This is a media comment, *click here to view*.",
-                        wrapper: "<br/><a data-author='#{author_name}' data-created_at='#{created_at}' href='#' class='play_comment_link media-comment'>\1</a>.")
+                        wrapper: "<br/><a data-author='#{::HtmlTextHelper.strip_tags(author_name)}' data-created_at='#{created_at}' href='#' class='play_comment_link media-comment'>\1</a>.")
                       %>
                       <span class="media_comment_id" style="display: none;"><%= comment.media_comment_id %></span>
                       <div class="media_comment_content">

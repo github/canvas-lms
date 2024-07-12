@@ -30,21 +30,15 @@ import GroupCategorySelector from '@canvas/groups/backbone/views/GroupCategorySe
 import PeerReviewsSelector from '@canvas/assignments/backbone/views/PeerReviewsSelector'
 import '@canvas/grading-standards'
 import LockManager from '@canvas/blueprint-courses/react/components/LockManager/index'
-import {monitorLtiMessages} from '@canvas/lti/jquery/messages'
-import {addDeepLinkingListener} from '@canvas/deep-linking/DeepLinking'
-import handleResponse from './deepLinking'
 
 ready(() => {
-  monitorLtiMessages()
-  addDeepLinkingListener(handleResponse)
-
   const lockManager = new LockManager()
   lockManager.init({itemType: 'assignment', page: 'edit'})
   const lockedItems = lockManager.isChildContent() ? lockManager.getItemLocks() : {}
 
   ENV.ASSIGNMENT.assignment_overrides = ENV.ASSIGNMENT_OVERRIDES
 
-  const userIsAdmin = ENV.current_user_roles.includes('admin')
+  const userIsAdmin = ENV.current_user_is_admin
 
   const assignment = new Assignment(ENV.ASSIGNMENT)
   assignment.urlRoot = ENV.URL_ROOT
@@ -94,6 +88,7 @@ ready(() => {
         inPacedCourse: assignment.inPacedCourse(),
         isModuleItem: ENV.IS_MODULE_ITEM,
         courseId: assignment.courseID(),
+        groupCategorySelector,
       }),
     },
     lockedItems: assignment.id ? lockedItems : {}, // if no id, creating a new assignment

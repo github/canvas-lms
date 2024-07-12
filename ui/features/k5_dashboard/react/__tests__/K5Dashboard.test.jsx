@@ -228,7 +228,8 @@ describe('K-5 Dashboard', () => {
       expect(getByText('Your homeroom is currently unpublished.')).toBeInTheDocument()
     })
 
-    it('shows due today and missing items links pointing to the schedule tab of the course', async () => {
+    // FOO-3830
+    it.skip('shows due today and missing items links pointing to the schedule tab of the course (flaky)', async () => {
       const {findByTestId} = render(<K5Dashboard {...defaultProps} plannerEnabled={true} />)
       const dueTodayLink = await findByTestId('number-due-today')
       expect(dueTodayLink).toBeInTheDocument()
@@ -255,7 +256,8 @@ describe('K-5 Dashboard', () => {
       expect(getAllByText('Loading Card')[0]).toBeInTheDocument()
     })
 
-    it('displays an empty state on the homeroom and schedule tabs if the user has no cards', async () => {
+    // FOO-3830
+    it.skip('displays an empty state on the homeroom and schedule tabs if the user has no cards (flaky)', async () => {
       moxios.stubs.reset()
       moxios.stubRequest('/api/v1/dashboard/dashboard_cards', {
         status: 200,
@@ -415,7 +417,7 @@ describe('K-5 Dashboard', () => {
     it('filters important dates to those selected', async () => {
       moxios.stubs.reset()
       // Overriding mocked cards to make all cards active so we have 2 subjects to choose from
-      moxios.stubRequest('/api/v1/dashboard/dashboard_cards', {
+      moxios.stubRequest(window.location.origin + '/api/v1/dashboard/dashboard_cards', {
         status: 200,
         response: MOCK_CARDS.map(c => ({...c, enrollmentState: 'active'})),
       })

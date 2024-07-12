@@ -265,6 +265,11 @@ describe "Default Account Reports" do
     @section5.root_account_id = @account.id
     @section5.save!
     @section5.destroy
+
+    @section6 = CourseSection.new(name: "CS_01", course: @course4)
+    @section6.sis_source_id = "cs_section_1"
+    @section6.root_account_id = @account.id
+    @section6.save!
   end
 
   def create_some_enrolled_users
@@ -818,6 +823,7 @@ describe "Default Account Reports" do
                                         nil,
                                         nil,
                                         nil,
+                                        nil,
                                         "true"],
                                        [@course1.id.to_s,
                                         "SIS_COURSE_ID_1",
@@ -832,6 +838,7 @@ describe "Default Account Reports" do
                                         @course1.start_at.iso8601,
                                         @course1.conclude_at.iso8601,
                                         @course1.course_format,
+                                        nil,
                                         nil,
                                         "true"],
                                        [@course2.id.to_s,
@@ -848,6 +855,7 @@ describe "Default Account Reports" do
                                         @course2.conclude_at.iso8601,
                                         @course2.course_format,
                                         nil,
+                                        nil,
                                         "true"],
                                        [@course3.id.to_s,
                                         "SIS_COURSE_ID_3",
@@ -863,6 +871,7 @@ describe "Default Account Reports" do
                                         nil,
                                         nil,
                                         nil,
+                                        nil,
                                         "true"],
                                        [@course4.id.to_s,
                                         nil,
@@ -874,6 +883,7 @@ describe "Default Account Reports" do
                                         @default_term.id.to_s,
                                         nil,
                                         "deleted",
+                                        nil,
                                         nil,
                                         nil,
                                         nil,
@@ -910,6 +920,7 @@ describe "Default Account Reports" do
                                         @course1.start_at.iso8601,
                                         @course1.conclude_at.iso8601,
                                         @course1.course_format,
+                                        nil,
                                         nil,
                                         "true"]]
       end
@@ -951,6 +962,7 @@ describe "Default Account Reports" do
         expect(parsed.detect { |r| r["course_id"] == @ac1_a.sis_source_id }["blueprint_course_id"]).to eq @bc1.sis_source_id
         expect(parsed.detect { |r| r["course_id"] == @ac1_b.sis_source_id }["blueprint_course_id"]).to eq @bc1.sis_source_id
         expect(parsed.detect { |r| r["course_id"] == @ac2.sis_source_id }["blueprint_course_id"]).to eq @bc2.sis_source_id
+        expect(parsed.detect { |r| r["course_id"] == @ac2.sis_source_id }["canvas_blueprint_course_id"]).to eq @bc2.id.to_s
       end
     end
 
@@ -1002,9 +1014,21 @@ describe "Default Account Reports" do
         @section1.crosslist_to_course(@course2)
         parameters = {}
         parameters["sections"] = true
-        parsed = read_report("provisioning_csv", { params: parameters, order: 4 })
-        expect(parsed.length).to eq 4
-        expect(parsed).to match_array [[@section1.id.to_s,
+        parsed = read_report("provisioning_csv", { params: parameters, order: 5 })
+        expect(parsed.length).to eq 5
+        expect(parsed).to match_array [[@section6.id.to_s,
+                                        @section6.sis_source_id,
+                                        @course4.id.to_s,
+                                        nil,
+                                        nil,
+                                        @section6.name,
+                                        "active",
+                                        nil,
+                                        nil,
+                                        @account.id.to_s,
+                                        nil,
+                                        "false"],
+                                       [@section1.id.to_s,
                                         @section1.sis_source_id,
                                         @course2.id.to_s,
                                         @course2.sis_source_id,
@@ -1056,12 +1080,25 @@ describe "Default Account Reports" do
 
       it "runs the provisioning report with deleted sections" do
         @section1.destroy
+        @section6.destroy
         parameters = {}
         parameters["sections"] = true
         parameters["include_deleted"] = true
-        parsed = read_report("provisioning_csv", { params: parameters, order: 4 })
-        expect(parsed.length).to eq 4
-        expect(parsed).to match_array [[@section4.id.to_s,
+        parsed = read_report("provisioning_csv", { params: parameters, order: 5 })
+        expect(parsed.length).to eq 5
+        expect(parsed).to match_array [[@section6.id.to_s,
+                                        @section6.sis_source_id,
+                                        @course4.id.to_s,
+                                        nil,
+                                        nil,
+                                        @section6.name,
+                                        "deleted",
+                                        nil,
+                                        nil,
+                                        @account.id.to_s,
+                                        nil,
+                                        "false"],
+                                       [@section4.id.to_s,
                                         nil,
                                         @course2.id.to_s,
                                         "SIS_COURSE_ID_2",
@@ -1160,7 +1197,6 @@ describe "Default Account Reports" do
         parsed = read_report("sis_export_csv", { params: parameters, order: [1, 0] })
         # should ignore creation pending enrollments on sis_export
         expect(parsed.length).to eq 8
-
         expect(parsed).to match_array [["SIS_COURSE_ID_1",
                                         "user_sis_id_01",
                                         "observer",
@@ -1271,6 +1307,7 @@ describe "Default Account Reports" do
       end
 
       it "runs the provisioning report with deleted enrollments" do
+        @enrollment2.enrollment_state.update!(state: "completed")
         c = Course.create(name: "course1")
         c.student_view_student
         Course.where(id: @course2.id).update_all(workflow_state: "deleted")
@@ -1346,7 +1383,7 @@ describe "Default Account Reports" do
                                         student_role(root_account_id: @account.id).id.to_s,
                                         @enrollment2.course_section_id.to_s,
                                         nil,
-                                        "active",
+                                        "concluded",
                                         nil,
                                         nil,
                                         "true",
@@ -1781,6 +1818,157 @@ describe "Default Account Reports" do
                                @enrollment9.id.to_s]]
       end
 
+      describe "temporary enrollments" do
+        before(:once) do
+          @account.enable_feature!(:temporary_enrollments)
+          temporary_enrollment_pairing = TemporaryEnrollmentPairing.create!(root_account: @account, created_by: @admin)
+          @enrollment = @course1.reload.enroll_user(
+            @user2,
+            "TeacherEnrollment",
+            {
+              role: teacher_role,
+              temporary_enrollment_source_user_id: @user4.id,
+              temporary_enrollment_pairing_id: temporary_enrollment_pairing.id
+            }
+          )
+        end
+
+        it "returns data with feature enabled in provisioning report" do
+          parameters = {}
+          parameters["enrollments"] = true
+          parameters["enrollment_filter"] = "TeacherEnrollment"
+          parsed = read_report("provisioning_csv", { params: parameters, order: [1, 0] })
+
+          expect(parsed.length).to eq 2
+          expect(parsed).to match_array [[@course1.id.to_s,
+                                          "SIS_COURSE_ID_1",
+                                          @user4.id.to_s,
+                                          @user4.pseudonyms.first.sis_user_id,
+                                          "teacher",
+                                          teacher_role(root_account_id: @account.id).id.to_s,
+                                          @enrollment9.course_section_id.to_s,
+                                          @section1.sis_source_id.to_s,
+                                          "active",
+                                          nil,
+                                          nil,
+                                          "true",
+                                          "TeacherEnrollment",
+                                          "false",
+                                          @enrollment9.id.to_s,
+                                          nil],
+                                         [@course1.id.to_s,
+                                          "SIS_COURSE_ID_1",
+                                          @user2.id.to_s,
+                                          @user2.pseudonyms.first.sis_user_id,
+                                          "teacher",
+                                          teacher_role(root_account_id: @account.id).id.to_s,
+                                          @enrollment.course_section_id.to_s,
+                                          nil,
+                                          "active",
+                                          nil,
+                                          nil,
+                                          "false",
+                                          "TeacherEnrollment",
+                                          "false",
+                                          @enrollment.id.to_s,
+                                          @user4.id.to_s]]
+        end
+
+        it "does not return data with feature disabled in provisioning report" do
+          @account.disable_feature!(:temporary_enrollments)
+          parameters = {}
+          parameters["enrollments"] = true
+          parameters["enrollment_filter"] = "TeacherEnrollment"
+          parsed = read_report("provisioning_csv", { params: parameters, order: [1, 0] })
+
+          expect(parsed.length).to eq 2
+          expect(parsed).to match_array [[@course1.id.to_s,
+                                          "SIS_COURSE_ID_1",
+                                          @user4.id.to_s,
+                                          @user4.pseudonyms.first.sis_user_id,
+                                          "teacher",
+                                          teacher_role(root_account_id: @account.id).id.to_s,
+                                          @enrollment9.course_section_id.to_s,
+                                          @section1.sis_source_id.to_s,
+                                          "active",
+                                          nil,
+                                          nil,
+                                          "true",
+                                          "TeacherEnrollment",
+                                          "false",
+                                          @enrollment9.id.to_s],
+                                         [@course1.id.to_s,
+                                          "SIS_COURSE_ID_1",
+                                          @user2.id.to_s,
+                                          @user2.pseudonyms.first.sis_user_id,
+                                          "teacher",
+                                          teacher_role(root_account_id: @account.id).id.to_s,
+                                          @enrollment.course_section_id.to_s,
+                                          nil,
+                                          "active",
+                                          nil,
+                                          nil,
+                                          "false",
+                                          "TeacherEnrollment",
+                                          "false",
+                                          @enrollment.id.to_s]]
+        end
+
+        it "returns data with feature enabled in SIS export" do
+          parameters = {}
+          parameters["enrollments"] = true
+          parameters["enrollment_filter"] = "TeacherEnrollment"
+          parsed = read_report("sis_export_csv", { params: parameters, order: [1, 0] })
+
+          expect(parsed.length).to eq 2
+          expect(parsed).to match_array [["SIS_COURSE_ID_1",
+                                          @user2.pseudonyms.first.sis_user_id,
+                                          "teacher",
+                                          teacher_role(root_account_id: @account.id).id.to_s,
+                                          nil,
+                                          "active",
+                                          nil,
+                                          "false",
+                                          @user4.pseudonyms.first.sis_user_id],
+                                         ["SIS_COURSE_ID_1",
+                                          @user4.pseudonyms.first.sis_user_id,
+                                          "teacher",
+                                          teacher_role(root_account_id: @account.id).id.to_s,
+                                          @section1.sis_source_id,
+                                          "active",
+                                          nil,
+                                          "false",
+                                          nil]]
+        end
+
+        it "does not return data with feature disabled in SIS export" do
+          @account.disable_feature!(:temporary_enrollments)
+
+          parameters = {}
+          parameters["enrollments"] = true
+          parameters["enrollment_filter"] = "TeacherEnrollment"
+          parsed = read_report("sis_export_csv", { params: parameters, order: [1, 0] })
+
+          expect(parsed.length).to eq 2
+          expect(parsed).to match_array [["SIS_COURSE_ID_1",
+                                          @user2.pseudonyms.first.sis_user_id,
+                                          "teacher",
+                                          teacher_role(root_account_id: @account.id).id.to_s,
+                                          nil,
+                                          "active",
+                                          nil,
+                                          "false"],
+                                         ["SIS_COURSE_ID_1",
+                                          @user4.pseudonyms.first.sis_user_id,
+                                          "teacher",
+                                          teacher_role(root_account_id: @account.id).id.to_s,
+                                          @section1.sis_source_id,
+                                          "active",
+                                          nil,
+                                          "false"]]
+        end
+      end
+
       describe "sharding" do
         specs_require_sharding
 
@@ -1814,7 +2002,7 @@ describe "Default Account Reports" do
                                    "other_shard",
                                    "student",
                                    student_role(root_account_id: @account.id).id.to_s,
-                                   @course1.enrollments.where(user_id: @user1).take.course_section_id.to_s,
+                                   @course1.enrollments.find_by(user_id: @user1).course_section_id.to_s,
                                    nil,
                                    "invited",
                                    nil,

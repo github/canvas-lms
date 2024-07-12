@@ -29,14 +29,22 @@ class MediaQueryWatcher {
 
   mediaQueries = {}
 
+  sizes_override = null
+
   // initialize the mediaQueryList with our media-query of interest
   setup() {
     if (!window.matchMedia) return // or unit tests fail
     // Note: specifying max-widths in ems so planner will adjust its layout
     // even if the browser window is physicallly wide, but the font-size is
     // enlarged. This will make for a better experience.
-    this.mediaQueries.small = window.matchMedia(SMALL_MEDIA_QUERY)
-    this.mediaQueries.medium = window.matchMedia(MEDIUM_MEDIA_QUERY)
+    if (this.sizes_override) {
+      this.mediaQueries.small = window.matchMedia(this.sizes_override.small)
+      this.mediaQueries.medium = window.matchMedia(this.sizes_override.medium)
+    } else {
+      this.mediaQueries.small = window.matchMedia(SMALL_MEDIA_QUERY)
+      this.mediaQueries.medium = window.matchMedia(MEDIUM_MEDIA_QUERY)
+    }
+
     if (this.mediaQueries.small.matches) {
       this.size = 'small'
     } else if (this.mediaQueries.medium.matches) {
@@ -128,6 +136,10 @@ class MediaQueryWatcher {
       this.notifyAll()
     }
   }
+
+  set_sizes_override(new_size) {
+    this.sizes_override = new_size
+  }
 }
 
 // take any react component have it respond to media query state
@@ -137,10 +149,10 @@ class MediaQueryWatcher {
 // one listener and has interested parties register to be notified of
 // a change in state.
 function responsiviser() {
-  return function (ComposedComponent) {
+  return function (ComposedComponent, sizes_override = null) {
     class ResponsiveComponent extends React.Component {
       static propTypes = {
-        ...ComposedComponent.propTypes
+        ...ComposedComponent.propTypes,
       }
 
       static defaultProps = ComposedComponent.defaultProps
@@ -149,10 +161,13 @@ function responsiviser() {
 
       constructor(props) {
         super(props)
+        if (sizes_override) {
+          responsiviser.mqwatcher.set_sizes_override(sizes_override)
+        }
 
         const size = responsiviser.mqwatcher.add(this)
         this.state = {
-          size
+          size,
         }
       }
 

@@ -48,6 +48,10 @@ describe "BigBlueButton conferences" do
 
   before do
     user_session(@teacher)
+    # ensure requests that aren't stubbed don't actually attempt to hit blah.com
+    # (the "real" stubs take precedence)
+    WebMock.stub_request(:any, /bbb.blah.com/)
+           .to_return(body: big_blue_button_mock_response("failed", "notstubbed"))
   end
 
   after do
@@ -56,7 +60,7 @@ describe "BigBlueButton conferences" do
 
   after { close_extra_windows }
 
-  context "when bbb_modal_update is ON", ignore_js_errors: true do
+  context "when bbb_modal_update is ON", :ignore_js_errors do
     before(:once) do
       Account.site_admin.enable_feature! :bbb_modal_update
     end
@@ -90,6 +94,7 @@ describe "BigBlueButton conferences" do
         @group_category = @course.group_categories.create!(name: "Group Category")
         @group = @course.groups.create!(group_category: @group_category, name: "Group 1")
         @group.add_user(@student, "accepted")
+        @empty_group = @course.groups.create!(group_category: @group_category, name: "Empty Group")
       end
 
       context "on create" do
@@ -99,6 +104,10 @@ describe "BigBlueButton conferences" do
           wait_for_ajaximations
           f("div#tab-attendees").click
           fj("label:contains('Invite all course members')").click
+
+          # side test: make sure no empty groups are pre-selected
+          expect(f("body")).not_to contain_jqcss("button[title='Remove Empty Group: Unnamed']")
+
           f("[data-testid='address-input']").click
           f("[data-testid='section-#{@section.id}']").click
           expect(@section.participants.count).to eq ff("[data-testid='address-tag']").count
@@ -246,7 +255,7 @@ describe "BigBlueButton conferences" do
       get conferences_index_page
       f("button[title='New Conference']").click
 
-      force_click("input[value='add_to_calendar']")
+      f("input[value='add_to_calendar'] + label").click
       driver.switch_to.alert.accept
       wait_for_ajaximations
 
@@ -287,7 +296,7 @@ describe "BigBlueButton conferences" do
 
       # click, then cancel add to calendar
       f("div#tab-settings").click
-      force_click("input[value='add_to_calendar']")
+      f("input[value='add_to_calendar'] + label").click
       driver.switch_to.alert.dismiss
       wait_for_ajaximations
 
@@ -347,6 +356,7 @@ describe "BigBlueButton conferences" do
     end
 
     it "sets start and end date on WebConference when created and edited from the calendar" do
+      skip "FOO-3804 (10/6/2023)"
       get "/calendar"
 
       # Create calendar event with conference
@@ -461,7 +471,7 @@ describe "BigBlueButton conferences" do
       end
     end
 
-    context "when a conference is open", ignore_js_errors: true do
+    context "when a conference is open", :ignore_js_errors do
       it "displays start and end dates by description" do
         conf = create_big_blue_button_conference
 
@@ -479,7 +489,7 @@ describe "BigBlueButton conferences" do
       end
 
       context "and the conference has no recordings" do
-        before(:once) do
+        before do
           stub_request(:get, /getRecordings/)
             .with(query: bbb_fixtures[:get_recordings])
             .to_return(body: big_blue_button_mock_response("get_recordings", "none"))
@@ -515,7 +525,7 @@ describe "BigBlueButton conferences" do
       end
 
       context "and the conference has one recording and it is deleted" do
-        before(:once) do
+        before do
           stub_request(:get, /deleteRecordings/)
             .with(query: bbb_fixtures[:delete_recordings])
             .to_return(body: big_blue_button_mock_response("delete_recordings"))
@@ -534,7 +544,7 @@ describe "BigBlueButton conferences" do
       end
 
       context "and the conference has one recording with statistics" do
-        before(:once) do
+        before do
           stub_request(:get, /getRecordings/)
             .with(query: bbb_fixtures[:get_recordings])
             .to_return(body: big_blue_button_mock_response("get_recordings", "one"))

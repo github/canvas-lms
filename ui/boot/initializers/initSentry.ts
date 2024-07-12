@@ -16,10 +16,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import SentryFullStory from '@sentry/fullstory'
-import {configureScope, init} from '@sentry/react'
-import {Integration} from '@sentry/types'
-import {BrowserTracing} from '@sentry/tracing'
+import {configureScope, init, BrowserTracing} from '@sentry/react'
+import type {Integration} from '@sentry/types'
 
 export function initSentry() {
   const sentrySettings = ENV.SENTRY_FRONTEND
@@ -33,12 +31,6 @@ export function initSentry() {
       ? [new RegExp(sentrySettings.url_deny_pattern)]
       : undefined
 
-    if (ENV.FULL_STORY_ENABLED) {
-      integrations.push(
-        new SentryFullStory(sentrySettings.org_slug, {baseSentryUrl: sentrySettings.base_url})
-      )
-    }
-
     if (tracesSampleRate) integrations.push(new BrowserTracing() as Integration)
 
     init({
@@ -47,6 +39,7 @@ export function initSentry() {
       release: sentrySettings.revision,
 
       denyUrls,
+      ignoreErrors: ['ChunkLoadError'],
       integrations,
 
       sampleRate: errorsSampleRate,

@@ -16,7 +16,7 @@
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
 import $ from 'jquery'
-import React from 'react'
+import React, {lazy, Suspense} from 'react'
 import ReactDOM from 'react-dom'
 import RichContentEditor from '@canvas/rce/RichContentEditor'
 import template from '../../jst/WikiPageEdit.handlebars'
@@ -25,8 +25,11 @@ import WikiPageDeleteDialog from './WikiPageDeleteDialog'
 import WikiPageReloadView from './WikiPageReloadView'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import DueDateCalendarPicker from '@canvas/due-dates/react/DueDateCalendarPicker'
-import '@canvas/datetime'
+import {unfudgeDateForProfileTimezone} from '@instructure/moment-utils'
+import {renderDatetimeField} from '@canvas/datetime/jquery/DatetimeField'
 import renderWikiPageTitle from '../../react/renderWikiPageTitle'
+import {renderAssignToTray} from '../../react/renderAssignToTray'
+import {itemTypeToApiURL} from '@canvas/context-modules/differentiated-modules/utils/assignToHelper'
 
 const I18n = useI18nScope('pages')
 
@@ -56,7 +59,9 @@ export default class WikiPageEditView extends ValidatedFormView {
     this.prototype.template = template
     this.prototype.className = 'form-horizontal edit-form validated-form-view'
     this.prototype.dontRenableAfterSaveSuccess = true
-
+    if (window.ENV.FEATURES?.selective_release_ui_api) {
+      this.prototype.disablingDfd = new $.Deferred()
+    }
     this.optionProperty('wiki_pages_path')
     this.optionProperty('WIKI_RIGHTS')
     this.optionProperty('PAGE_RIGHTS')
@@ -66,10 +71,34 @@ export default class WikiPageEditView extends ValidatedFormView {
     super.initialize(...arguments)
     if (!this.WIKI_RIGHTS) this.WIKI_RIGHTS = {}
     if (!this.PAGE_RIGHTS) this.PAGE_RIGHTS = {}
-    this.on('success', _args => (window.location.href = this.model.get('html_url')))
+    this.enableAssignTo =
+      window.ENV.FEATURES?.selective_release_ui_api &&
+      ENV.COURSE_ID != null &&
+      ENV.WIKI_RIGHTS.manage_assign_to
+    const redirect = () => {
+      window.location.href = this.model.get('html_url')
+    }
+    let callBack = redirect
+    if (this.enableAssignTo) {
+      callBack = _args => this.handleOverridesSave(_args, redirect)
+    }
+    this.on('success', callBack)
     this.lockedItems = options.lockedItems || {}
     const todoDate = this.model.get('todo_date')
+    this.overrides = null
     return (this.studentTodoAtDateValue = todoDate ? new Date(todoDate) : '')
+  }
+
+  handleOverridesSave(page, redirect) {
+    if (!page.page_id) return
+    const url = itemTypeToApiURL(ENV.COURSE_ID, 'page', page.page_id)
+    const errorCallBack = () => {
+      this.disablingDfd.reject()
+      $.flashError(I18n.t("Oops! We weren't able to save your page. Please try again"))
+    }
+    $.ajaxJSON(url, 'PUT', JSON.stringify(this.overrides), redirect, errorCallBack, {
+      contentType: 'application/json',
+    })
   }
 
   toJSON() {
@@ -112,6 +141,7 @@ export default class WikiPageEditView extends ValidatedFormView {
     json.assignment = json.assignment != null ? json.assignment.toView() : undefined
 
     json.content_is_locked = this.lockedItems.content
+    json.show_assign_to = this.enableAssignTo
 
     return json
   }
@@ -185,7 +215,47 @@ export default class WikiPageEditView extends ValidatedFormView {
       })
     }
 
-    RichContentEditor.loadNewEditor(this.$wikiPageBody, {focus: true, manageParent: true})
+    if (this.enableAssignTo) {
+      const pageName = this.model.get('title')
+      const pageId = this.model.id
+      const mountElement = document.getElementById('assign-to-mount-point-edit-page')
+      const onSync = payload => {
+        this.overrides = payload
+      }
+      renderAssignToTray(mountElement, {pageId, onSync, pageName})
+    }
+    if (window.ENV.BLOCK_EDITOR) {
+      const BlockEditor = lazy(() => import('@canvas/block-editor'))
+
+      const blockEditorData = ENV.WIKI_PAGE?.block_editor_attributes || {
+        version: '1',
+        blocks: [{data: undefined}],
+      }
+
+      const container = document.getElementById('content')
+      container.style.boxSizing = 'border-box'
+      container.style.width = '100%'
+      container.style.transition = 'width 0.3s ease-in-out'
+
+      ReactDOM.render(
+        <Suspense fallback={<div>{I18n.t('Loading...')}</div>}>
+          <BlockEditor
+            container={container}
+            version={blockEditorData.version}
+            content={blockEditorData.blocks[0].data}
+            onCancel={this.cancel.bind(this)}
+          />
+        </Suspense>,
+        document.getElementById('block_editor')
+      )
+    } else {
+      RichContentEditor.loadNewEditor(this.$wikiPageBody, {
+        focus: true,
+        manageParent: true,
+        resourceType: 'wiki_page.body',
+        resourceId: this.model.id,
+      })
+    }
 
     this.checkUnsavedOnLeave = true
     $(window).on('beforeunload', this.onUnload.bind(this))
@@ -198,8 +268,7 @@ export default class WikiPageEditView extends ValidatedFormView {
       if (this.model.get('published')) {
         publishAtInput.prop('disabled', true)
       } else {
-        publishAtInput
-          .datetime_field()
+        renderDatetimeField(publishAtInput)
           .change(e => {
             $('.save_and_publish').prop('disabled', e.target.value.length > 0)
           })
@@ -228,8 +297,16 @@ export default class WikiPageEditView extends ValidatedFormView {
   }
 
   destroyEditor() {
-    RichContentEditor.destroyRCE(this.$wikiPageBody)
-    return this.$el.remove()
+    // hack fix for LF-1134
+    try {
+      if (!window.ENV.BLOCK_EDITOR) {
+        RichContentEditor.destroyRCE(this.$wikiPageBody)
+      }
+    } catch (e) {
+      console.warn(e)
+    } finally {
+      this.$el.remove()
+    }
   }
 
   switchViews(event) {
@@ -240,6 +317,16 @@ export default class WikiPageEditView extends ValidatedFormView {
     // hide the clicked link, and show the other toggle link.
     // todo: replace .andSelf with .addBack when JQuery is upgraded.
     $(event.currentTarget).siblings('a').andSelf().toggle().focus()
+  }
+
+  showErrors(errors) {
+    if (window.ENV.FEATURES.permanent_page_links) {
+      // Let the IntsUI TextInput component show the title errors
+      const {title, ...otherErrors} = errors
+      super.showErrors(otherErrors)
+    } else {
+      super.showErrors(errors)
+    }
   }
 
   // Validate they entered in a title.
@@ -285,7 +372,7 @@ export default class WikiPageEditView extends ValidatedFormView {
     )
   }
 
-  submit(event) {
+  async submit(event) {
     this.checkUnsavedOnLeave = false
     if (this.reloadPending) {
       if (
@@ -301,6 +388,13 @@ export default class WikiPageEditView extends ValidatedFormView {
           event.preventDefault()
         }
         return
+      }
+    }
+    if (window.block_editor) {
+      this.blockEditorData = {
+        time: Date.now(),
+        version: '1',
+        blocks: [{data: window.block_editor.serialize()}],
       }
     }
 
@@ -341,9 +435,11 @@ export default class WikiPageEditView extends ValidatedFormView {
     }
 
     if (page_data.publish_at) {
-      page_data.publish_at = $.unfudgeDateForProfileTimezone(page_data.publish_at)
+      page_data.publish_at = unfudgeDateForProfileTimezone(page_data.publish_at)
     }
-
+    if (this.blockEditorData) {
+      page_data.block_editor_attributes = this.blockEditorData
+    }
     if (this.shouldPublish) page_data.published = true
     return page_data
   }
@@ -355,7 +451,9 @@ export default class WikiPageEditView extends ValidatedFormView {
     // eslint-disable-next-line no-alert
     if (!this.hasUnsavedChanges() || window.confirm(this.unsavedWarning())) {
       this.checkUnsavedOnLeave = false
-      RichContentEditor.closeRCE(this.$wikiPageBody)
+      if (!window.ENV.BLOCK_EDITOR) {
+        RichContentEditor.closeRCE(this.$wikiPageBody)
+      }
       return this.trigger('cancel')
     }
   }

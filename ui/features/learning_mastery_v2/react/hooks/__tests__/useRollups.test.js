@@ -18,19 +18,41 @@
 
 import {renderHook, act} from '@testing-library/react-hooks/dom'
 import axios from '@canvas/axios'
-import * as FlashAlert from '@canvas/alerts/react/FlashAlert'
+import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
 import useRollups from '../useRollups'
 
 jest.useFakeTimers()
 
+jest.mock('@canvas/axios', () => ({
+  get: jest.fn(),
+}))
+
+jest.mock('@canvas/alerts/react/FlashAlert', () => ({
+  showFlashAlert: jest.fn(() => jest.fn(() => {})),
+}))
+
 describe('useRollups', () => {
-  let fetchMock
   const mockedUsers = [
     {
       id: '1',
       name: 'Student 1',
       display_name: 'Student 1',
       avatar_url: 'url',
+      status: 'active',
+    },
+    {
+      id: '2',
+      name: 'Student 2',
+      display_name: 'Student 2',
+      avatar_url: 'url',
+      status: 'inactive',
+    },
+    {
+      id: '3',
+      name: 'Student 3',
+      display_name: 'Student 3',
+      avatar_url: 'url',
+      status: 'concluded',
     },
   ]
 
@@ -61,10 +83,39 @@ describe('useRollups', () => {
     {
       links: {
         user: '1',
+        status: 'active',
       },
       scores: [
         {
           score: 4,
+          links: {
+            outcome: '1',
+          },
+        },
+      ],
+    },
+    {
+      links: {
+        user: '2',
+        status: 'inactive',
+      },
+      scores: [
+        {
+          score: 4,
+          links: {
+            outcome: '1',
+          },
+        },
+      ],
+    },
+    {
+      links: {
+        user: '3',
+        status: 'completed',
+      },
+      scores: [
+        {
+          score: 0,
           links: {
             outcome: '1',
           },
@@ -84,17 +135,18 @@ describe('useRollups', () => {
         rollups: mockedRollups,
       },
     })
-    fetchMock = jest.spyOn(axios, 'get').mockResolvedValue(promise)
+    axios.get.mockResolvedValue(promise)
   })
 
   describe('useRollups hook', () => {
     it('returns defaults until the request finishes loading', async () => {
       const {result} = renderHook(() => useRollups({courseId: '1'}))
-      const {isLoading, students, outcomes, rollups} = result.current
+      const {isLoading, students, outcomes, rollups, gradebookFilters} = result.current
       expect(isLoading).toEqual(true)
       expect(students).toEqual([])
       expect(outcomes).toEqual([])
       expect(rollups).toEqual([])
+      expect(gradebookFilters).toEqual([])
       await act(async () => jest.runAllTimers())
       expect(result.current.isLoading).toEqual(false)
     })
@@ -102,10 +154,11 @@ describe('useRollups', () => {
     it('returns the response after the request finishes', async () => {
       const {result} = renderHook(() => useRollups({courseId: '1'}))
       await act(async () => jest.runAllTimers())
-      const {students, outcomes, rollups} = result.current
-      expect(fetchMock).toHaveBeenCalled()
+      const {students, outcomes, rollups, gradebookFilters} = result.current
+      expect(axios.get).toHaveBeenCalled()
       expect(students).toEqual(mockedUsers)
       expect(outcomes).toEqual(mockedOutcomes)
+      expect(gradebookFilters).toEqual([])
       expect(rollups).toStrictEqual([
         {
           studentId: '1',
@@ -113,7 +166,33 @@ describe('useRollups', () => {
             {outcomeId: '1', rating: {...mockedRatings[0], color: `#${mockedRatings[0].color}`}},
           ],
         },
+        {
+          studentId: '2',
+          outcomeRollups: [
+            {outcomeId: '1', rating: {...mockedRatings[0], color: `#${mockedRatings[0].color}`}},
+          ],
+        },
+        {
+          studentId: '3',
+          outcomeRollups: [
+            {outcomeId: '1', rating: {...mockedRatings[1], color: `#${mockedRatings[1].color}`}},
+          ],
+        },
       ])
+    })
+
+    it("correctly translates student status from 'completed' to 'concluded' when loading rollups", async () => {
+      const {result} = renderHook(() => useRollups({courseId: '1'}))
+      await act(async () => jest.runAllTimers())
+      const {students} = result.current
+      expect(axios.get).toHaveBeenCalled()
+      expect(students[2]).toStrictEqual({
+        id: '3',
+        name: 'Student 3',
+        display_name: 'Student 3',
+        avatar_url: 'url',
+        status: 'concluded',
+      })
     })
 
     it('calls the /rollups URL with the right parameters', async () => {
@@ -123,22 +202,22 @@ describe('useRollups', () => {
         params: {
           rating_percents: true,
           per_page: 20,
+          exclude: [],
           include: ['outcomes', 'users', 'outcome_paths', 'alignments'],
           sort_by: 'student',
           add_defaults: true,
           page: 1,
         },
       }
-      expect(fetchMock).toHaveBeenCalledWith('/api/v1/courses/1/outcome_rollups', params)
+      expect(axios.get).toHaveBeenCalledWith('/api/v1/courses/1/outcome_rollups', params)
     })
 
     it('renders a flashAlert if the request fails', async () => {
-      fetchMock = jest.spyOn(axios, 'get').mockRejectedValue({})
-      const showFlashAlertSpy = jest.spyOn(FlashAlert, 'showFlashAlert')
+      axios.get.mockRejectedValue({})
       renderHook(() => useRollups({courseId: '1'}))
       await act(async () => jest.runAllTimers())
-      expect(fetchMock).toHaveBeenCalled()
-      expect(showFlashAlertSpy).toHaveBeenCalledWith({
+      expect(axios.get).toHaveBeenCalled()
+      expect(showFlashAlert).toHaveBeenCalledWith({
         message: 'Error loading rollups',
         type: 'error',
       })

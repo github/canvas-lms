@@ -201,6 +201,9 @@ const locale = {
   "congruent_5a244acd": { "message": "Congruente" },
   "contains_311f37b7": { "message": "Contiene" },
   "content_1440204b": { "message": "Contenido" },
+  "content_in_the_editor_will_be_changed_press_cancel_d5bf3357": {
+    "message": "El contenido en el editor cambiará. Pulsa cancelar para mantener el contenido original."
+  },
   "content_is_still_being_uploaded_if_you_continue_it_8f06d0cb": {
     "message": "Todavía se está cargando el contenido; si continúas, no se incrustará correctamente."
   },
@@ -346,6 +349,10 @@ const locale = {
   "enter_at_least_3_characters_to_search_4f037ee0": {
     "message": "Introduce al menos 3 caracteres para buscar"
   },
+  "enter_replacement_text_17631bbc": {
+    "message": "introducir texto de reemplazo"
+  },
+  "enter_search_text_26cb4459": { "message": "introducir texto de búsqueda" },
   "epsilon_54bb8afa": { "message": "Épsilon" },
   "epsilon_variant_d31f1e77": { "message": "Épsilon (Variante)" },
   "equals_sign_c51bdc58": { "message": "Signo igual" },
@@ -390,6 +397,8 @@ const locale = {
   },
   "files_c300e900": { "message": "Archivos" },
   "files_index_af7c662b": { "message": "Índice de archivos" },
+  "find_8d605019": { "message": "Buscar" },
+  "find_and_replace_6e345933": { "message": "Buscar y reemplazar" },
   "finish_bc343002": { "message": "Terminar" },
   "fix_heading_hierarchy_f60884c4": { "message": "Fijar jerarquía de títulos" },
   "flat_music_76d5a5c3": { "message": "Bemol (Música)" },
@@ -514,6 +523,7 @@ const locale = {
   "in_element_of_19ca2f33": { "message": "En (Elemento de)" },
   "increase_indent_6af90f7c": { "message": "Aumentar sangría" },
   "indefinite_integral_6623307e": { "message": "Integral indefinida" },
+  "index_of_max_80dcf7a5": { "message": "{ index } de { max }" },
   "indigo_2035fc55": { "message": "Índigo" },
   "inference_fed5c960": { "message": "Inferencia" },
   "infinity_7a10f206": { "message": "Infinito" },
@@ -693,6 +703,7 @@ const locale = {
   "nested_less_than_27d17e58": { "message": "Agrupado menor que" },
   "new_quiz_34aacba6": { "message": "Nueva prueba" },
   "next_40e12421": { "message": "Siguiente" },
+  "next_findtext_9d69f0fe": { "message": "Siguiente { findText }" },
   "no_accessibility_issues_were_detected_f8d3c875": {
     "message": "No se han detectado problemas de accesibilidad."
   },
@@ -738,6 +749,7 @@ const locale = {
   },
   "no_quizzes_found_c80c537a": { "message": "No se han encontrado pruebas." },
   "no_results_940393cf": { "message": "No hay resultados." },
+  "no_results_found_58717065": { "message": "No se han encontrado resultados" },
   "no_results_found_for_filterterm_ad1b04c8": {
     "message": "No se han encontrado resultados para { filterTerm }"
   },
@@ -828,11 +840,16 @@ const locale = {
   "precedes_196b9aef": { "message": "Precede" },
   "precedes_equal_20701e84": { "message": "Precede o es igual a" },
   "preformatted_d0670862": { "message": "Previamente formateado" },
+  "prepend_findtext_append_8e0e769a": {
+    "message": "{ prepend }{ findText }{ append }"
+  },
   "prev_f82cbc48": { "message": "Previo" },
   "preview_53003fd2": { "message": "Vista previa" },
   "preview_a3f8f854": { "message": "VISTA PREVIA" },
   "preview_in_overlay_ed772c46": { "message": "Vista previa en superposición" },
   "preview_inline_9787330": { "message": "Vista previa online" },
+  "previous_bd2ac015": { "message": "Anterior" },
+  "previous_findtext_8dfbfd30": { "message": "Anterior { findText }" },
   "prime_917ea60e": { "message": "Primo" },
   "prime_numbers_13464f61": { "message": "Números primo" },
   "product_39cf144f": { "message": "Producto" },
@@ -861,11 +878,28 @@ const locale = {
   "religion_icon_246e0be1": { "message": "Icono religión" },
   "remove_heading_style_5fdc8855": { "message": "Eliminar estilo del título" },
   "remove_link_d1f2f4d0": { "message": "Eliminar enlace" },
+  "replace_all_d3d68b3": { "message": "Reemplazar todo" },
+  "replace_all_findtext_with_replacetext_da574b32": {
+    "message": "Reemplazar todo { findText } con { replaceText }"
+  },
   "replace_e61834a7": { "message": "Sustituir" },
+  "replace_findtext_with_replacetext_7b5c7fb3": {
+    "message": "Reemplazar { findText } con { replaceText }"
+  },
+  "replace_with_eeff01ad": { "message": "Reemplazar con" },
+  "replaced_alertfindtext_with_alertreplacetext_de5c1795": {
+    "message": "Reemplazado { alertFindText } con { alertReplaceText }"
+  },
+  "replaced_all_alertfindtext_with_alertreplacetext_83fdfe59": {
+    "message": "Reemplazado todo { alertFindText } con { alertReplaceText }"
+  },
   "reset_95a81614": { "message": "Restablecer" },
   "resize_ec83d538": { "message": "Redimensionar" },
   "restore_auto_save_deccd84b": {
     "message": "¿Quieres restablecer el guardado automático?"
+  },
+  "result_index_of_max_7db5ad8b": {
+    "message": "Resultado { index } de { max }."
   },
   "reverse_turnstile_does_not_yield_7558be06": {
     "message": "Trinquete invertido (no satisface)"

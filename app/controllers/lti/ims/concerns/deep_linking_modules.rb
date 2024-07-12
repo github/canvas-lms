@@ -19,8 +19,6 @@
 
 module Lti::IMS::Concerns
   module DeepLinkingModules
-    extend ActiveSupport::Concern
-
     CREATE_NEW_MODULE_PLACEMENTS = %w[course_assignments_menu module_index_menu_modal].freeze
     ALLOW_LINE_ITEM_PLACEMENTS = %w[course_assignments_menu module_index_menu_modal assignment_selection link_selection module_menu_modal].freeze
 
@@ -29,7 +27,7 @@ module Lti::IMS::Concerns
       # a resource link for the newly-created assignment later, when we actually
       # create the assignment. The assignment_selection placement, therefore, should
       # not be creating resource links.
-      return true if for_placement?(:assignment_selection)
+      return true if for_placement?(:assignment_selection) || for_placement?(:submission_type_selection)
 
       add_item_to_existing_module = return_url_parameters[:context_module_id].present?
       create_new_module? || add_item_to_existing_module || add_assignment?

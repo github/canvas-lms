@@ -7,6 +7,10 @@
     <div class="ig-row__layout">
       {{>ui/shared/spinner/jst/_spinner.handlebars}} {{#t}}Making a copy of "{{originalAssignmentName}}"{{/t}}
     </div>
+  {{else}} {{#if isCloningAlignment}}
+    <div class="ig-row__layout">
+      {{>ui/shared/spinner/jst/_spinner.handlebars}} {{#t}}Cloning Alignments of "{{originalAssignmentName}}"{{/t}}
+    </div>
   {{else}} {{#if failedToDuplicate}}
     <span aria-live="polite" role="alert" aria-atomic="true">{{#t}}Oops! Something went wrong with making a copy of "{{originalAssignmentName}}"{{/t}}</span>
     <div class="duplicate-failed-actions">
@@ -17,6 +21,20 @@
       {{#unless is_master_course_child_content}}
       <button class="duplicate-failed-cancel btn">
         <span class="screenreader-only">{{#t}}Cancel duplicating "{{originalAssignmentName}}"{{/t}}</span>
+        <span aria-hidden="true">{{#t}}Cancel{{/t}}</span>
+      </button>
+      {{/unless}}
+    </div>
+  {{else}} {{#if failedToCloneAlignment}}
+    <span aria-live="polite" role="alert" aria-atomic="true">{{#t}}Oops! Something went wrong with cloning alignments of "{{originalAssignmentName}}"{{/t}}</span>
+    <div class="alignment-clone-failed-actions">
+      <button class="alignment-clone-failed-retry btn btn-primary">
+        <span class="screenreader-only">{{#t}}Retry cloning "{{originalAssignmentName}}"{{/t}}</span>
+        <span aria-hidden="true">{{#t}}Retry{{/t}}</span>
+      </button>
+      {{#unless is_master_course_child_content}}
+      <button class="alignment-clone-failed-cancel btn">
+        <span class="screenreader-only">{{#t}}Cancel cloning "{{originalAssignmentName}}"{{/t}}</span>
         <span aria-hidden="true">{{#t}}Cancel{{/t}}</span>
       </button>
       {{/unless}}
@@ -91,6 +109,9 @@
             </div>
           {{/if}}
         {{/if}}
+        {{#if isCheckpoint}}
+          <div id="assignment_teacher_checkpoint_info_{{id}}"></div>
+        {{/if}}
         {{#if showAvailability}}
         <div class="ig-details__item assignment-date-available" data-view="date-available">
         </div>
@@ -99,25 +120,25 @@
           <div class="ig-details__item assignment-date-due" data-view="date-due">
           </div>
         {{/if}}
-        {{#unless restrict_quantitative_data}}
-            {{#if pointsPossible}}
-              <div class="ig-details__item js-score">
-                <span class="screenreader-only">
-                  {{#t}}{{n pointsPossible}} Points Possible{{/t}}
-                </span>
-                <span class="non-screenreader" aria-hidden="true">
-                  {{#t}}{{n pointsPossible}} pts{{/t}}
-                </span>
-              </div>
-            {{else}}
-              <span class="js-score screenreader-only">
-                {{#t}}No Points Possible{{/t}}
-              </span>
-            {{/if}}
+        {{#if (or isCheckpoint restrict_quantitative_data)}}
+          <div class="ig-details__item js-score">
+          </div>
         {{else}}
+          {{#if pointsPossible}}
             <div class="ig-details__item js-score">
+              <span class="screenreader-only">
+                {{#t}}{{n pointsPossible}} Points Possible{{/t}}
+              </span>
+              <span class="non-screenreader" aria-hidden="true">
+                {{#t}}{{n pointsPossible}} pts{{/t}}
+              </span>
             </div>
-        {{/unless}}
+          {{else}}
+            <span class="js-score screenreader-only">
+              {{#t}}No Points Possible{{/t}}
+            </span>
+          {{/if}}
+        {{/if}}
         {{#if isMasteryConnectTool}}
           <div class="ig-details__item mc-objectives">{{externalToolData.objectives}}</div>
         {{/if}}
@@ -205,7 +226,7 @@
                       class="speed-grader-link icon-speed-grader"
                       id="assignment_{{id}}_link_to_speed_grader"
                       href="/courses/{{courseId}}/gradebook/speed_grader?assignment_id={{id}}"
-                      aria-label="{{#t}}Navigate to Speed Grader for {{name}}{{/t}}"
+                      aria-label="{{#t}}Navigate to SpeedGrader for {{name}}{{/t}}"
                       data-focus-returns-to="assign_{{id}}_manage_link"
                       >{{#t}}SpeedGrader{{/t}}</a>
                   </li>
@@ -219,6 +240,24 @@
                     data-focus-returns-to="assign_{{id}}_manage_link"
                   >{{#t}}Duplicate{{/t}}</a>
                 </li>
+                {{/if}}
+                {{#if canManageAssignTo}}
+                {{#if differentiatedModulesFlag}}
+                  <li>
+                    <a
+                      class="assign-to-link icon-permissions"
+                      id="assign_to_{{id}}_link"
+                      href="{{id}}%>"
+                      data-assignment-name="{{name}}"
+                      data-assignment-context-id="{{courseId}}"
+                      data-assignment-id="{{id}}"
+                      data-assignment-type="{{item_assignment_type}}"
+                      title="<%= {{#t}}Assign this Assignment{{/t}} %>"
+                      aria-label="{{#t}}Assign To...{{/t}}"
+                      data-focus-returns-to="assign_{{id}}_manage_link"
+                    >{{#t}}Assign To...{{/t}}</a>
+                  </li>
+                {{/if}}
                 {{/if}}
             {{/if}}
             {{#unless is_locked}}
@@ -376,6 +415,24 @@
                   >{{#t}}Duplicate{{/t}}</a>
                 </li>
                 {{/if}}
+                {{#if canManageAssignTo}}
+                {{#if differentiatedModulesFlag}}
+                  <li>
+                    <a
+                      class="assign-to-link icon-permissions"
+                      id="assign_to_{{id}}_link"
+                      href="{{id}}%>"
+                      data-assignment-name="{{name}}"
+                      data-assignment-context-id="{{courseId}}"
+                      data-assignment-id="{{id}}"
+                      data-assignment-type="{{item_assignment_type}}"
+                      title="<%= {{#t}}Assign this Assignment{{/t}} %>"
+                      aria-label="{{#t}}Assign To...{{/t}}"
+                      data-focus-returns-to="assign_{{id}}_manage_link"
+                    >{{#t}}Assign To...{{/t}}</a>
+                  </li>
+                {{/if}}
+                {{/if}}
                 {{#if canMove}}
                 <li>
                   <a
@@ -452,7 +509,9 @@
     </div>
 
     {{#if canManage}}<form data-view="edit-assignment" class="form-dialog"></form>{{/if}}
-  {{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}
+  {{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}{{/if}}
 </div>
+<div id="assignment_student_checkpoints_{{id}}"></div>
 <div id="assignment_student_peer_review_{{id}}">
+<div id="assign-to-mount-point"></div>
 </div>

@@ -19,37 +19,12 @@
 #
 
 module ContextModulesHelper
-  include Api::V1::ContextModule
   include CyoeHelper
-
-  def translated_content_type(content_type)
-    case content_type
-    when :Announcement
-      I18n.t("Announcement")
-    when :Assignment
-      I18n.t("Assignment")
-    when :Attachment
-      I18n.t("Attachment")
-    when :ContextExternalTool
-      I18n.t("External Tool")
-    when :ContextModuleSubHeader
-      I18n.t("Context Module Sub Header")
-    when :DiscussionTopic
-      I18n.t("Discussion Topic")
-    when :ExternalUrl
-      I18n.t("External Url")
-    when :"Quizzes::Quiz", :Quiz
-      I18n.t("Quiz")
-    when :WikiPage
-      I18n.t("Page")
-    else
-      I18n.t("Unknown Content Type")
-    end
-  end
+  include ApplicationHelper
 
   def cache_if_module(context_module, viewable, can_add, can_edit, can_delete, is_student, can_view_unpublished, user, context, &)
     if context_module
-      visible_assignments = user ? user.assignment_and_quiz_visibilities(context) : []
+      visible_assignments = user ? user.learning_object_visibilities(context) : []
       cache_key_items = ["context_module_render_22_",
                          context_module.cache_key,
                          viewable,
@@ -58,6 +33,7 @@ module ContextModulesHelper
                          can_delete,
                          is_student,
                          can_view_unpublished,
+                         @module_ids_with_overrides&.include?(context_module.id),
                          true,
                          Time.zone,
                          Digest::SHA256.hexdigest([visible_assignments, @section_visibility].join("/"))]
@@ -185,6 +161,6 @@ module ContextModulesHelper
       return is_student ? I18n.t("Quiz") : I18n.t("New Quiz")
     end
 
-    translated_content_type(item.content_type.to_sym)
+    Context.translated_content_type(item.content_type)
   end
 end

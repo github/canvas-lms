@@ -18,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "atom"
-
 class Enrollment < ActiveRecord::Base
   SIS_TYPES = {
     "TeacherEnrollment" => "teacher",
@@ -29,6 +27,8 @@ class Enrollment < ActiveRecord::Base
     "ObserverEnrollment" => "observer"
   }.freeze
 
+  self.ignored_columns += ["graded_at"]
+
   include Workflow
 
   belongs_to :course, inverse_of: :enrollments
@@ -37,6 +37,7 @@ class Enrollment < ActiveRecord::Base
   belongs_to :user, inverse_of: :enrollments
   belongs_to :sis_pseudonym, class_name: "Pseudonym", inverse_of: :sis_enrollments
   belongs_to :associated_user, class_name: "User"
+  belongs_to :temporary_enrollment_pairing, inverse_of: :enrollments
 
   belongs_to :role
   include Role::AssociationHelper
@@ -54,6 +55,7 @@ class Enrollment < ActiveRecord::Base
                                               unless: ->(enrollment) { enrollment.type == "ObserverEnrollment" },
                                               message: -> { t("only ObserverEnrollments may have an associated_user_id") } }
   validate :cant_observe_self, if: ->(enrollment) { enrollment.type == "ObserverEnrollment" }
+  validate :cant_observe_observer, if: ->(enrollment) { enrollment.type == "ObserverEnrollment" }
 
   validate :valid_role?
   validate :valid_course?
@@ -86,6 +88,7 @@ class Enrollment < ActiveRecord::Base
 
   after_commit :sync_microsoft_group
   scope :microsoft_sync_relevant, -> { active_or_pending.accepted.not_fake }
+  scope :microsoft_sync_irrelevant_but_not_fake, -> { not_fake.where("enrollments.workflow_state IN ('rejected', 'completed', 'inactive', 'invited')") }
 
   attr_accessor :already_enrolled, :need_touch_user, :skip_touch_user
 
@@ -101,6 +104,14 @@ class Enrollment < ActiveRecord::Base
 
   def cant_observe_self
     errors.add(:associated_user_id, "Cannot observe yourself") if user_id == associated_user_id
+  end
+
+  def cant_observe_observer
+    if !deleted? && course.enrollments.where(type: "ObserverEnrollment",
+                                             user_id: associated_user_id,
+                                             associated_user_id: user_id).exists?
+      errors.add(:associated_user_id, "Cannot observe observer observing self")
+    end
   end
 
   def valid_course?
@@ -159,8 +170,8 @@ class Enrollment < ActiveRecord::Base
   def active_student?(was = false)
     suffix = was ? "_before_last_save" : ""
 
-    %w[StudentEnrollment StudentViewEnrollment].include?(send("type#{suffix}")) &&
-      send("workflow_state#{suffix}") == "active"
+    %w[StudentEnrollment StudentViewEnrollment].include?(send(:"type#{suffix}")) &&
+      send(:"workflow_state#{suffix}") == "active"
   end
 
   def active_student_changed?
@@ -244,6 +255,7 @@ class Enrollment < ActiveRecord::Base
   end
 
   scope :active, -> { where("enrollments.workflow_state<>'deleted'") }
+  scope :deleted, -> { where(workflow_state: "deleted") }
 
   scope :admin, lambda {
                   select(:course_id)
@@ -431,11 +443,12 @@ class Enrollment < ActiveRecord::Base
   end
 
   def update_linked_enrollments(restore: false)
+    restorable_states = %w[inactive deleted completed]
     observers.each do |observer|
       enrollment = restore ? linked_enrollment_for(observer) : active_linked_enrollment_for(observer)
       if enrollment
         enrollment.update_from(self)
-      elsif restore || (saved_change_to_workflow_state? && ["inactive", "deleted"].include?(workflow_state_before_last_save))
+      elsif restore || (saved_change_to_workflow_state? && restorable_states.include?(workflow_state_before_last_save))
         create_linked_enrollment_for(observer)
       end
     end
@@ -749,7 +762,9 @@ class Enrollment < ActiveRecord::Base
       association(:enrollment_state).reload
       result = super
     end
-    result.enrollment = self # ensure reverse association
+    # ensure we have an enrollment state object present with a reverse association
+    result ||= create_enrollment_state
+    result.enrollment = self
     result
   end
 
@@ -1050,7 +1065,7 @@ class Enrollment < ActiveRecord::Base
   end
 
   def self.recompute_due_dates_and_scores(user_id)
-    Course.where(id: StudentEnrollment.where(user_id:).distinct.pluck(:course_id)).each do |course|
+    Course.where(id: StudentEnrollment.where(user_id:).distinct.select(:course_id)).each do |course|
       SubmissionLifecycleManager.recompute_users_for_course([user_id], course, nil, update_grades: true)
     end
   end
@@ -1198,14 +1213,7 @@ class Enrollment < ActiveRecord::Base
   end
 
   def graded_at
-    score = find_score
-    if score.present?
-      score.updated_at
-    else
-      # TODO: drop the graded_at column after the data fixup to populate
-      # the scores table completes
-      read_attribute(:graded_at)
-    end
+    find_score&.updated_at
   end
 
   def self.typed_enrollment(type)
@@ -1239,7 +1247,13 @@ class Enrollment < ActiveRecord::Base
   end
 
   def temporary_enrollment?
-    read_attribute(:temporary_enrollment_source_user_id).present?
+    temporary_enrollment_source_user_id.present?
+  end
+
+  def temporary_enrollment_source_user
+    return nil unless temporary_enrollment?
+
+    User.find(temporary_enrollment_source_user_id)
   end
 
   def observer?
@@ -1271,13 +1285,12 @@ class Enrollment < ActiveRecord::Base
   end
 
   def to_atom
-    Atom::Entry.new do |entry|
-      entry.title     = t("#enrollment.title", "%{user_name} in %{course_name}", user_name:, course_name:)
-      entry.updated   = updated_at
-      entry.published = created_at
-      entry.links << Atom::Link.new(rel: "alternate",
-                                    href: "/courses/#{course.id}/enrollments/#{id}")
-    end
+    {
+      title: t("#enrollment.title", "%{user_name} in %{course_name}", user_name:, course_name:),
+      updated: updated_at,
+      published: created_at,
+      link: "/courses/#{course.id}/enrollments/#{id}"
+    }
   end
 
   set_policy do
@@ -1320,7 +1333,7 @@ class Enrollment < ActiveRecord::Base
   scope :active_or_pending, -> { where("enrollments.workflow_state NOT IN ('rejected', 'completed', 'deleted', 'inactive')") }
   scope :all_active_or_pending, -> { where("enrollments.workflow_state NOT IN ('rejected', 'completed', 'deleted')") } # includes inactive
 
-  scope :active_by_date_or_completed, -> { joins(:enrollment_state).where("enrollment_states.state  IN ('active', 'completed')") }
+  scope :excluding_pending, -> { joins(:enrollment_state).where.not(enrollment_states: { state: EnrollmentState::PENDING_STATES }) }
   scope :active_by_date, -> { joins(:enrollment_state).where("enrollment_states.state = 'active'") }
   scope :invited_by_date, lambda {
                             joins(:enrollment_state).where(enrollment_states: { restricted_access: false })

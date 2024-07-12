@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /*
  * Copyright (C) 2020 - present Instructure, Inc.
  *
@@ -232,7 +233,7 @@ describe('AddConference', () => {
 
     it('renders a select if multiple conference types are available', () => {
       const {getByRole} = render(<AddConference {...getProps({conferenceTypes})} />)
-      const select = getByRole('button')
+      const select = getByRole('combobox')
       expect(select.value).toEqual('Add Conferencing')
     })
 
@@ -241,7 +242,7 @@ describe('AddConference', () => {
       const {getByRole} = render(
         <AddConference {...getProps({conferenceTypes, currentConferenceType})} />
       )
-      const select = getByRole('button')
+      const select = getByRole('combobox')
       expect(select.value).toEqual('Foo Conference')
     })
 
@@ -251,7 +252,7 @@ describe('AddConference', () => {
       const {getByRole, findByText} = render(
         <AddConference {...getProps({conferenceTypes, currentConferenceType, setConference})} />
       )
-      const select = getByRole('button')
+      const select = getByRole('combobox')
       act(() => {
         fireEvent.click(select)
       })
@@ -268,7 +269,7 @@ describe('AddConference', () => {
       const {getByRole, findByText} = render(
         <AddConference {...getProps({conferenceTypes, currentConferenceType, setConference})} />
       )
-      const select = getByRole('button')
+      const select = getByRole('combobox')
       act(() => {
         fireEvent.click(select)
       })

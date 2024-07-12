@@ -21,6 +21,20 @@
 class MediaObject < ActiveRecord::Base
   include Workflow
   include SearchTermHelper
+
+  class VideoCaptionServiceError < Delayed::RetriableError; end
+
+  AUTO_CAPTION_STATUSES = {
+    processing: -> { I18n.t("Processing") },
+    failed_initial_validation: -> { I18n.t("Error - Something went wrong") },
+    failed_handoff: -> { I18n.t("Error - Failed to communicate with captioning service") },
+    failed_request: -> { I18n.t("Error - Failed to request") },
+    non_english_captions: -> { I18n.t("Error - Non-English detected") },
+    failed_captions: -> { I18n.t("Error - Caption request failed") },
+    failed_to_pull: -> { I18n.t("Error - Captions not found") },
+    complete: -> { I18n.t("Complete") },
+  }.freeze
+
   belongs_to :user
   belongs_to :context,
              polymorphic:
@@ -36,15 +50,16 @@ class MediaObject < ActiveRecord::Base
   belongs_to :root_account, class_name: "Account"
 
   validates :media_id, :workflow_state, presence: true
+  validates :auto_caption_status, inclusion: { in: AUTO_CAPTION_STATUSES.keys }, allow_nil: true
   has_many :media_tracks, ->(media_object) { where(attachment_id: [nil, media_object.attachment_id]).order(:locale) }, dependent: :destroy, inverse_of: :media_object
   has_many :attachments_by_media_id, class_name: "Attachment", primary_key: :media_id, foreign_key: :media_entry_id, inverse_of: :media_object_by_media_id
   before_create :create_attachment
   after_create :retrieve_details_later
+  after_create :generate_captions
   after_save :update_title_on_kaltura_later
   serialize :data
 
-  attr_accessor :podcast_associated_asset
-  attr_accessor :current_attachment
+  attr_accessor :podcast_associated_asset, :current_attachment
 
   def user_entered_title=(val)
     @push_user_title = true
@@ -81,26 +96,26 @@ class MediaObject < ActiveRecord::Base
   set_policy do
     #################### Begin legacy permission block #########################
     given do |user|
-      !context_root_account(user).feature_enabled?(:granular_permissions_manage_course_content) &&
+      !context_root_account(user)&.feature_enabled?(:granular_permissions_manage_course_content) &&
         ((self.user && self.user == user) || context&.grants_right?(user, :manage_content))
     end
     can :add_captions and can :delete_captions
 
     given do |user|
-      !context_root_account(user).feature_enabled?(:granular_permissions_manage_course_content) &&
+      !context_root_account(user)&.feature_enabled?(:granular_permissions_manage_course_content) &&
         Account.site_admin.feature_enabled?(:media_links_use_attachment_id) && attachment&.grants_right?(user, :update)
     end
     can :add_captions and can :delete_captions
     ##################### End legacy permission block ##########################
 
     given do |user|
-      context_root_account(user).feature_enabled?(:granular_permissions_manage_course_content) &&
+      context_root_account(user)&.feature_enabled?(:granular_permissions_manage_course_content) &&
         (attachment.present? ? attachment.grants_right?(user, :update) : (context&.grants_right?(user, :manage_course_content_add) || (self.user && self.user == user)))
     end
     can :add_captions
 
     given do |user|
-      context_root_account(user).feature_enabled?(:granular_permissions_manage_course_content) &&
+      context_root_account(user)&.feature_enabled?(:granular_permissions_manage_course_content) &&
         (attachment.present? ? attachment.grants_right?(user, :update) : (context&.grants_right?(user, :manage_course_content_delete) || (self.user && self.user == user)))
     end
     can :delete_captions
@@ -164,10 +179,6 @@ class MediaObject < ActiveRecord::Base
         mo.context = attachment.context
         mo.attachment_id = attachment.id
         attachment.update_attribute(:media_entry_id, entry[:entryId])
-        # check for attachments that were created temporarily, just to import a media object
-        if attachment.full_path.starts_with?(File.join(Folder::ROOT_FOLDER_NAME, CC::CCHelper::MEDIA_OBJECTS_FOLDER) + "/")
-          attachment.destroy
-        end
       end
       mo.context ||= mo.root_account
       mo.save
@@ -294,7 +305,7 @@ class MediaObject < ActiveRecord::Base
     entry = client.mediaGet(media_id)
     media_type = client.mediaTypeToSymbol(entry[:mediaType]).to_s if entry
     # attachment#build_content_types_sql assumes the content_type has a "/"
-    media_type = "#{media_type}/*" unless media_type.blank? || media_type.include?("/")
+    media_type = MediaObject.normalize_content_type(media_type)
     assets = client.flavorAssetGetByEntryId(media_id) || []
     process_retrieved_details(entry, media_type, assets)
   end
@@ -333,6 +344,19 @@ class MediaObject < ActiveRecord::Base
     save!
   end
 
+  def generate_captions
+    return unless Account.site_admin.feature_enabled?(:speedgrader_studio_media_capture)
+
+    # On error, the job is scheduled again in 5 seconds + N ** 4, where N is the number of attempts
+    delay(max_attempts: 10).request_captions
+  end
+
+  def request_captions
+    raise VideoCaptionServiceError unless media_sources.any?
+
+    VideoCaptionService.call(self)
+  end
+
   def data
     read_or_initialize_attribute(:data, {})
   end
@@ -355,7 +379,7 @@ class MediaObject < ActiveRecord::Base
     return unless %w[Account Course Group User].include?(context_type)
 
     self.attachment = Folder.media_folder(context).attachments
-                            .create(
+                            .create!(
                               context:,
                               display_name: guaranteed_title,
                               filename: guaranteed_title,
@@ -365,31 +389,50 @@ class MediaObject < ActiveRecord::Base
                               file_state: "hidden",
                               workflow_state: "pending_upload"
                             )
+    attachment.handle_duplicates(:rename)
   end
 
   def ensure_attachment_media_info
     create_attachment
-    return unless (current_attachment || attachment_id) && attachment.workflow_state == "pending_upload"
-
     # if there are multiple attachments attached to the media_object, we need to update the right one
     updated_attachment = current_attachment || attachment
+    return unless updated_attachment && ["pending_upload", "errored"].include?(updated_attachment.workflow_state)
 
     file_state = updated_attachment.file_state
     sources = media_sources
     return unless sources.present?
 
     url = self.data[:download_url]
-    url = sources.find { |s| s[:isOriginal] == "1" }&.dig(:url) if url.blank?
-    url = sources.min_by { |a| a[:bitrate].to_i }&.dig(:url) if url.blank?
+    ext, url = sources.find { |s| s[:isOriginal] == "1" }&.slice(:fileExt, :url)&.values if url.blank?
+    ext, url = sources.min_by { |a| a[:bitrate].to_i }&.slice(:fileExt, :url)&.values if url.blank?
 
     updated_attachment.clone_url(url, :rename, false) # no check_quota because the bits are in kaltura
     updated_attachment.file_state = file_state
+    if ext.present? && File.mime_type(updated_attachment.display_name) == "unknown/unknown"
+      updated_attachment.display_name = "#{updated_attachment.display_name}.#{ext}"
+    end
     updated_attachment.workflow_state = "processed"
+    updated_attachment.media_entry_id = media_id
     updated_attachment.save!
+  end
+
+  def thumbnail_url
+    kaltura_config = CanvasKaltura::ClientV3.config
+    if kaltura_config
+      kaltura_settings = kaltura_config.try(:slice, "resource_domain", "partner_id")
+      domain = "https://#{kaltura_settings["resource_domain"]}"
+      "#{domain}/p/#{kaltura_settings["partner_id"]}/thumbnail/entry_id/#{media_id}/width/140/height/100/bgcolor/000000/type/2/vid_sec/5"
+    end
   end
 
   def deleted?
     workflow_state == "deleted"
+  end
+
+  def self.normalize_content_type(content_type)
+    return content_type if content_type.blank? || content_type.include?("/")
+
+    "#{content_type}/*"
   end
 
   scope :active, -> { where("media_objects.workflow_state<>'deleted'") }

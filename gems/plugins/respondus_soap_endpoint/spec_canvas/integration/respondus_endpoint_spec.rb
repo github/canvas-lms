@@ -50,7 +50,7 @@ describe "Respondus SOAP API", type: :request do
     streamHandler = soap.proxy.streamhandler
     method_args = [userName, password, context, *args.map(&:last)]
     streamHandler.capture(soap, method, *method_args) do |s_body, s_headers|
-      post "/api/respondus/soap", params: s_body, headers: s_headers
+      post "/api/respondus/soap", params: s_body, headers: s_headers.merge("Content-Type" => "application/soap+xml")
       response
     end
   end
@@ -101,7 +101,8 @@ Implemented for: Canvas LMS)
 
   if Canvas.redis_enabled?
     it "limits the max failed login attempts" do
-      Setting.set("login_attempts_total", "2")
+      @pseudonym.account.settings[:password_policy] = { maximum_login_attempts: 2 }
+      @pseudonym.account.save!
       soap_response = soap_request("ValidateAuth",
                                    "nobody@example.com",
                                    "hax0r",

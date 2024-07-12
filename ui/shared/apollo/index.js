@@ -27,17 +27,17 @@ import {ApolloLink} from 'apollo-link'
 import {ApolloProvider, Query} from 'react-apollo'
 import introspectionQueryResultData from './fragmentTypes.json'
 import {withClientState} from 'apollo-link-state'
-import InstAccess from './InstAccess'
 
 import EncryptedForage from '../encrypted-forage'
 
 function createConsoleErrorReportLink() {
   return onError(({graphQLErrors, networkError}) => {
     if (graphQLErrors)
-      graphQLErrors.map(({message, locations, path}) =>
-        console.log(`[GraphQL error]: Message: ${message}, Location: ${locations}, Path: ${path}`)
+      graphQLErrors.map(
+        ({message, locations, path}) =>
+          console.log(`[GraphQL error]: Message: ${message}, Location: ${locations}, Path: ${path}`) // eslint-disable-line no-console
       )
-    if (networkError) console.log(`[Network error]: ${networkError}`)
+    if (networkError) console.log(`[Network error]: ${networkError}`) // eslint-disable-line no-console
   })
 }
 
@@ -66,14 +66,17 @@ function createHttpLink(httpLinkOptions = {}) {
   return new HttpLink(linkOpts)
 }
 
-function createCache() {
+export function createCache() {
   return new InMemoryCache({
     addTypename: true,
     dataIdFromObject: object => {
       let cacheKey
-
       if (object.id) {
         cacheKey = object.id
+      } else if (object._id && object.__typename === 'RubricAssessmentRating') {
+        cacheKey = object.__typename + object._id + object.rubricAssessmentId
+      } else if (object.__typename === 'RubricRating') {
+        cacheKey = object.__typename + object._id + object.rubricId
       } else if (object._id && object.__typename) {
         cacheKey = object.__typename + object._id
       } else {
@@ -98,7 +101,7 @@ function createCache() {
   })
 }
 
-async function createPersistentCache(passphrase = null) {
+export async function createPersistentCache(passphrase = null) {
   const cache = createCache()
   await persistCache({
     cache,
@@ -107,7 +110,7 @@ async function createPersistentCache(passphrase = null) {
   return cache
 }
 
-function createClient(opts = {}) {
+export function createClient(opts = {}) {
   const cache = opts.cache || createCache()
   const defaults = opts.defaults || {}
   const resolvers = opts.resolvers || {}
@@ -117,22 +120,6 @@ function createClient(opts = {}) {
     defaults,
   })
 
-  // if this option exists, we want this client
-  // to talk through the API gateway instead of
-  // directly to canvas, so we'll need to update the http
-  // link to have both our target URL, and also
-  // an enhanced "fetch" implementation that uses
-  // InstAccess tokens
-  const gatewayUri = opts.apiGatewayUri || false
-  const defaultHttpLinkOptions = {}
-  if (gatewayUri) {
-    defaultHttpLinkOptions.uri = gatewayUri
-    const instAccess = new InstAccess()
-    defaultHttpLinkOptions.fetch = (uri, fetchOpts) => {
-      return instAccess.gatewayAuthenticatedFetch(uri, fetchOpts)
-    }
-  }
-
   // there are some cases where we need to override these options.
   //  If we're using an API gateway instead of talking to canvas directly,
   // we need to be able to inject that config.
@@ -141,10 +128,7 @@ function createClient(opts = {}) {
   // A design goal here is not to do anything "special", but just
   // use the options that are already built into ApolloLink:
   // https://github.com/apollographql/apollo-client/blob/main/src/link/core/ApolloLink.ts
-  const httpLinkOptions = {
-    ...defaultHttpLinkOptions,
-    ...(opts.httpLinkOptions || {}),
-  }
+  const httpLinkOptions = opts.httpLinkOptions || {}
 
   const links =
     createClient.mockLink == null
@@ -164,4 +148,4 @@ function createClient(opts = {}) {
   return client
 }
 
-export {createClient, gql, ApolloProvider, Query, createCache, createPersistentCache}
+export {gql, ApolloProvider, Query}

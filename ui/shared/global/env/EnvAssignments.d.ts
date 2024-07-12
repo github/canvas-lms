@@ -39,6 +39,7 @@ export interface EnvAssignmentsA2StudentView {
   originality_reports_for_a2_enabled: boolean
   restrict_quantitative_data: boolean
   grading_scheme: any
+  points_based: boolean
 
   // Peer review data
   peer_review_available: boolean
@@ -57,6 +58,10 @@ export interface EnvAssignmentsA2StudentView {
   ORIGINALITY_REPORTS_FOR_A2: boolean
   PREREQS: any
   SUBMISSION_ID: string | number
+  DUE_DATE_REQUIRED_FOR_ACCOUNT?: boolean
+  SECTION_LIST?: EnvSection[]
+  HAS_GRADING_PERIODS?: boolean
+  active_grading_periods?: any[]
 }
 
 /**
@@ -67,4 +72,11 @@ export interface EnvAssignmentsDefaultToolInfo {
   DEFAULT_ASSIGNMENT_TOOL_NAME?: string
   DEFAULT_ASSIGNMENT_TOOL_BUTTON_TEXT?: string
   DEFAULT_ASSIGNMENT_TOOL_INFO_MESSAGE?: string
+}
+
+export interface EnvSection {
+  end_at: string | null
+  id: string
+  override_course_and_term_dates: boolean | null
+  start_at: string | null
 }

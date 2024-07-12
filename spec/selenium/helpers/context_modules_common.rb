@@ -34,28 +34,18 @@ module ContextModulesCommon
     modules
   end
 
-  def publish_module
-    fj("#context_modules .publish-icon-publish").click
-    wait_for_ajaximations
-  end
-
-  def unpublish_module
-    fj("#context_modules .publish-icon-published").click
-    wait_for_ajaximations
-  end
-
-  def module_setup
-    @module = @course.context_modules.create!(name: "module")
+  def module_setup(course = @course)
+    @module = course.context_modules.create!(name: "Module 1", workflow_state: "unpublished")
 
     # create module items
     # add first and last module items to get previous and next displayed
-    @assignment1 = @course.assignments.create!(title: "first item in module")
-    @assignment2 = @course.assignments.create!(title: "assignment")
-    @assignment3 = @course.assignments.create!(title: "last item in module")
-    @quiz = @course.quizzes.create!(title: "quiz assignment")
+    @assignment1 = course.assignments.create!(title: "first item in module")
+    @assignment2 = course.assignments.create!(title: "assignment")
+    @assignment3 = course.assignments.create!(title: "last item in module")
+    @quiz = course.quizzes.create!(title: "quiz assignment")
     @quiz.publish!
-    @wiki = @course.wiki_pages.create!(title: "wiki", body: "hi")
-    @discussion = @course.discussion_topics.create!(title: "discussion")
+    @wiki = course.wiki_pages.create!(title: "wiki", body: "hi")
+    @discussion = course.discussion_topics.create!(title: "discussion")
 
     # add items to module
     @module.add_item type: "assignment", id: @assignment1.id
@@ -66,11 +56,11 @@ module ContextModulesCommon
     @module.add_item type: "assignment", id: @assignment3.id
 
     # add external tool
-    @tool = @course.context_external_tools.create!(name: "new tool",
-                                                   consumer_key: "key",
-                                                   shared_secret: "secret",
-                                                   domain: "example.com",
-                                                   custom_fields: { "a" => "1", "b" => "2" })
+    @tool = course.context_external_tools.create!(name: "new tool",
+                                                  consumer_key: "key",
+                                                  shared_secret: "secret",
+                                                  domain: "example.com",
+                                                  custom_fields: { "a" => "1", "b" => "2" })
     @external_tool_tag = @module.add_item({
                                             type: "context_external_tool",
                                             title: "Example",
@@ -96,6 +86,19 @@ module ContextModulesCommon
     expect_any_instance_of(ContextModule).to receive(:relock_progressions).once
     fj(".ui-dialog:visible .ui-button:first-child").click
     wait_for_ajaximations
+  end
+
+  def ignore_relock
+    scroll_to_the_top_of_modules_page
+    continue_button_selector = "//*[contains(@class, 'ui-dialog') and not(contains(@style, 'display: none')) and ./*[@id = 'relock_modules_dialog']]//button[. = 'Continue']"
+    if element_exists?(continue_button_selector, true)
+      fxpath(continue_button_selector).click
+    end
+  end
+
+  def relock_modules
+    expect(element_exists?("#relock_modules_dialog")).to be_truthy
+    fj(".ui-dialog:visible .ui-button:first-child").click
   end
 
   def create_context_module(module_name)
@@ -132,7 +135,7 @@ module ContextModulesCommon
     end
   end
 
-  def vaildate_correct_pill_message(module_id, message_expected)
+  def validate_correct_pill_message(module_id, message_expected)
     pill_message = f("#context_module_#{module_id} .requirements_message li").text
     expect(pill_message).to eq message_expected
   end
@@ -177,7 +180,11 @@ module ContextModulesCommon
   end
 
   def manually_add_module_item(item_select_selector, module_name, item_name)
-    add_module(module_name + "Module")
+    if Account.site_admin.feature_enabled?(:selective_release_ui_api)
+      add_module_with_tray(module_name + "Module")
+    else
+      add_module(module_name + "Module")
+    end
     f(".ig-header-admin .al-trigger").click
     wait_for_ajaximations
     f(".add_module_item_link").click
@@ -271,7 +278,13 @@ module ContextModulesCommon
     expect(f("#context_modules")).to include_text(module_name)
   end
 
-  def add_new_module_item(item_select_selector, module_name, new_item_text, item_title_text)
+  def add_module_with_tray(module_name = "Test Module")
+    click_new_module_link
+    update_module_name(module_name)
+    click_add_tray_add_module_button
+  end
+
+  def add_new_module_item_and_yield(item_select_selector, module_name, new_item_text, item_title_text)
     f(".ig-header-admin .al-trigger").click
     f(".add_module_item_link").click
     select_module_item("#add_module_item_select", module_name)

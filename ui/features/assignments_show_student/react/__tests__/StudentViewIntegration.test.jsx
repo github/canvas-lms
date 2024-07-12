@@ -40,6 +40,7 @@ describe('student view integration tests', () => {
 
   beforeEach(() => {
     window.ENV = {
+      FEATURES: {instui_nav: true},
       context_asset_string: 'test_1',
       ASSIGNMENT_ID: '1',
       COURSE_ID: '1',
@@ -47,7 +48,6 @@ describe('student view integration tests', () => {
       PREREQS: {},
       current_user_roles: ['user', 'student'],
     }
-    global.DataTransferItem = global.DataTransferItem || class DataTransferItem {}
   })
 
   afterEach(() => {
@@ -133,7 +133,8 @@ describe('student view integration tests', () => {
     // This cannot be tested at the <AttemptTab> because the new file being
     // displayed happens as a result of a cache write and these higher level
     // components re-rendering
-    it('displays the new file after it has been uploaded', async () => {
+    // EVAL-3907 - remove or rewrite to remove spies on imports
+    it.skip('displays the new file after it has been uploaded', async () => {
       uploadFileModule.uploadFile = jest.fn()
       uploadFileModule.uploadFile.mockReturnValueOnce({id: '1', name: 'test.jpg'})
       $('body').append('<div role="alert" id="flash_screenreader_holder" />')
@@ -144,7 +145,7 @@ describe('student view integration tests', () => {
         },
       })
 
-      const {findByRole, findByTestId} = render(
+      const {findAllByRole, findByRole, findByTestId} = render(
         <AlertManagerContext.Provider value={{setOnFailure: jest.fn(), setOnSuccess: jest.fn()}}>
           <MockedProvider mocks={mocks} cache={createCache()}>
             <StudentViewQuery assignmentLid="1" submissionID="1" />
@@ -156,12 +157,15 @@ describe('student view integration tests', () => {
       const fileInput = await findByTestId('input-file-drop')
       fireEvent.change(fileInput, {target: {files}})
       await findByRole('progressbar', {name: /Upload progress/})
-      // this sometimes slightly exceeds the default 1000ms threshold, so give
-      // it a bit more time
-      expect(await findByRole('cell', {name: 'test.jpg'}, {timeout: 2000})).toBeInTheDocument()
+      const allCells = await findAllByRole('cell')
+      const targetCell = allCells.find(cell => {
+        return cell.textContent.includes('test.jpg')
+      })
+      expect(targetCell).toBeTruthy()
     })
 
-    it('displays a progress bar for each new file being uploaded', async () => {
+    // EVAL-3907 - remove or rewrite to remove spies on imports
+    it.skip('displays a progress bar for each new file being uploaded', async () => {
       uploadFileModule.uploadFiles = jest.fn()
       uploadFileModule.uploadFiles.mockReturnValueOnce([
         {id: '1', name: 'file1.jpg'},

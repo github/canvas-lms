@@ -43,12 +43,8 @@ describe "conversations new" do
       @convo.add_message(@s2, "I need the homework too.")
     end
 
-    context "when react_inbox feature flag is on" do
-      before do
-        Account.default.set_feature_flag! :react_inbox, "on"
-      end
-
-      it "doesn't allow replying with no recipients", ignore_js_errors: true do
+    context "react_inbox" do
+      it "doesn't allow replying with no recipients", :ignore_js_errors do
         get "/conversations"
         f("div[data-testid='conversation']").click
         wait_for_ajaximations
@@ -57,21 +53,42 @@ describe "conversations new" do
         f("textarea[data-testid='message-body']").send_keys("no recipient")
         f("button[data-testid='send-button']").click
         wait_for_ajaximations
-        expect(fj("span:contains('Please select a recipient.')")).to be_displayed
+        # There is a hidden screen reader message that is not displayed and a visible error message
+        expect(ffj("span:contains('Please select a recipient.')")[1]).to be_displayed
       end
 
-      it "allows adding a new recipient", ignore_js_errors: true do
+      it "only displays students in the selected course context when selecting students to reply to", :ignore_js_errors do
+        @course1 = @course
+        @course2 = course_factory(active_course: true, course_name: "Course 2")
+        @s3 = user_factory(name: "second student")
+        teacher_in_course(user: @teacher, course: @course2, active_all: true)
+        student_in_course(user: @s3, active_all: true, course: @course2)
+
+        @convo.update_attribute(:context, @course1)
         get "/conversations"
         f("div[data-testid='conversation']").click
         wait_for_ajaximations
         f("button[data-testid='message-reply']").click
 
-        # The second compose modal addressbook should appear
-        expect(ff("input[aria-label='Address Book']").count).to eq(2)
+        f("input[aria-label='To']").click
+        expect(f("body")).not_to contain_jqcss("div[data-testid='address-book-item']:contains('Users')")
+        fj("div[data-testid='address-book-item']:contains('Students')").click
+        expect(fj("div[data-testid='address-book-item']:contains('first student')")).to be_present
+        expect(fj("div[data-testid='address-book-item']:contains('second student')")).to be_present
+        expect(f("body")).not_to contain_jqcss("div[data-testid='address-book-item']:contains('third student')")
+      end
+
+      it "allows adding a new recipient", :ignore_js_errors do
+        get "/conversations"
+        f("div[data-testid='conversation']").click
+        wait_for_ajaximations
+        f("button[data-testid='message-reply']").click
+
+        # The compose modal "To" addressbook should appear
+        expect(ff("input[aria-label='To']").count).to eq(1)
 
         f("textarea[data-testid='message-body']").send_keys("new recipient")
-        ff("input[aria-label='Address Book']")[1].click
-        fj("div[data-testid='address-book-item']:contains('Users')").click
+        f("input[aria-label='To']").click
         fj("div[data-testid='address-book-item']:contains('first student')").click
         f("button[data-testid='send-button']").click
         wait_for_ajaximations
@@ -81,17 +98,17 @@ describe "conversations new" do
         expect(participants.collect(&:user_id)).to match_array [@s1.id, @s2.id, @teacher.id]
       end
 
-      it "does not allow adding recipients to private messages", ignore_js_errors: true do
+      it "does not allow adding recipients to private messages", :ignore_js_errors do
         @convo.update_attribute(:private_hash, "12345")
         get "/conversations"
         f("div[data-testid='conversation']").click
         wait_for_ajaximations
         f("button[data-testid='message-reply']").click
         # There should only be one addressbook, which controls the inbox filter
-        expect(ff("input[aria-label='Address Book']").count).to eq(1)
+        expect(ff("input[aria-label='Search']").count).to eq(1)
       end
 
-      it "replies to most recent author using the individual message reply button", ignore_js_errors: true do
+      it "replies to most recent author using the individual message reply button", :ignore_js_errors do
         get "/conversations"
         f("div[data-testid='conversation']").click
         wait_for_ajaximations
@@ -104,7 +121,7 @@ describe "conversations new" do
         expect(participants.collect(&:user_id)).to match_array [@s2.id, @teacher.id]
       end
 
-      it "replies to everyone using the individual message reply all button", ignore_js_errors: true do
+      it "replies to everyone using the individual message reply all button", :ignore_js_errors do
         get "/conversations"
         f("div[data-testid='conversation']").click
         wait_for_ajaximations
@@ -119,7 +136,7 @@ describe "conversations new" do
       end
 
       # the js errors caught in here are captured by VICE-2507
-      it "reply from top bar show record / upload media ui when kaltura is enabled", ignore_js_errors: true do
+      it "reply from top bar show record / upload media ui when kaltura is enabled", :ignore_js_errors do
         stub_kaltura
         get "/conversations"
         f("div[data-testid='conversation']").click
@@ -133,7 +150,7 @@ describe "conversations new" do
         expect(f("input[type='file']")).to be_truthy
       end
 
-      it "reply from conversation header from mobile detail message view", ignore_js_errors: true do
+      it "reply from conversation header from mobile detail message view", :ignore_js_errors do
         driver.manage.window.resize_to(565, 836)
         get "/conversations"
         f("div[data-testid='conversation']").click
@@ -147,7 +164,7 @@ describe "conversations new" do
         resize_screen_to_standard
       end
 
-      it "replying using top bar reply button replies to most recent author", ignore_js_errors: true do
+      it "replying using top bar reply button replies to most recent author", :ignore_js_errors do
         get "/conversations"
         f("div[data-testid='conversation']").click
         wait_for_ajaximations
@@ -159,7 +176,7 @@ describe "conversations new" do
         expect(participants.collect(&:user_id)).to match_array [@s2.id, @teacher.id]
       end
 
-      it "replying using top bar reply all button replies to everyone in conversation", ignore_js_errors: true do
+      it "replying using top bar reply all button replies to everyone in conversation", :ignore_js_errors do
         get "/conversations"
         f("div[data-testid='conversation']").click
         wait_for_ajaximations
@@ -171,7 +188,7 @@ describe "conversations new" do
         expect(participants.collect(&:user_id)).to match_array [@s2.id, @teacher.id, @s1.id]
       end
 
-      it "successfully replies to convos with chars outside of latin1", ignore_js_errors: true do
+      it "successfully replies to convos with chars outside of latin1", :ignore_js_errors do
         @convo.add_message(@teacher, "✓")
         expect(ConversationMessage.last.body).to eq "✓"
 
@@ -189,133 +206,6 @@ describe "conversations new" do
         wait_for_ajaximations
 
         expect(ConversationMessage.last.body).to eq "all good"
-      end
-    end
-
-    context "when react_inbox feature flag is off" do
-      before do
-        Account.default.set_feature_flag! :react_inbox, "off"
-      end
-
-      it "maintains context and subject", priority: "1" do
-        go_to_inbox_and_select_message
-        f("#reply-btn").click
-        expect(f("#compose-message-course")).to be_disabled
-        expect(f(".message_course_ro").text).to eq @group.name
-        expect(f("input[name=context_code]")).to have_value @group.asset_string
-        expect(f("#compose-message-subject")).to be_disabled
-        expect(f("#compose-message-subject")).not_to be_displayed
-        expect(f("#compose-message-subject")).to have_value(@convo.subject)
-        expect(f(".message_subject_ro")).to be_displayed
-        expect(f(".message_subject_ro").text).to eq @convo.subject
-      end
-
-      it "adds new messages to the conversation", priority: "1" do
-        initial_message_count = @convo.conversation_messages.length
-        go_to_inbox_and_select_message
-        f("#reply-btn").click
-        write_message_body("Read chapters five and six.")
-        click_send
-        wait_for_ajaximations
-        expect(ff(".message-item-view").length).to eq initial_message_count + 1
-        @convo.reload
-        expect(@convo.conversation_messages.length).to eq initial_message_count + 1
-      end
-
-      it "does not allow adding recipients to private messages", priority: "2" do
-        @convo.update_attribute(:private_hash, "12345")
-        go_to_inbox_and_select_message
-        f("#reply-btn").click
-        expect(f("#recipient-row")).to have_attribute(:style, "display: none;")
-      end
-
-      context "reply and reply all" do
-        it "addresses replies to the most recent author by default from the icon at the top of the page", priority: "2" do
-          go_to_inbox_and_select_message
-          f("#reply-btn").click
-          assert_number_of_recipients(1)
-        end
-
-        it "replies to all users from the reply all icon on the top of the page", priority: "2" do
-          go_to_inbox_and_select_message
-          f("#reply-all-btn").click
-          assert_number_of_recipients(2)
-        end
-
-        it "replies to message from the reply icon next to the message", priority: "2" do
-          go_to_inbox_and_select_message
-          f(".message-detail-actions .reply-btn").click
-          assert_number_of_recipients(1)
-        end
-
-        it "replies to all users from the settings icon next to the message", priority: "2" do
-          go_to_inbox_and_select_message
-          f(".message-detail-actions .icon-settings").click
-          f(".ui-menu-item .reply-all-btn").click
-          assert_number_of_recipients(2)
-        end
-      end
-
-      it "does not let a student reply to a student conversation if they lose messaging permissions" do
-        @convo.conversation_participants.where(user_id: @teacher).delete_all
-        @convo.update_attribute(:context, @course)
-        user_session(@s1)
-        go_to_inbox_and_select_message
-        expect(f("#reply-btn")).to_not be_disabled
-
-        @course.account.role_overrides.create!(permission: :send_messages, role: student_role, enabled: false)
-        go_to_inbox_and_select_message
-        expect(f("#reply-btn")).to be_disabled
-      end
-
-      it "lets a student reply to a conversation including a teacher even if they lose messaging permissions" do
-        @convo.update_attribute(:context, @course)
-        user_session(@s1)
-        @course.account.role_overrides.create!(permission: :send_messages, role: student_role, enabled: false)
-        go_to_inbox_and_select_message
-        expect(f("#reply-btn")).to_not be_disabled
-      end
-
-      context "hard concluded course" do
-        before do
-          @course.complete!
-          @course.save!
-        end
-
-        it "does not allow teachers to reply to a conversation", ignore_js_errors: true do
-          user_session(@teacher)
-          go_to_inbox_and_select_message
-          expect(f("#reply-btn")).to be_disabled
-        end
-
-        it "does not allow students to reply to a conversation", ignore_js_errors: true do
-          user_session(@s1)
-          go_to_inbox_and_select_message
-          expect(f("#reply-btn")).to be_disabled
-        end
-      end
-
-      context "soft concluded course" do
-        before do
-          @course.enrollment_term.start_at = 2.days.ago
-          @course.enrollment_term.end_at = 1.day.ago
-          @course.enrollment_term.set_overrides(Account.default, "TeacherEnrollment" => { start_at: 1.day.ago, end_at: 2.days.ago })
-          @course.enrollment_term.set_overrides(Account.default, "StudentEnrollment" => { start_at: 1.day.ago, end_at: 2.days.ago })
-          @course.save!
-          @course.enrollment_term.save!
-        end
-
-        it "does not allow teachers to reply to a conversation", ignore_js_errors: true do
-          user_session(@teacher)
-          go_to_inbox_and_select_message
-          expect(f("#reply-btn")).to be_disabled
-        end
-
-        it "does not allow student to reply to a conversation", ignore_js_errors: true do
-          user_session(@s1)
-          go_to_inbox_and_select_message
-          expect(f("#reply-btn")).to be_disabled
-        end
       end
     end
   end

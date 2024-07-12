@@ -21,9 +21,18 @@
 class GradingStandard < ActiveRecord::Base
   include Canvas::SoftDeletable
 
-  belongs_to :context, polymorphic: [:account, :course], required: true
+  belongs_to :context, polymorphic: [:account, :course], optional: false
   belongs_to :user
   has_many :assignments
+  has_many :courses
+  has_many :assessed_course_assignments,
+           lambda {
+             where(grading_standard_id: nil, grading_type: ["letter_grade", "gpa_scale"])
+               .joins(:submissions)
+               .where("submissions.workflow_state='graded'")
+           },
+           through: :courses,
+           source: :assignments
 
   has_many :accounts, inverse_of: :grading_standard, dependent: :nullify
 
@@ -32,6 +41,7 @@ class GradingStandard < ActiveRecord::Base
   validate :valid_grading_scheme_data
   validate :full_range_scheme
   validate :scaling_factor_points_based
+  before_destroy :prevent_deletion_of_used_schemes
 
   # version 1 data is an array of [ letter, max_integer_value ]
   # we created a version 2 because this is ambiguous once we added support for
@@ -62,12 +72,23 @@ class GradingStandard < ActiveRecord::Base
   before_create :set_root_account_id
 
   workflow do
-    state :active
+    state :active do
+      event :archive!, transitions_to: :archived
+    end
     state :deleted
+    state :archived do
+      event :unarchive!, transitions_to: :active
+    end
   end
 
-  scope :active, -> { where("grading_standards.workflow_state<>'deleted'") }
+  scope :active, -> { where("grading_standards.workflow_state = 'active'") }
+  scope :archived, -> { where("grading_standards.workflow_state = 'archived'") }
   scope :sorted, -> { order(Arel.sql("usage_count >= 3 DESC")).order(nulls(:last, best_unicode_collation_key("title"))) }
+  scope :for_context, lambda { |context|
+    context_codes = [context.asset_string]
+    context_codes = context_codes.concat(Account.all_accounts_for(context).map(&:asset_string)).uniq
+    where(context_code: context_codes)
+  }
 
   VERSION = 2
 
@@ -76,10 +97,41 @@ class GradingStandard < ActiveRecord::Base
     can :manage
   end
 
-  def self.for(context)
-    context_codes = [context.asset_string]
-    context_codes.concat Account.all_accounts_for(context).map(&:asset_string)
-    GradingStandard.active.where(context_code: context_codes.uniq)
+  def self.for(context, include_archived: false)
+    unless Account.site_admin.feature_enabled?(:archived_grading_schemes)
+      return GradingStandard.active.for_context(context)
+    end
+
+    case context
+    when Account
+      for_account(context)
+    when Course
+      for_course(context, include_archived:)
+    else
+      for_assignment(context, include_archived:)
+    end
+  end
+
+  def self.for_assignment(assignment, include_archived: false)
+    standards = include_archived ? GradingStandard.for_context(assignment.context) : GradingStandard.active.for_context(assignment.context)
+    standards = GradingStandard.where(id: standards)
+    course_scheme = assignment.context.grading_standard
+    standards = standards.union(GradingStandard.where(id: course_scheme)) if course_scheme&.archived?
+    if assignment.grading_standard&.archived?
+      standards = standards.union(GradingStandard.where(id: assignment.grading_standard))
+    end
+    standards
+  end
+
+  def self.for_course(course, include_archived: false)
+    standards = include_archived ? GradingStandard.for_context(course) : GradingStandard.active.for_context(course)
+    standards = GradingStandard.where(id: standards)
+    standards = standards.union(GradingStandard.where(id: course.grading_standard)) if course.grading_standard&.archived?
+    standards
+  end
+
+  def self.for_account(account)
+    GradingStandard.active.union(GradingStandard.archived).for_context(account)
   end
 
   def version
@@ -95,13 +147,18 @@ class GradingStandard < ActiveRecord::Base
 
   def place_in_scheme(key_name)
     # look for keys with only digits and a single '.'
-    if key_name.to_s&.match?(/\A(\d*[.])?\d+\Z/)
+    key_name_str = key_name.to_s
+    if key_name_str&.match?(/\A(\d*[.])?\d+\Z/)
       # compare numbers
       # second condition to filter letters so zeros work properly ("A".to_d == 0)
       ordered_scheme.index { |g, _| g.to_d == key_name.to_d && g.to_s.match(/\A(\d*[.])?\d+\Z/) }
     else
-      # compare words
-      ordered_scheme.index { |g, _| g.to_s.casecmp?(key_name.to_s) }
+      idx = index_of_key(key_name_str)
+      if idx.nil? && minus_grade?(key_name_str)
+        idx = index_of_key(key_name_str.sub(/−$/, "-"))
+      end
+
+      idx
     end
   end
 
@@ -116,9 +173,17 @@ class GradingStandard < ActiveRecord::Base
     # otherwise, we step down just 1/10th of a point, which is the
     # granularity we support right now
     elsif idx && (ordered_scheme[idx].last - ordered_scheme[idx - 1].last).abs >= BigDecimal("0.01")
-      (ordered_scheme[idx - 1].last * BigDecimal("100.0")) - BigDecimal("1.0")
+      if points_based
+        (((ordered_scheme[idx - 1].last * scaling_factor) - BigDecimal("0.1")) / scaling_factor) * BigDecimal("100.0")
+      else
+        (ordered_scheme[idx - 1].last * BigDecimal("100.0")) - BigDecimal("1.0")
+      end
     elsif idx
-      (ordered_scheme[idx - 1].last * BigDecimal("100.0")) - BigDecimal("0.1")
+      if points_based
+        (((ordered_scheme[idx - 1].last * scaling_factor) - BigDecimal("0.1")) / scaling_factor) * BigDecimal("100.0")
+      else
+        (ordered_scheme[idx - 1].last * BigDecimal("100.0")) - BigDecimal("0.1")
+      end
     else
       nil
     end
@@ -127,8 +192,12 @@ class GradingStandard < ActiveRecord::Base
   # e.g. convert 89.7 to B+
   def score_to_grade(score)
     score = 0 if score < 0
+    score = scale_score(score) if points_based?
     # assign the highest grade whose min cutoff is less than the score
     # if score is less than all scheme cutoffs, assign the lowest grade
+    if points_based
+      score = score.round(2) # round to 2 decimal places because points based grading schemes lower bounds are rounded to 2 decimal places
+    end
     score = BigDecimal(score.to_s) # Cast this to a BigDecimal too or comparisons get wonky
     ordered_scheme.max_by { |_, lower_bound| (score >= lower_bound * BigDecimal("100.0")) ? lower_bound : -lower_bound }[0]
   end
@@ -181,8 +250,34 @@ class GradingStandard < ActiveRecord::Base
     self.context_code = "#{context_type.underscore}_#{context_id}" rescue nil
   end
 
+  def prevent_deletion_of_used_schemes
+    return unless Account.site_admin.feature_enabled?(:archived_grading_schemes) && assessed_assignment?
+
+    errors.add(:workflow_state, "You cannot delete a used scheme")
+    throw :error
+  end
+  private :prevent_deletion_of_used_schemes
+
   def assessed_assignment?
-    assignments.active.joins(:submissions).where("submissions.workflow_state='graded'").exists?
+    GuardRail.activate(:secondary) do
+      unless Account.site_admin.feature_enabled?(:archived_grading_schemes)
+        return assignments.active.joins(:submissions).where("submissions.workflow_state='graded'").exists?
+      end
+
+      return true if assessed_course_assignments.exists? || assessed_assignments.exists?
+
+      false
+    end
+  end
+
+  def used_locations
+    assessed_assignments.union(assessed_course_assignments)
+  end
+
+  def assessed_assignments
+    assignments
+      .except(:order).joins(:submissions)
+      .where("submissions.workflow_state='graded'")
   end
 
   delegate :name, to: :context, prefix: true
@@ -275,5 +370,27 @@ class GradingStandard < ActiveRecord::Base
 
   def set_root_account_id
     self.root_account_id ||= context.is_a?(Account) ? context.resolved_root_account_id : context.root_account_id
+  end
+
+  def used_as_default?
+    courses.any? || accounts.any?
+  end
+
+  private
+
+  def scale_score(score)
+    return score if scaling_factor == 100 || scaling_factor <= 0
+
+    scaled = score.to_d / (100 / scaling_factor)
+    rounded = scaled.round(2)
+    (rounded / scaling_factor) * 100
+  end
+
+  def minus_grade?(grade)
+    !!grade && /.+−$/.match?(grade)
+  end
+
+  def index_of_key(key)
+    ordered_scheme.index { |scheme_key, _| scheme_key.to_s.casecmp?(key) }
   end
 end

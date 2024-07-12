@@ -206,6 +206,7 @@ describe "Enrollment::BatchStateUpdater" do
       autosave_associated_records_for_root_account
       autosave_associated_records_for_sis_pseudonym
       autosave_associated_records_for_user
+      autosave_associated_records_for_temporary_enrollment_pairing
       around_save_collection_association
       broadcast_notifications
       cancel_future_appointments
@@ -225,6 +226,7 @@ describe "Enrollment::BatchStateUpdater" do
       update_assignment_overrides_if_needed
       update_linked_enrollments
       update_user_account_associations_if_necessary
+      _notify_live_events_observer_for_after_save
     ]
     expect(Enrollment._save_callbacks.collect(&:filter).select { |k| k.is_a? Symbol } - accounted_for_callbacks).to eq []
   end

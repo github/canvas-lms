@@ -30,11 +30,13 @@ class AccountGradingSettingsController < ApplicationController
   def index
     if authorized_action(@account, @current_user, :read_as_admin)
       js_env({
-               # TODO: remove after grading_scheme_updates flag is removed
-               POINTS_BASED_GRADING_SCHEMES_ENABLED: Account.site_admin.feature_enabled?(:points_based_grading_schemes),
                CUSTOM_GRADEBOOK_STATUSES_ENABLED: Account.site_admin.feature_enabled?(:custom_gradebook_statuses),
+               #  TODO: remove after archived grading schemes flag is removed
+               ARCHIVED_GRADING_SCHEMES_ENABLED: Account.site_admin.feature_enabled?(:archived_grading_schemes),
+               IS_ROOT_ACCOUNT: @account.root_account?,
+               ROOT_ACCOUNT_ID: @account.root_account.id.to_s,
+               DEFAULT_ACCOUNT_GRADING_SCHEME_ENABLED: Account.site_admin.feature_enabled?(:default_account_grading_scheme),
              })
-      js_bundle :react_content_router
       css_bundle :grading_period_sets, :enrollment_terms
       render html: "".html_safe, layout: true
     end

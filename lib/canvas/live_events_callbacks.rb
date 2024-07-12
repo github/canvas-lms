@@ -22,6 +22,8 @@ module Canvas::LiveEventsCallbacks
 
   def self.after_create(obj)
     case obj
+    when ContentExport
+      Canvas::LiveEvents.content_export_created(obj)
     when Course
       Canvas::LiveEvents.course_created(obj)
     when Conversation
@@ -163,7 +165,7 @@ module Canvas::LiveEventsCallbacks
         singleton_key = "course_progress_course_#{obj.context_module.global_context_id}_user_#{obj.global_user_id}"
         CourseProgress.delay_if_production(
           singleton: singleton_key,
-          run_at: Setting.get("course_progress_live_event_delay_seconds", "120").to_i.seconds.from_now,
+          run_at: 2.minutes.from_now,
           on_conflict: :overwrite,
           priority: 15
         ).dispatch_live_event(obj)
@@ -220,6 +222,22 @@ module Canvas::LiveEventsCallbacks
       Canvas::LiveEvents.wiki_page_deleted(obj)
     when MasterCourses::ChildSubscription
       Canvas::LiveEvents.blueprint_subscription_deleted(obj)
+    end
+  end
+
+  # Exercise caution when triggering events using after_save callback
+  # it will run for both creating and updating an object
+  def self.after_save(obj)
+    case obj
+    # RubricAssessment events must be triggered on after_save.
+    # RubricAssessments are simply versioned meaning the object
+    # is updated when subsequent assessments are made by an
+    # an instructor. This means the event should trigger after a
+    # record is created and after it is updated.
+    when RubricAssessment
+      if obj.active_rubric_association?
+        Canvas::LiveEvents.rubric_assessed(obj)
+      end
     end
   end
 

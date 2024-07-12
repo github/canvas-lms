@@ -1,0 +1,13 @@
+---
+translation:
+  state: hidden
+  applies_to: Course
+  display_name: Enable AI Translation
+  description: AI-driven translation controls for courses
+  beta: true
+translate_inbox_messages:
+  state: hidden
+  applies_to: RootAccount
+  display_name: Enable Translation in Inbox Compose and Inbound Messages
+  description: Will translate inbound messages, and allow users to include translated versions of their outbound messages
+  beta: true

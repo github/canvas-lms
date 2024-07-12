@@ -31,6 +31,7 @@ const defaultProps = {
       href: '/groups/1/discussion_topics/3',
       children: 'Group_Test_1',
       contextName: 'Group_Test_1',
+      entryCounts: {unreadCount: 0},
       type: 'button',
       disabled: false,
     },
@@ -39,6 +40,7 @@ const defaultProps = {
       href: '/groups/2/discussion_topics/4',
       children: 'Group_Test_2',
       contextName: 'Group_Test_2',
+      entryCounts: {unreadCount: 5},
       type: 'button',
       disabled: false,
     },
@@ -57,11 +59,14 @@ describe('GroupsMenu', () => {
       expect(queryByTestId('groups-menu-btn')).toBeTruthy()
     })
 
-    it('should find "Group_Test_1" group name', () => {
-      const {queryByText, queryByTestId} = setup(defaultProps)
-      expect(queryByText('Group_Test_1')).toBeFalsy()
+    it('should find the group names, and corresponding unread counts', () => {
+      const {queryByText, queryAllByText, queryByTestId} = setup(defaultProps)
+      expect(queryAllByText('Group_Test_1')).toEqual([])
       fireEvent.click(queryByTestId('groups-menu-btn'))
-      expect(queryByText('Group_Test_1')).toBeTruthy()
+      expect(queryAllByText('Group_Test_1').length).toEqual(2)
+      expect(queryByText('0 Unread')).toBeTruthy()
+      expect(queryAllByText('Group_Test_2').length).toEqual(2)
+      expect(queryByText('5 Unread')).toBeTruthy()
     })
   })
 })

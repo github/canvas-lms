@@ -17,7 +17,8 @@
  */
 
 import {enhanceUserContent} from '../enhance_user_content'
-import Mathml from '../mathml'
+import {Mathml} from '../mathml'
+import formatMessage from '../../format-message'
 
 jest.useFakeTimers()
 
@@ -134,6 +135,22 @@ describe('enhanceUserContent()', () => {
     })
   })
 
+  describe('when tool launch iframe has display=in_rce', () => {
+    const canvasOrigin = 'https://canvas.is.here:2000/'
+
+    it('replaces with display=borderless', () => {
+      subject(
+        `<iframe id="iframe" src="${canvasOrigin}courses/1/external_tools/retrieve?display=in_rce" />`
+      )
+
+      enhanceUserContent(document, {canvasOrigin})
+
+      expect(document.getElementById('iframe').getAttribute('src')).toEqual(
+        `${canvasOrigin}courses/1/external_tools/retrieve?display=borderless`
+      )
+    })
+  })
+
   describe('when a link has an href that matches a canvas file path', () => {
     it('makes relative links absolute', () => {
       subject(
@@ -213,6 +230,18 @@ describe('enhanceUserContent()', () => {
         enhanceUserContent()
         const aTag = document.querySelector('a')
         expect(aTag.classList.contains('file_preview_link')).toBeTruthy()
+        expect(aTag).toHaveAttribute('target')
+      })
+    })
+
+    describe('when the link has preview inline set', () => {
+      it('includes previewable in the class list', () => {
+        subject(
+          '<a class="instructure_file_link instructure_scribd_file" href="/courses/1/files/1" target="_blank" data-canvas-previewable="true">file</a>'
+        )
+        enhanceUserContent(document, {locale: 'es'})
+        const aTag = document.querySelector('a')
+        expect(aTag.classList.value).toEqual('file_preview_link previewable')
         expect(aTag).toHaveAttribute('target')
       })
     })
@@ -319,6 +348,50 @@ describe('enhanceUserContent()', () => {
       subject('<p>anything</p>')
       enhanceUserContent(document, {explicit_latex_typesetting: false})
       expect(processSpy).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('addResourceIdentifiersToStudioContent', () => {
+    beforeEach(() => {
+      const userContent = document.querySelector('.user_content')
+      userContent.dataset.resourceType = 'assignment.body'
+      userContent.dataset.resourceId = '123'
+    })
+
+    it('adds resource identifiers to studio iframe', () => {
+      subject(
+        '<p><iframe class="lti-embed" title="small_video" src="http://localhost/courses/1/external_tools/retrieve?display=in_rce&url=https%3A%2F%2Fbeta.instructuremedia.com%2Flti%2Flaunch%3Fcustom_arc_launch_type%3Dembed%26custom_arc_media_id%3D902318c4-cc8d-4c4d-95dd-5d955f6dc5af-8%26custom_arc_start_at%3D0"></iframe></p>'
+      )
+      enhanceUserContent()
+      const iframe = document.querySelector('iframe')
+      expect(iframe.src).toEqual(
+        'http://localhost/courses/1/external_tools/retrieve?display=in_rce&url=https%3A%2F%2Fbeta.instructuremedia.com%2Flti%2Flaunch%3Fcustom_arc_launch_type%3Dembed%26custom_arc_media_id%3D902318c4-cc8d-4c4d-95dd-5d955f6dc5af-8%26custom_arc_start_at%3D0&com_instructure_course_canvas_resource_type=assignment.body&com_instructure_course_canvas_resource_id=123'
+      )
+    })
+
+    it('adds resource identifiers to multiple studio iframes', () => {
+      subject(
+        '<p><iframe class="lti-embed" title="small_video" src="http://localhost/courses/1/external_tools/retrieve?display=in_rce&url=https%3A%2F%2Fbeta.instructuremedia.com%2Flti%2Flaunch%3Fcustom_arc_launch_type%3Dembed%26custom_arc_media_id%3D902318c4-cc8d-4c4d-95dd-5d955f6dc5af-8%26custom_arc_start_at%3D0"></iframe></p><p><iframe class="lti-embed" title="small_video" src="http://localhost/courses/1/external_tools/retrieve?display=in_rce&url=https%3A%2F%2Fbeta.instructuremedia.com%2Flti%2Flaunch%3Fcustom_arc_launch_type%3Dembed%26custom_arc_media_id%3D902318c4-cc8d-4c4d-95dd-5d955f6dc5ae-8%26custom_arc_start_at%3D0"></iframe></p>'
+      )
+      enhanceUserContent()
+      const iframes = document.querySelectorAll('iframe')
+      expect(iframes[0].src).toEqual(
+        'http://localhost/courses/1/external_tools/retrieve?display=in_rce&url=https%3A%2F%2Fbeta.instructuremedia.com%2Flti%2Flaunch%3Fcustom_arc_launch_type%3Dembed%26custom_arc_media_id%3D902318c4-cc8d-4c4d-95dd-5d955f6dc5af-8%26custom_arc_start_at%3D0&com_instructure_course_canvas_resource_type=assignment.body&com_instructure_course_canvas_resource_id=123'
+      )
+      expect(iframes[1].src).toEqual(
+        'http://localhost/courses/1/external_tools/retrieve?display=in_rce&url=https%3A%2F%2Fbeta.instructuremedia.com%2Flti%2Flaunch%3Fcustom_arc_launch_type%3Dembed%26custom_arc_media_id%3D902318c4-cc8d-4c4d-95dd-5d955f6dc5ae-8%26custom_arc_start_at%3D0&com_instructure_course_canvas_resource_type=assignment.body&com_instructure_course_canvas_resource_id=123'
+      )
+    })
+
+    it('ignores non-studio iframes', () => {
+      subject(
+        '<p><iframe class="lti-embed" title="something else" src="http://localhost/courses/1/external_tools/retrieve?display=in_rce&url=https%3A%2F%2Fbeta.somethingelse.com"></iframe></p>'
+      )
+      enhanceUserContent()
+      const iframe = document.querySelector('iframe')
+      expect(iframe.src).toEqual(
+        'http://localhost/courses/1/external_tools/retrieve?display=in_rce&url=https%3A%2F%2Fbeta.somethingelse.com'
+      )
     })
   })
 })

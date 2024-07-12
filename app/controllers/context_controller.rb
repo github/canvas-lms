@@ -91,6 +91,7 @@ class ContextController < ApplicationController
         view_user_logins: @context.grants_right?(@current_user, session, :view_user_logins),
         manage_students:,
         add_users_to_course: can_add_enrollments,
+        active_granular_enrollment_permissions: @context.root_account.feature_enabled?(:granular_permissions_manage_users) ? get_active_granular_enrollment_permissions(@context) : [],
         read_reports: @context.grants_right?(@current_user, session, :read_reports),
         can_add_groups: can_do(@context.groups.temp_record, @current_user, :create),
         manage_user_notes: @context.root_account.enable_user_notes && @context.grants_right?(@current_user, :manage_user_notes)
@@ -207,6 +208,11 @@ class ContextController < ApplicationController
         @accesses = AssetUserAccess.for_user(@user).where(context: contexts).most_recent
         respond_to do |format|
           format.html do
+            add_crumb(t("#crumbs.people", "People"), context_url(@context, :context_users_url))
+            add_crumb(@user.short_name, context_url(@context, :context_user_url, @user))
+            add_crumb(t("#crumbs.access_report", "Access Report"))
+            set_active_tab "people"
+
             @accesses = @accesses.paginate(page: params[:page], per_page: 50)
             @last_activity_at = @context.enrollments.where(user_id: @user).maximum(:last_activity_at)
             @aua_expiration_date = AssetUserAccess.expiration_date
@@ -251,6 +257,7 @@ class ContextController < ApplicationController
       end
 
       @user = @membership.user rescue nil
+      # rubocop:disable Rails/ActionControllerFlashBeforeRender
       unless @user
         case @context
         when Course
@@ -261,6 +268,7 @@ class ContextController < ApplicationController
         redirect_to named_context_url(@context, :context_users_url)
         return
       end
+      # rubocop:enable Rails/ActionControllerFlashBeforeRender
 
       js_env(CONTEXT_USER_DISPLAY_NAME: @user.short_name)
 
@@ -278,7 +286,6 @@ class ContextController < ApplicationController
 
         add_crumb(t("#crumbs.people", "People"), context_url(@context, :context_users_url))
         add_crumb(@user.short_name, context_url(@context, :context_user_url, @user))
-        add_crumb(t("#crumbs.access_report", "Access Report"))
         set_active_tab "people"
 
         render :new_roster_user, stream: can_stream_template?
@@ -366,6 +373,19 @@ class ContextController < ApplicationController
 
       render json: @item
     end
+  end
+
+  def get_active_granular_enrollment_permissions(context)
+    enrollment_granular_permissions_map = {
+      add_teacher_to_course: "TeacherEnrollment",
+      add_ta_to_course: "TaEnrollment",
+      add_designer_to_course: "DesignerEnrollment",
+      add_student_to_course: "StudentEnrollment",
+      add_observer_to_course: "ObserverEnrollment"
+    }
+    enrollment_granular_permissions_map.select do |key, _|
+      context.grants_right?(@current_user, session, key)
+    end.values
   end
 
   def add_enrollment_permissions(context)

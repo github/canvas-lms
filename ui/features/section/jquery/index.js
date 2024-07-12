@@ -20,20 +20,21 @@
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
 import '@canvas/jquery/jquery.ajaxJSON'
-import '@canvas/datetime' /* time_field, datetime_field */
-import '@canvas/forms/jquery/jquery.instructure_forms' /* formSubmit, formErrors */
+import '@canvas/jquery/jquery.instructure_forms' /* formSubmit, formErrors */
 import 'jqueryui/dialog'
 import '@canvas/jquery/jquery.instructure_misc_helpers' /* replaceTags */
 import '@canvas/jquery/jquery.instructure_misc_plugins' /* confirmDelete, showIf */
-import '@canvas/keycodes'
+import '@canvas/jquery-keycodes'
 import '@canvas/loading-image'
 import '@canvas/util/templateData'
+import 'jqueryui/menu'
 import 'jqueryui/autocomplete'
 import PaginatedList from './PaginatedList'
 import enrollmentTemplate from '../jst/enrollment.handlebars'
 import sectionEnrollmentPresenter from '../sectionEnrollmentPresenter'
 import '@canvas/context-cards/react/StudentContextCardTrigger'
 import replaceTags from '@canvas/util/replaceTags'
+import {renderDatetimeField} from '@canvas/datetime/jquery/DatetimeField'
 
 const I18n = useI18nScope('section')
 
@@ -92,7 +93,7 @@ $(document).ready(function () {
     $('#edit_section_form :text:visible:first').focus().select()
   })
 
-  $('.user_list').delegate('.unenroll_user_link', 'click', function (event) {
+  $('.user_list').on('click', '.unenroll_user_link', function (event) {
     event.preventDefault()
     $(this)
       .parents('.user')
@@ -109,11 +110,13 @@ $(document).ready(function () {
         },
       })
   })
-  $('.datetime_field').datetime_field()
+  renderDatetimeField($('.datetime_field'))
   $('.uncrosslist_link').click(event => {
     event.preventDefault()
     $('#uncrosslist_form').dialog({
       width: 400,
+      modal: true,
+      zIndex: 1000,
     })
   })
   $('#uncrosslist_form .cancel_button')
@@ -123,7 +126,7 @@ $(document).ready(function () {
     .submit(function () {
       $(this)
         .find('button')
-        .attr('disabled', true)
+        .prop('disabled', true)
         .filter('.submit_button')
         .text(I18n.t('status.removing_crosslisting_of_section', 'De-Cross-Listing Section...'))
     })
@@ -131,18 +134,50 @@ $(document).ready(function () {
     event.preventDefault()
     $('#crosslist_course_form').dialog({
       width: 450,
+      modal: true,
+      zIndex: 1000,
     })
-    $('#crosslist_course_form .submit_button').attr('disabled', true)
+    $('#crosslist_course_form .submit_button').prop('disabled', true)
     $('#course_autocomplete_id_lookup').val('')
     $('#course_id').val('').change()
   })
-  $('#course_autocomplete_id_lookup').autocomplete({
-    source: $('#course_autocomplete_url').attr('href'),
-    select(event, ui) {
-      $('#course_id').val('')
-      $('#crosslist_course_form').triggerHandler('id_entered', ui.item)
-    },
-  })
+  $('#course_autocomplete_id_lookup')
+    .autocomplete({
+      source: $('#course_autocomplete_url').attr('href'),
+      select(event, ui) {
+        $('#course_id').val('')
+        $('#crosslist_course_form').triggerHandler('id_entered', ui.item)
+      },
+    })
+    .data('ui-autocomplete')._renderItem = function (ul, item) {
+    return $('<li>')
+      .data('ui-autocomplete-item', item)
+      .append(
+        $('<a>')
+          .append($('<div>').text(item.label))
+          .append(
+            $('<div>')
+              .addClass('secondary')
+              .append(
+                $('<small>').text(
+                  item.sis_id
+                    ? I18n.t(
+                        'course.sisid_term',
+                        'SIS ID: %{course_sisid} | Term: %{course_term}',
+                        {
+                          course_sisid: item.sis_id,
+                          course_term: item.term,
+                        }
+                      )
+                    : I18n.t('course.term', 'Term: %{course_term}', {
+                        course_term: item.term,
+                      })
+                )
+              )
+          )
+      )
+      .appendTo(ul)
+  }
   $('#course_id').keycodes('return', function (event) {
     event.preventDefault()
     $(this).change()
@@ -159,7 +194,7 @@ $(document).ready(function () {
     if (course.id == latest_course_id) {
       return
     }
-    $('#crosslist_course_form .submit_button').attr('disabled', true)
+    $('#crosslist_course_form .submit_button').prop('disabled', true)
     $('#course_autocomplete_id').val('')
     if (!course.id) {
       $('#sis_id_holder,#account_name_holder').hide()
@@ -200,7 +235,7 @@ $(document).ready(function () {
           $('#account_name_holder').showIf(template_data.account_name)
 
           $('#course_autocomplete_id').val(data.course.id)
-          $('#crosslist_course_form .submit_button').attr('disabled', false)
+          $('#crosslist_course_form .submit_button').prop('disabled', false)
         } else {
           const errorText = I18n.t(
             'errors.course_not_authorized_for_crosslist',

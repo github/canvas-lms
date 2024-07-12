@@ -34,7 +34,7 @@ class LtiApiController < ApplicationController
   def grade_passback
     verify_oauth
 
-    if request.content_type != "application/xml"
+    if request.media_type != "application/xml"
       raise BasicLTI::BasicOutcomes::InvalidRequest, "Content-Type must be 'application/xml'"
     end
 
@@ -96,7 +96,7 @@ class LtiApiController < ApplicationController
     token = Lti::AnalyticsService::Token.parse_and_validate(params[:token])
     verify_oauth(token.tool)
 
-    if request.content_type != "application/json"
+    if request.media_type != "application/json"
       return head :unsupported_media_type
     end
 
@@ -178,13 +178,13 @@ class LtiApiController < ApplicationController
 
     timestamp = Time.zone.at(@signature.request.timestamp.to_i)
     # 90 minutes is suggested by the LTI spec
-    allowed_delta = Setting.get("oauth.allowed_timestamp_delta", 90.minutes.to_s).to_i
-    if timestamp < allowed_delta.seconds.ago || timestamp > allowed_delta.seconds.from_now
+    allowed_delta = 90.minutes
+    if timestamp < allowed_delta.ago || timestamp > allowed_delta.from_now
       Canvas::Errors::Reporter.raise_canvas_error(BasicLTI::BasicOutcomes::Unauthorized, "Timestamp too old or too far in the future, request has expired", oauth_error_info)
     end
 
     cache_key = "nonce:#{@tool.asset_string}:#{@signature.request.nonce}"
-    unless Lti::Security.check_and_store_nonce(cache_key, timestamp, allowed_delta.seconds)
+    unless Lti::Security.check_and_store_nonce(cache_key, timestamp, allowed_delta)
       Canvas::Errors::Reporter.raise_canvas_error(BasicLTI::BasicOutcomes::Unauthorized, "Duplicate nonce detected", oauth_error_info)
     end
   end

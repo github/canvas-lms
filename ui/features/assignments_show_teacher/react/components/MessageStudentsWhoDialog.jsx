@@ -21,13 +21,11 @@ import {bool, func} from 'prop-types'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
 import {sendMessageStudentsWho} from '../api'
-
-import {hasSubmitted, hasSubmission} from '@canvas/grading/messageStudentsWhoHelper'
-
+import {hasSubmitted, hasSubmission, hasGraded} from '@canvas/grading/messageStudentsWhoHelper'
 import {TeacherAssignmentShape} from '../assignmentData'
-
 import ConfirmDialog from './ConfirmDialog'
 import MessageStudentsWhoForm from './MessageStudentsWhoForm'
+import {captureException} from '@sentry/browser'
 
 const I18n = useI18nScope('assignments_2')
 
@@ -82,8 +80,12 @@ export default class MessageStudentsWhoDialog extends React.Component {
     else if (selectedFilter === 'not-graded') this.handleNotGraded()
     else if (selectedFilter === 'less-than') this.handleLessThan()
     else if (selectedFilter === 'more-than') this.handleMoreThan()
-    // eslint-disable-next-line no-console
-    else console.error('MessageStudentsWhoDialog error: unrecognized filter', selectedFilter)
+    else {
+      const errorMessage = 'MessageStudentsWhoDialog error: unrecognized filter'
+      // eslint-disable-next-line no-console
+      console.error(errorMessage, selectedFilter)
+      captureException(new Error(errorMessage))
+    }
   }
 
   handlePointsChange = newPointsThreshold => {
@@ -106,7 +108,7 @@ export default class MessageStudentsWhoDialog extends React.Component {
       subject: I18n.t('No grade for %{assignmentTitle}', {
         assignmentTitle: this.props.assignment.name,
       }),
-      selectedStudents: this.findStudentsWith(submission => submission.score == null),
+      selectedStudents: this.findStudentsWith(submission => !hasGraded(submission)),
     })
   }
 

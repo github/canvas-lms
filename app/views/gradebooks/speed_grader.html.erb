@@ -23,7 +23,8 @@
     :RUBRIC_ASSESSMENT => {
       :assessor_id => @current_user.id.to_s,
       :assessment_type => can_do(@assignment, @current_user, :grade) ? "grading" : "peer_review"
-    }
+    },
+    studio_media_capture_enabled: Account.site_admin.feature_enabled?(:speedgrader_studio_media_capture)
   })
   @show_left_side = false
   @show_embedded_chat = false
@@ -43,7 +44,7 @@
     <div id="gradebook_header" class="subheadContent" style="display:none;">
       <div class="subheadContent subheadContent--flex-start">
         <div id="speedgrader-icons" class="gradebookActions">
-          <a href="<%= polymorphic_url([@context, :gradebook]) %>" id="speed_grader_gradebook_link" class="Button Button--icon-action gradebookActions__Button gradebook-icon-link" title="<%= t('Gradebook') %>">
+          <a href="<%= polymorphic_url([@context, :gradebook]) %>" id="speed_grader_gradebook_link" class="Button Button--icon-action-rev gradebookActions__Button gradebook-icon-link" title="<%= t('Gradebook') %>">
             <i class="icon-gradebook" aria-hidden="true"></i>
             <span class="screenreader-only" aria-hidden="true"><%= t("Gradebook") %></span>
           </a>
@@ -77,7 +78,7 @@
           </div>
         </div>
         <div class="studentSelection">
-          <button id="prev-student-button" class="Button Button--icon-action gradebookMoveToNext prev" type="button" aria-label="<%= t("Previous") %>">
+          <button id="prev-student-button" class="Button Button--icon-action-rev gradebookMoveToNext prev" type="button" aria-label="<%= t("Previous") %>">
             <i class="icon-arrow-left prev" aria-hidden="true"></i>
           </button>
           <% if service_enabled?(:avatars) %>
@@ -86,7 +87,7 @@
             </div>
           <% end %>
           <div id="combo_box_container"></div>
-          <button id="next-student-button" class="Button Button--icon-action gradebookMoveToNext next" type="button" aria-label="<%= t("Next") %>">
+          <button id="next-student-button" class="Button Button--icon-action-rev gradebookMoveToNext next" type="button" aria-label="<%= t("Next") %>">
             <i class="icon-arrow-right next" aria-hidden="true"></i>
           </button>
         </div>
@@ -105,6 +106,7 @@
   </figure>
   <section id="full_width_container" style="display:none; flex: 1;">
     <div id="left_side" class="full_height">
+    <div id="screen-capture-indicator-mount-point"></div>
       <div id="left_side_inner">
         <div id="no_annotation_warning" class="alert speedgrader_alert">
           <a class="dismiss_alert close" href="#">×</a>
@@ -153,6 +155,7 @@
         </div>
       </div>
     </div>
+    <div id="speed_grader_rubric_assessment_tray_wrapper"></div>
     <div id="right_side" class="full_height">
       <div id="not_gradeable_message"><%= t("This submission has already been graded and is ready for moderation.") %></div>
       <div class="full_height" id="width_resizer"></div>
@@ -163,7 +166,7 @@
           </div>
           <div id="submission_details" class="content_box">
             <div style="display: flex;">
-              <div id="multiple_submissions" style="display:flex; flex: 1"></div>
+              <div id="multiple_submissions" style="display:flex; flex: 1; gap: 3px;"></div>
               <div id="speed_grader_edit_status_mount_point"></div>
             </div>
             <div id="submission_not_newest_notice" title='<%= t('titles.not_newest', "use the dropdown above to change which submission to look at") %>'><%= t(:not_newest_notice, "Note: This is not the most recent submission") %></div>
@@ -271,7 +274,7 @@
                 <div class="comment" id="comment_blank" style="display: none;">
                   <div class="comment_flex">
                     <img src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" class="avatar" alt="" style="display: none;"/>
-                    <span class="draft-marker" aria-label="<%= t('Draft comment') %>">*</span>
+                    <span class="draft-marker" aria-label="<%= t('Draft comment') %>"><%=t('DRAFT')%></span>
                     <span class="comment"></span>
                     <button class="submit_comment_button">
                       <span><%= t('Submit') %></span>
@@ -334,38 +337,78 @@
                     </span>
                   </a>
                 </div>
-                <div class="ic-Action-header">
+                <% if Account.site_admin.feature_enabled?(:speedgrader_studio_media_capture) %>
+                  <div class="ic-Action-header flex-wrap">
                   <div id="emojis-attachments-container">
                     <span id="emoji-quick-picker-container"></span>
                     <div class="ic-Action-header__Primary attach_things<%= @emojis_enabled ? " emojis" : "" %>" role="group">
-                      <button class="Button Button--small" id="add_attachment" title="<%= t("File Attachment") %>" type="button">
-                        <i class="icon-paperclip" aria-hidden="true"></i>
-                        <span class="screenreader-only">
-                          <%= t("File Attachment") %>
-                        </span>
-                      </button>
-                      <% if feature_enabled?(:kaltura) %>
-                        <button id="media_comment_button" class="Button Button--small media_comment_link" title="<%= t("Media Comment") %> " type="button">
-                          <i class="icon-media" aria-hidden="true"></i>
-                          <span class="screenreader-only">
-                            <%= t("Media Comment") %>
-                          </span>
-                        </button>
-                      <% end %>
-                      <div class="speech-recognition" style="display:none">
-                        <a id="speech_recognition_button" title="<%= t("Speech Recognition") %>" href="#" class="Button Button--small speech_recognition_link">
+                    <div class="speech-recognition" style="display:none">
+                        <a id="speech_recognition_button" title="<%= t("Speech Recognition") %>" href="#" class="Button Button--small speech_recognition_link transparent-bg borderless">
                           <i class="icon-audio"></i>
                           <span class="screenreader-only">
                             <%= t("Speech Recognition") %>
                           </span>
                         </a>
                       </div>
+                      <% if feature_enabled?(:kaltura) %>
+                        <div id="new-studio-media-indicator-wrapper" title="<%= t("New") + "&excl; " + t(" Record videos and screen capture with auto captioning.") %>">
+                          <button id="media_comment_button" class="Button Button--small media_comment_link transparent-bg borderless r-margin-0" type="button">
+                            <i id="screen-capture-icon-mount-point" aria-hidden="true"></i>
+                            <span class="screenreader-only">
+                              <%= t("Media Comment") %>
+                            </span>
+                          </button>
+                          <p id="new-studio-media-indicator"><%= t("NEW") %></p>
+                        </div>
+                      <% end %>
+                      <div style="display:flex; align-items: center; justify-content: center; flex: 0 0;">
+                        <button class="Button Button--small transparent-bg borderless" id="add_attachment" title="<%= t("File Attachment") %>" type="button">
+                          <i class="icon-paperclip" aria-hidden="true"></i>
+                          <span class="screenreader-only">
+                            <%= t("File Attachment") %>
+                          </span>
+                        </button>
+                      </div>
                     </div>
                   </div>
-                  <div class="ic-Action-header__Secondary">
+                  <div class="ic-Action-header__Secondary m-left-auto">
                     <button id="comment_submit_button" class="Button Button--primary" type="submit"><%= t("Submit") %></button>
                   </div>
                 </div>
+                  <% else %>
+                  <div class="ic-Action-header">
+                    <div id="emojis-attachments-container">
+                      <span id="emoji-quick-picker-container"></span>
+                      <div class="ic-Action-header__Primary attach_things<%= @emojis_enabled ? " emojis" : "" %>" role="group">
+                        <button class="Button Button--small" id="add_attachment" title="<%= t("File Attachment") %>" type="button">
+                          <i class="icon-paperclip" aria-hidden="true"></i>
+                          <span class="screenreader-only">
+                            <%= t("File Attachment") %>
+                          </span>
+                        </button>
+                        <% if feature_enabled?(:kaltura) %>
+                          <button id="media_comment_button" class="Button Button--small media_comment_link" title="<%= t("Media Comment") %> " type="button">
+                            <i class="icon-media" aria-hidden="true"></i>
+                            <span class="screenreader-only">
+                              <%= t("Media Comment") %>
+                            </span>
+                          </button>
+                        <% end %>
+                        <div class="speech-recognition" style="display:none">
+                          <a id="speech_recognition_button" title="<%= t("Speech Recognition") %>" href="#" class="Button Button--small speech_recognition_link">
+                            <i class="icon-audio"></i>
+                            <span class="screenreader-only">
+                              <%= t("Speech Recognition") %>
+                            </span>
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="ic-Action-header__Secondary">
+                      <button id="comment_submit_button" class="Button Button--primary" type="submit"><%= t("Submit") %></button>
+                    </div>
+                  </div>
+                <% end %>
               </form>
 
               <% if @can_reassign_submissions %>
@@ -402,7 +445,10 @@
       <%= select_tag 'eg_sort_by', options_for_select([
         [t('sort_by.student_name', "by student name (alphabetically)"), "alphabetically"],
         [t('sort_by.submitted_at', "the date they submitted the assignment"), "submitted_at"],
-        [t('sort_by.status', "by submission status (needs grading, not submitted, etc)"), "submission_status"]], cookies[:eg_sort_by]) %>
+        [t('sort_by.status', "by submission status (needs grading, not submitted, etc)"), "submission_status"],
+        [t('sort_by.randomize', "randomize students"), "randomize"],
+        [t('sort_by.status_randomize', "randomize students within submission status"), "submission_status_randomize"],
+        ], cookies[:eg_sort_by]) %>
     </p>
 
     <% unless @assignment.anonymous_grading? %>
@@ -411,7 +457,7 @@
           <% if force_anonymous_grading?(@assignment) %>disabled<% end %>
         />
         <label for="hide_student_names">
-          <%= t('labels.hide_names', "Hide student names in the SpeedGrader") %>
+          <%= t('labels.hide_names', "Hide student names in SpeedGrader") %>
         </label>
         <% if force_anonymous_grading?(@assignment) %>
           <i class="icon-info" aria-hidden="true"

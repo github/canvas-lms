@@ -40,7 +40,7 @@ export class CompletedItemsFacade extends Component {
           iconColor: this.style.theme.labelColor,
           iconMargin: this.style.theme.gutterWidth,
         }
-      : null
+      : undefined
   }
 
   static propTypes = {
@@ -154,6 +154,7 @@ export class CompletedItemsFacade extends Component {
         {this.renderNotificationBadge()}
         <div className={this.style.classNames.contentPrimary}>
           <ToggleDetails
+            data-testid="completed-items-toggle"
             ref={ref => (this.buttonRef = ref)}
             onToggle={this.props.onClick}
             summary={I18n.t(
@@ -163,7 +164,7 @@ export class CompletedItemsFacade extends Component {
               },
               {count: this.props.itemCount}
             )}
-            theme={this.conditionalTheme}
+            themeOverride={this.conditionalTheme}
           >
             ToggleDetails requires a child
           </ToggleDetails>

@@ -51,6 +51,7 @@ import {
   IconUnpublishedLine,
   IconUpdownLine,
   IconUserLine,
+  IconPermissionsLine,
 } from '@instructure/ui-icons'
 import {Link} from '@instructure/ui-link'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
@@ -131,6 +132,8 @@ class DiscussionRow extends Component {
     masteryPathsPillLabel: string, // required if displayMasteryPathsPill is true
     displayManageMenu: bool.isRequired,
     displayPinMenuItem: bool.isRequired,
+    displayDifferentiatedModulesTray: bool.isRequired,
+    onOpenAssignToTray: func,
     draggable: bool,
     duplicateDiscussion: func.isRequired,
     isDragging: bool,
@@ -159,6 +162,7 @@ class DiscussionRow extends Component {
     displayMasteryPathsPill: false,
     masteryPathsPillLabel: '',
     onMoveDiscussion: null,
+    onOpenAssignToTray: null,
   }
 
   componentDidMount = () => {
@@ -238,6 +242,9 @@ class DiscussionRow extends Component {
         break
       case 'ltiMenuTool':
         window.location = `${menuTool.base_url}&discussion_topics[]=${id}`
+        break
+      case 'assignTo':
+        this.props.onOpenAssignToTray(this.props.discussion)
         break
       default:
         throw new Error('Unknown manage discussion action encountered')
@@ -477,7 +484,11 @@ class DiscussionRow extends Component {
     } else if (menuTool.icon_url) {
       return (
         <span>
-          <img className="icon" alt="" src={menuTool.icon_url} />
+          <img
+            alt={menuTool.title}
+            className="icon lti_tool_icon"
+            src={menuTool.icon_url}
+          />
           &nbsp;&nbsp;{menuTool.title}
         </span>
       )
@@ -514,6 +525,20 @@ class DiscussionRow extends Component {
       )
     }
 
+    const showAssignTo = this.props.discussion.assignment_id || (!this.props.discussion.assignment_id && !this.props.discussion.group_category_id)
+    if (this.props.displayDifferentiatedModulesTray && showAssignTo) {
+      menuList.push(
+        this.createMenuItem(
+          'assignTo',
+          <span aria-hidden="true">
+            <IconPermissionsLine />
+            &nbsp;&nbsp;{I18n.t('Assign To...')}
+          </span>,
+          I18n.t('Set Assign to for %{title}', {title: discussionTitle})
+        )
+      )
+    }
+
     if (this.props.displayPinMenuItem) {
       const screenReaderContent = this.props.discussion.pinned
         ? I18n.t('Unpin discussion %{title}', {title: discussionTitle})
@@ -539,7 +564,7 @@ class DiscussionRow extends Component {
           >
             {I18n.t('SpeedGrader')}
           </a>,
-          I18n.t('Navigate to speed grader for %{title} assignment', {title: discussionTitle})
+          I18n.t('Navigate to SpeedGrader for %{title} assignment', {title: discussionTitle})
         )
       )
     }
@@ -643,7 +668,7 @@ class DiscussionRow extends Component {
   renderDragHandleIfAppropriate = () => {
     if (this.props.draggable && this.props.connectDragSource) {
       return (
-        <div className="ic-item-row__drag-col">
+        <div className="ic-item-row__drag-col" data-testid="ic-drag-handle-icon-container">
           <span>
             <Text color="secondary" size="large">
               <IconDragHandleLine />
@@ -760,20 +785,13 @@ class DiscussionRow extends Component {
   }
 
   renderIcon = () => {
+    const accessibleGradedIcon = (isSuccessColor = true) => (
+      <Text color={isSuccessColor ? 'success' : 'secondary'} size="large">
+        <IconAssignmentLine title={I18n.t('Graded Discussion')} />
+      </Text>
+    )
     if (this.props.discussion.assignment) {
-      if (this.props.discussion.published) {
-        return (
-          <Text color="success" size="large">
-            <IconAssignmentLine />
-          </Text>
-        )
-      } else {
-        return (
-          <Text color="secondary" size="large">
-            <IconAssignmentLine />
-          </Text>
-        )
-      }
+      return accessibleGradedIcon(!!this.props.discussion.published)
     }
     return null
   }
@@ -823,7 +841,11 @@ class DiscussionRow extends Component {
           {maybeRenderMasteryPathsLink}
           {maybeRenderPeerReviewIcon}
           {actionsContent}
-          <span ref={this.initializeMasterCourseIcon} className="ic-item-row__master-course-lock" />
+          <span
+            ref={this.initializeMasterCourseIcon}
+            data-testid="ic-master-course-icon-container"
+            className="ic-item-row__master-course-lock"
+          />
           {maybeDisplayManageMenu}
         </div>
       </div>
@@ -846,7 +868,7 @@ class DiscussionRow extends Component {
                 <Grid.Row vAlign="middle">
                   <Grid.Col vAlign="middle" textAlign="start">
                     {this.renderTitle()}
-                    {this.renderSectionsTooltip()}
+                    {!ENV?.FEATURES?.selective_release_ui_api && this.renderSectionsTooltip()}
                   </Grid.Col>
                   <Grid.Col vAlign="top" textAlign="end">
                     {this.renderUpperRightBadges()}
@@ -874,7 +896,11 @@ class DiscussionRow extends Component {
 
   renderBlueUnreadBadge() {
     if (this.props.discussion.read_state !== 'read') {
-      return <Badge margin="0 small x-small 0" standalone={true} type="notification" />
+      return (
+        <div data-testid="ic-blue-unread-badge">
+          <Badge margin="0 small x-small 0" standalone={true} type="notification" />
+        </div>
+      )
     } else {
       return (
         <View display="block" margin="0 small x-small 0">
@@ -941,6 +967,10 @@ const mapState = (state, ownProps) => {
       discussion.permissions.delete ||
       (state.DIRECT_SHARE_ENABLED && state.permissions.read_as_admin),
     displayPinMenuItem: state.permissions.moderate,
+    displayDifferentiatedModulesTray:
+      ENV?.FEATURES?.selective_release_ui_api &&
+      discussion.permissions.manage_assign_to &&
+      state.contextType === 'course',
     masterCourseData: state.masterCourseData,
     isMasterCourse: masterCourse,
     DIRECT_SHARE_ENABLED: state.DIRECT_SHARE_ENABLED,

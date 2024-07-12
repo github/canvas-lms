@@ -17,8 +17,10 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
+require_relative "../helpers/selective_release_common"
 
 describe DiscussionTopic do
+  include SelectiveReleaseCommon
   before :once do
     course_with_teacher(active_all: true)
     student_in_course(active_all: true)
@@ -44,6 +46,50 @@ describe DiscussionTopic do
         course_section: section,
         workflow_state: opts[:workflow_state]
       )
+  end
+
+  describe ".create_graded_topic!" do
+    it "returns a discussion topic with an attached assignment" do
+      topic = DiscussionTopic.create_graded_topic!(course: @course, title: "My Graded Topic")
+      aggregate_failures do
+        expect(topic).to be_a DiscussionTopic
+        expect(topic.assignment.submission_types).to eq "discussion_topic"
+      end
+    end
+
+    it "sets the title on both the assignment and discussion topic" do
+      title = "My Graded Topic"
+      topic = DiscussionTopic.create_graded_topic!(course: @course, title:)
+      aggregate_failures do
+        expect(topic.title).to eq title
+        expect(topic.assignment.title).to eq title
+      end
+    end
+
+    it "optionally accepts a user to be assigned to the discussion topic" do
+      topic = DiscussionTopic.create_graded_topic!(course: @course, title: "My Graded Topic", user: @teacher)
+      expect(topic.user).to eq @teacher
+    end
+
+    it "raises an error when the assignment is invalid" do
+      expect { DiscussionTopic.create_graded_topic!(course: nil, title: "My Graded Topic") }.to raise_error(ActiveRecord::RecordInvalid)
+    end
+  end
+
+  describe ".preload_subentry_counts" do
+    it "preloads the discussion subentry count" do
+      topic1 = @course.discussion_topics.create!
+      topic1.discussion_entries.create!(user: @teacher)
+      topic2 = @course.discussion_topics.create!
+
+      DiscussionTopic.preload_subentry_counts([topic1, topic2])
+      aggregate_failures do
+        expect(topic1.instance_variable_get(:@preloaded_subentry_count)).to eq 1
+        expect(topic1.discussion_subentry_count).to eq 1
+        expect(topic2.instance_variable_get(:@preloaded_subentry_count)).to eq 0
+        expect(topic2.discussion_subentry_count).to eq 0
+      end
+    end
   end
 
   describe "#grading_standard_or_default" do
@@ -115,7 +161,7 @@ describe DiscussionTopic do
     end
 
     let(:values) do
-      DiscussionTopic.where(id: @topic).pluck(
+      DiscussionTopic.where(id: @topic).pick(
         :could_be_locked,
         :podcast_enabled,
         :podcast_has_student_posts,
@@ -125,7 +171,7 @@ describe DiscussionTopic do
         :allow_rating,
         :only_graders_can_rate,
         :sort_by_rating
-      ).first
+      )
     end
 
     it "saves boolean attributes as false if they are set to nil" do
@@ -275,7 +321,7 @@ describe DiscussionTopic do
 
     it "does not grant moderate permissions without read permissions" do
       @course.account.role_overrides.create!(role: teacher_role, permission: "read_forum", enabled: false)
-      expect(@topic.reload.check_policy(@teacher2)).to eql %i[create duplicate attach student_reporting]
+      expect(@topic.reload.check_policy(@teacher2)).to eql %i[create duplicate attach student_reporting manage_assign_to create_assign_to]
     end
 
     it "grants permissions if it not locked" do
@@ -309,6 +355,55 @@ describe DiscussionTopic do
       expect((@entry.check_policy(@teacher1) & @relevant_permissions).map(&:to_s).sort).to eq %w[read reply update delete].sort
       expect((@entry.check_policy(@teacher2) & @relevant_permissions).map(&:to_s).sort).to eq %w[read reply update delete].sort
       expect((@entry.check_policy(@student) & @relevant_permissions).map(&:to_s).sort).to eq []
+    end
+
+    describe "manage_assign_to" do
+      context "graded topics" do
+        before do
+          @topic.assignment = @course.assignments.create!(title: "some assignment", points_possible: 5)
+          @topic.save!
+        end
+
+        it "is granted to users with moderate_forum and manage_assignments_edit permission" do
+          expect(@topic.grants_right?(@teacher1, :manage_assign_to)).to be true
+        end
+
+        it "is not granted to users with moderate_forum and not manage_assignments_edit permission" do
+          RoleOverride.create!(context: @course.account, permission: "manage_assignments_edit", role: teacher_role, enabled: false)
+          expect(@topic.grants_right?(@teacher1, :manage_assign_to)).to be false
+        end
+
+        it "is not granted to users with manage_assignments_edit and not moderate_forum permission" do
+          RoleOverride.create!(context: @course.account, permission: "moderate_forum", role: teacher_role, enabled: false)
+          expect(@topic.grants_right?(@teacher1, :manage_assign_to)).to be false
+        end
+      end
+
+      context "ungraded topics" do
+        it "is granted to teachers with moderate_forum permission" do
+          expect(@topic.grants_right?(@teacher1, :manage_assign_to)).to be true
+        end
+
+        it "is not granted to students by default" do
+          expect(@topic.grants_right?(@student, :manage_assign_to)).to be false
+        end
+
+        it "is granted to students with moderate_forum permission and an unrestricted enrollment" do
+          RoleOverride.create!(context: @course.account, permission: "moderate_forum", role: student_role, enabled: true)
+          expect(@topic.grants_right?(@student, :manage_assign_to)).to be true
+        end
+
+        it "is not granted to students with moderate_forum permission and a restricted enrollment" do
+          RoleOverride.create!(context: @course.account, permission: "moderate_forum", role: student_role, enabled: true)
+          @student.enrollments.where(course: @course).first.update!(limit_privileges_to_course_section: true)
+          expect(@topic.grants_right?(@student, :manage_assign_to)).to be false
+        end
+
+        it "is granted to account admins" do
+          account_admin = account_admin_user(account: @course.root_account)
+          expect(@topic.grants_right?(account_admin, :manage_assign_to)).to be true
+        end
+      end
     end
   end
 
@@ -483,6 +578,61 @@ describe DiscussionTopic do
       it "does not include people out of the group or non-instructors" do
         [@not_group_student, @group_designer].each do |user|
           expect(@announcement.active_participants_include_tas_and_teachers.include?(user)).to be_falsey
+        end
+      end
+
+      context "differentiated modules" do
+        before do
+          Account.site_admin.enable_feature! :selective_release_backend
+        end
+
+        context "ungraded discussions" do
+          before do
+            @topic = discussion_topic_model(user: @teacher, context: @course)
+            @topic.update!(only_visible_to_overrides: true)
+            @course_section = @course.course_sections.create
+            @student1 = student_in_course(course: @course, active_enrollment: true).user
+            @student2 = student_in_course(course: @course, active_enrollment: true, section: @course_section).user
+            @teacher1 = teacher_in_course(course: @course, active_enrollment: true).user
+            @teacher2_limited_to_section = teacher_in_course(course: @course, active_enrollment: true).user
+            Enrollment.limit_privileges_to_course_section!(@course, @teacher2_limited_to_section, true)
+          end
+
+          it "is visible only to the assigned student" do
+            override = @topic.assignment_overrides.create!
+            override.assignment_override_students.create!(user: @student1)
+            expect(@topic.visible_for?(@student1)).to be_truthy
+            expect(@topic.visible_for?(@student2)).to be_falsey
+
+            expect(@topic.visible_for?(@teacher1)).to be_truthy
+            expect(@topic.visible_for?(@teacher2_limited_to_section)).to be_truthy
+          end
+
+          it "is visible only to users who can access the assigned section" do
+            @topic.assignment_overrides.create!(set: @course_section)
+            expect(@topic.visible_for?(@student1)).to be_falsey
+            expect(@topic.visible_for?(@student2)).to be_truthy
+
+            expect(@topic.visible_for?(@teacher1)).to be_truthy
+            expect(@topic.visible_for?(@teacher2_limited_to_section)).to be_falsey
+          end
+
+          it "is visible only to students in module override section" do
+            context_module = @course.context_modules.create!(name: "module")
+            context_module.content_tags.create!(content: @topic, context: @course)
+
+            override2 = @topic.assignment_overrides.create!(unlock_at: "2022-02-01T01:00:00Z",
+                                                            unlock_at_overridden: true,
+                                                            lock_at: "2022-02-02T01:00:00Z",
+                                                            lock_at_overridden: true)
+            override2.assignment_override_students.create!(user: @student1)
+
+            expect(@topic.visible_for?(@student1)).to be_truthy
+            expect(@topic.visible_for?(@student2)).to be_falsey
+
+            expect(@topic.visible_for?(@teacher1)).to be_truthy
+            expect(@topic.visible_for?(@teacher2_limited_to_section)).to be_truthy
+          end
         end
       end
     end
@@ -1510,6 +1660,53 @@ describe DiscussionTopic do
     it "does not return discussions that have an assignment and no visibility" do
       expect(DiscussionTopic.visible_to_students_in_course_with_da([@student.id], [@course.id])).not_to include(@topic)
     end
+
+    context "differentiated modules" do
+      before do
+        Account.site_admin.enable_feature! :selective_release_backend
+      end
+
+      context "ungraded discussions" do
+        before do
+          @topic = discussion_topic_model(user: @teacher, context: @course)
+          @topic.update!(only_visible_to_overrides: true)
+          @course_section = @course.course_sections.create
+          @student1 = student_in_course(course: @course, active_enrollment: true).user
+          @student2 = student_in_course(course: @course, active_enrollment: true, section: @course_section).user
+          @teacher1 = teacher_in_course(course: @course, active_enrollment: true).user
+          @teacher2_limited_to_section = teacher_in_course(course: @course, active_enrollment: true).user
+          Enrollment.limit_privileges_to_course_section!(@course, @teacher2_limited_to_section, true)
+        end
+
+        it "is visible only to the assigned student" do
+          override = @topic.assignment_overrides.create!
+          override.assignment_override_students.create!(user: @student1)
+
+          expect(DiscussionTopic.visible_to_students_in_course_with_da([@student1.id], [@course.id])).to include(@topic)
+          expect(DiscussionTopic.visible_to_students_in_course_with_da([@student2.id], [@course.id])).not_to include(@topic)
+        end
+
+        it "is visible only to users who can access the assigned section" do
+          @topic.assignment_overrides.create!(set: @course_section)
+          expect(DiscussionTopic.visible_to_students_in_course_with_da([@student1.id], [@course.id])).not_to include(@topic)
+          expect(DiscussionTopic.visible_to_students_in_course_with_da([@student2.id], [@course.id])).to include(@topic)
+        end
+
+        it "is visible only to students in module override section" do
+          context_module = @course.context_modules.create!(name: "module")
+          context_module.content_tags.create!(content: @topic, context: @course)
+
+          override2 = @topic.assignment_overrides.create!(unlock_at: "2022-02-01T01:00:00Z",
+                                                          unlock_at_overridden: true,
+                                                          lock_at: "2022-02-02T01:00:00Z",
+                                                          lock_at_overridden: true)
+          override2.assignment_override_students.create!(user: @student1)
+
+          expect(DiscussionTopic.visible_to_students_in_course_with_da([@student1.id], [@course.id])).to include(@topic)
+          expect(DiscussionTopic.visible_to_students_in_course_with_da([@student2.id], [@course.id])).not_to include(@topic)
+        end
+      end
+    end
   end
 
   context "posters" do
@@ -1846,11 +2043,11 @@ describe DiscussionTopic do
       return unless user
 
       if read
-        expect(DiscussionTopic.read_for(user)).to be_include @topic
-        expect(DiscussionTopic.unread_for(user)).not_to be_include @topic
+        expect(DiscussionTopic.read_for(user)).to include @topic
+        expect(DiscussionTopic.unread_for(user)).not_to include @topic
       else
-        expect(DiscussionTopic.read_for(user)).not_to be_include @topic
-        expect(DiscussionTopic.unread_for(user)).to be_include @topic
+        expect(DiscussionTopic.read_for(user)).not_to include @topic
+        expect(DiscussionTopic.unread_for(user)).to include @topic
       end
     end
 
@@ -2321,7 +2518,7 @@ describe DiscussionTopic do
     it "does not allow replies from students to topics locked based on date" do
       course_with_teacher(active_all: true)
       discussion_topic_model(context: @course)
-      @topic.unlock_at = 1.day.from_now
+      @topic.delayed_post_at = 1.day.from_now
       @topic.save!
       @topic.reply_from(user: @teacher, text: "reply") # should not raise error
       student_in_course(course: @course).accept!
@@ -2417,6 +2614,32 @@ describe DiscussionTopic do
       add_section_to_topic(topic, @section)
       add_section_to_topic(topic, section2)
       expect(topic.address_book_context_for(user).to_a).to eq [@section]
+    end
+
+    context "differentiated modules address_book_context_for" do
+      before do
+        Account.site_admin.enable_feature! :selective_release_backend
+
+        @topic = discussion_topic_model(user: @teacher, context: @course)
+        @topic.update!(only_visible_to_overrides: true)
+        @course_section = @course.course_sections.create
+        @student1 = student_in_course(course: @course, active_enrollment: true).user
+        @student2 = student_in_course(course: @course, active_enrollment: true, section: @course_section).user
+        @teacher1 = teacher_in_course(course: @course, active_enrollment: true).user
+      end
+
+      it "returns the section for the address_book_context relative to the student with differentiated modules enabled" do
+        @topic.assignment_overrides.create!(set: @course_section)
+
+        expect(@topic.address_book_context_for(@teacher1).to_a).to eq [@course_section]
+      end
+
+      it "returns the course if there are student overrides" do
+        override = @topic.assignment_overrides.create!
+        override.assignment_override_students.create!(user: @student1)
+
+        expect(@topic.address_book_context_for(@teacher1)).to eq @course
+      end
     end
 
     it "returns no sections for the address_book_context when student has none" do
@@ -2721,7 +2944,7 @@ describe DiscussionTopic do
     it "sends a message for a published course" do
       @course.offer!
       topic = @course.discussion_topics.create!(title: "title")
-      expect(topic.messages_sent["New Discussion Topic"].map(&:user)).to be_include(@user)
+      expect(topic.messages_sent["New Discussion Topic"].map(&:user)).to include(@user)
       expect(topic.messages_sent["New Discussion Topic"].first.from_name).to eq @course.name
     end
 
@@ -2739,7 +2962,7 @@ describe DiscussionTopic do
       it "sends a message for a group discussion in a published course" do
         @course.offer!
         topic = @group.discussion_topics.create!(title: "title")
-        expect(topic.messages_sent["New Discussion Topic"].map(&:user)).to be_include(@user)
+        expect(topic.messages_sent["New Discussion Topic"].map(&:user)).to include(@user)
       end
 
       it "does not send a message for a group discussion in an unpublished course" do
@@ -2954,6 +3177,541 @@ describe DiscussionTopic do
         @topic.assignment_id = nil
         @topic.save!
         expect(Progress.last.context).to eq(@course_pace)
+      end
+    end
+  end
+
+  describe "checkpoints" do
+    before do
+      @course.root_account.enable_feature!(:discussion_checkpoints)
+      @topic = DiscussionTopic.create_graded_topic!(course: @course, title: "Discussion Topic Title", user: @teacher)
+    end
+
+    it "not in place in the topic" do
+      expect(@topic.checkpoints?).to be false
+      expect(@topic.sub_assignments.length).to eq 0
+      expect(@topic.reply_to_topic_checkpoint).to be_nil
+      expect(@topic.reply_to_entry_checkpoint).to be_nil
+      expect(@topic.reply_to_entry_required_count).to eq 0
+    end
+
+    it "does not allow setting the reply_to_entry_required_count to more than 10" do
+      expect do
+        @topic.create_checkpoints(reply_to_topic_points: 10, reply_to_entry_points: 15, reply_to_entry_required_count: 11)
+      end.to raise_error(ActiveRecord::RecordInvalid)
+    end
+
+    it "does not create a discussion topic per-checkpoint (instead, checkpoints belong to the topic through the parent)" do
+      expect do
+        @topic.create_checkpoints(reply_to_topic_points: 10, reply_to_entry_points: 15, reply_to_entry_required_count: 0)
+      end.not_to change { DiscussionTopic.count }.from(1)
+    end
+
+    describe "in place" do
+      before do
+        @course.root_account.enable_feature!(:discussion_checkpoints)
+        @topic.reload
+        @topic.create_checkpoints(reply_to_topic_points: 10, reply_to_entry_points: 15, reply_to_entry_required_count: 5)
+      end
+
+      it "in the topic" do
+        expect(@topic.checkpoints?).to be true
+        expect(@topic.sub_assignments.length).to eq 2
+        expect(@topic.reply_to_topic_checkpoint.sub_assignment_tag).to eq CheckpointLabels::REPLY_TO_TOPIC
+        expect(@topic.reply_to_entry_checkpoint.sub_assignment_tag).to eq CheckpointLabels::REPLY_TO_ENTRY
+      end
+
+      it "correctly marks the reply to topic checkpoint submission as submitted when the student replies to topic" do
+        @topic.discussion_entries.create!(user: @student, message: "reply to topic")
+
+        expect(@topic.assignment.submissions.find_by(user: @student).workflow_state).to eq "unsubmitted"
+        expect(@topic.reply_to_topic_checkpoint.submissions.find_by(user: @student).workflow_state).to eq "submitted"
+        expect(@topic.reply_to_entry_checkpoint.submissions.find_by(user: @student).workflow_state).to eq "unsubmitted"
+      end
+
+      it "correctly marks the reply to entry checkpoint submission as submitted when the student replies to an entry 5 times" do
+        entry = @topic.discussion_entries.create!(user: @teacher, message: "reply to topic")
+        5.times do
+          @topic.discussion_entries.create!(user: @student, message: "reply to entry", root_entry_id: entry.id, parent_id: entry.id)
+        end
+
+        expect(@topic.assignment.submissions.find_by(user: @student).workflow_state).to eq "unsubmitted"
+        expect(@topic.reply_to_topic_checkpoint.submissions.find_by(user: @student).workflow_state).to eq "unsubmitted"
+        expect(@topic.reply_to_entry_checkpoint.submissions.find_by(user: @student).workflow_state).to eq "submitted"
+      end
+
+      it "correctly leaves the reply to entry checkpoint submission as unsubmitted when the student has not replied to an entry 5 times" do
+        entry = @topic.discussion_entries.create!(user: @teacher, message: "reply to topic")
+        @topic.discussion_entries.create!(user: @student, message: "reply to topic by student")
+        @topic.discussion_entries.create!(user: @student, message: "reply to entry", root_entry_id: entry.id, parent_id: entry.id)
+
+        expect(@topic.assignment.submissions.find_by(user: @student).workflow_state).to eq "unsubmitted"
+        expect(@topic.reply_to_topic_checkpoint.submissions.find_by(user: @student).workflow_state).to eq "submitted"
+        expect(@topic.reply_to_entry_checkpoint.submissions.find_by(user: @student).workflow_state).to eq "unsubmitted"
+      end
+
+      it "correctly marks both checkpoint submissions when the user replies to both topic and entry 5 times" do
+        entry_by_teacher = @topic.discussion_entries.create!(user: @teacher, message: "reply to topic by teacher")
+        @topic.discussion_entries.create!(user: @student, message: "reply to topic by student")
+        5.times do
+          @topic.discussion_entries.create!(user: @student, message: "reply to entry by student", root_entry_id: entry_by_teacher.id, parent_id: entry_by_teacher.id)
+        end
+
+        expect(@topic.assignment.submissions.find_by(user: @student).workflow_state).to eq "submitted"
+        expect(@topic.reply_to_topic_checkpoint.submissions.find_by(user: @student).workflow_state).to eq "submitted"
+        expect(@topic.reply_to_entry_checkpoint.submissions.find_by(user: @student).workflow_state).to eq "submitted"
+      end
+
+      it "has the correct reply_to_entry_required_count and is valid" do
+        expect(@topic.reply_to_entry_required_count).to eq 5
+        expect(@topic).to be_valid
+      end
+    end
+  end
+
+  describe "unlock_at and delayed_post_at" do
+    before do
+      @topic = @course.discussion_topics.create!(title: "topic", user: @teacher)
+    end
+
+    it "prefers unlock_at to delayed_post_at" do
+      @topic[:delayed_post_at] = Time.now + 5.days
+      @topic[:unlock_at] = Time.now
+      expect(@topic.delayed_post_at).to equal @topic[:unlock_at]
+      expect(@topic.unlock_at).to equal @topic[:unlock_at]
+    end
+
+    it "defaults to delayed_post_at if unlock_at is nil" do
+      @topic[:delayed_post_at] = Time.now + 5.days
+      @topic[:unlock_at] = nil
+      expect(@topic.delayed_post_at).to equal @topic[:delayed_post_at]
+      expect(@topic.unlock_at).to equal @topic[:delayed_post_at]
+    end
+
+    it "always updates unlock_at and sets delayed_post_at to the same value" do
+      @topic.delayed_post_at = nil
+      expect(@topic[:delayed_post_at]).to be_nil
+      expect(@topic[:unlock_at]).to eq @topic.delayed_post_at
+      expect(@topic.delayed_post_at).to eq @topic.unlock_at
+
+      @topic[:delayed_post_at] = Time.now + 5.days
+      @topic[:unlock_at] = nil
+      @topic.unlock_at = Time.now + 1.day
+      expect(@topic[:delayed_post_at]).to eq @topic[:unlock_at]
+      expect(@topic[:unlock_at]).to eq @topic.delayed_post_at
+      expect(@topic.delayed_post_at).to eq @topic.unlock_at
+    end
+  end
+
+  describe "visible_ids_by_user" do
+    def add_section_to_topic(topic, section)
+      topic.is_section_specific = true
+      topic.discussion_topic_section_visibilities <<
+        DiscussionTopicSectionVisibility.new(
+          discussion_topic: topic,
+          course_section: section,
+          workflow_state: "active"
+        )
+      topic.save!
+    end
+
+    def add_section_differentiation_to_topic(topic, section)
+      topic.update!(only_visible_to_overrides: true)
+      topic.assignment_overrides.create!(set: section)
+      topic.save!
+    end
+
+    def add_student_differentiation_to_topic(topic, student)
+      topic.update!(only_visible_to_overrides: true)
+      override = topic.assignment_overrides.create!
+      override.assignment_override_students.create!(user: student)
+      topic.save!
+    end
+
+    def discussion_and_assignment(opts = {})
+      assignment = @course.assignments.create!({
+        title: "some discussion assignment",
+        submission_types: "discussion_topic"
+      }.merge(opts))
+      [assignment.discussion_topic, assignment]
+    end
+
+    describe "differentiated topics" do
+      before :once do
+        Account.site_admin.enable_feature! :selective_release_backend
+        @course = course_factory(active_course: true)
+
+        @item_without_assignment = discussion_topic_model(user: @teacher)
+        @item_with_assignment_and_only_vis, @assignment = discussion_and_assignment(only_visible_to_overrides: true)
+        @item_with_assignment_and_visible_to_all, @assignment2 = discussion_and_assignment(only_visible_to_overrides: false)
+        @item_with_override_for_section_with_no_students, @assignment3 = discussion_and_assignment(only_visible_to_overrides: true)
+        @item_with_no_override, @assignment4 = discussion_and_assignment(only_visible_to_overrides: true)
+
+        @course_section = @course.course_sections.create
+        @student1, @student2, @student3 = create_users(3, return_type: :record)
+        @course.enroll_student(@student2, enrollment_state: "active")
+        @section = @course.course_sections.create!(name: "test section")
+        @section2 = @course.course_sections.create!(name: "second test section")
+        student_in_section(@section, user: @student1)
+        create_section_override_for_assignment(@assignment, { course_section: @section })
+        create_section_override_for_assignment(@assignment3, { course_section: @section2 })
+        @course.reload
+        @vis_hash = DiscussionTopic.visible_ids_by_user(course_id: [@course.id], user_id: [@student1, @student2, @student3].map(&:id))
+      end
+
+      it "returns both topics for a student with an override" do
+        expect(@vis_hash[@student1.id].sort).to eq [
+          @item_without_assignment.id,
+          @item_with_assignment_and_only_vis.id,
+          @item_with_assignment_and_visible_to_all.id
+        ].sort
+      end
+
+      it "does not return differentiated topics to a student with no overrides" do
+        expect(@vis_hash[@student2.id].sort).to eq [
+          @item_without_assignment.id,
+          @item_with_assignment_and_visible_to_all.id
+        ].sort
+      end
+    end
+
+    describe "section specific topic" do
+      it "filters section specific topics properly" do
+        course = course_factory(active_course: true)
+        section1 = course.course_sections.create!(name: "test section")
+        section2 = course.course_sections.create!(name: "second test section")
+        section_specific_topic1 = course.discussion_topics.create!(title: "section specific topic 1")
+        section_specific_topic2 = course.discussion_topics.create!(title: "section specific topic 2")
+        add_section_to_topic(section_specific_topic1, section1)
+        add_section_to_topic(section_specific_topic2, section2)
+        student = create_users(1, return_type: :record).first
+        course.enroll_student(student, section: section1)
+        course.reload
+        vis_hash = DiscussionTopic.visible_ids_by_user(course_id: [course.id], user_id: [student.id], item_type: :discussion)
+        expect(vis_hash[student.id].length).to eq(1)
+        expect(vis_hash[student.id].first).to eq(section_specific_topic1.id)
+      end
+
+      it "filters section specific topics properly for multiple users" do
+        differentiated_modules_off
+        course = course_factory(active_all: true)
+        section1 = course.course_sections.create!(name: "section 1")
+        section2 = course.course_sections.create!(name: "section 2")
+        topic1 = course.discussion_topics.create!(title: "topic 1 (for section 1)")
+        topic2 = course.discussion_topics.create!(title: "topic 2 (for section 2)")
+        topic3 = course.discussion_topics.create!(title: "topic 3 (for all sections)")
+        topic4 = course.discussion_topics.create!(title: "topic 4 (for section 2)")
+        add_section_to_topic(topic1, section1)
+        add_section_to_topic(topic2, section2)
+        add_section_to_topic(topic4, section2)
+        student = user_factory(active_all: true)
+        teacher = user_factory(active_all: true)
+        course.enroll_student(student, section: section2)
+        course.enroll_teacher(teacher, section: section1)
+        course.reload
+
+        vis_hash = DiscussionTopic.visible_ids_by_user(course_id: [course.id], user_id: [student.id, teacher.id], item_type: :discussion)
+        expect(vis_hash[student.id]).to contain_exactly(topic2.id, topic3.id, topic4.id)
+        expect(vis_hash[teacher.id]).to contain_exactly(topic1.id, topic3.id)
+      end
+
+      it "properly filters section specific topics for deleted section visibilities" do
+        course = course_factory(active_course: true)
+        section1 = course.course_sections.create!(name: "section for student")
+        section_specific_topic1 = course.discussion_topics.create!(title: "section specific topic 1")
+        add_section_to_topic(section_specific_topic1, section1)
+        student = create_users(1, return_type: :record).first
+        course.enroll_student(student, section: section1)
+        course.reload
+        section_specific_topic1.destroy
+        vis_hash = DiscussionTopic.visible_ids_by_user(course_id: [course.id], user_id: [student.id], item_type: :discussion)
+        expect(vis_hash[student.id].length).to eq(0)
+      end
+
+      it "handles sections that don't have any discussion topics" do
+        course = course_factory(active_all: true)
+        section1 = course.course_sections.create!(name: "section 1")
+        section2 = course.course_sections.create!(name: "section 2")
+        topic1 = course.discussion_topics.create!(title: "topic 1 (for section 1)")
+        add_section_to_topic(topic1, section1)
+        student = user_factory(active_all: true)
+        course.enroll_student(student, section: section2)
+        course.reload
+
+        vis_hash = DiscussionTopic.visible_ids_by_user(course_id: [course.id], user_id: [student.id], item_type: :discussion)
+        expect(vis_hash[student.id].length).to be(0)
+      end
+
+      it "handles user not enrolled in any sections" do
+        course = course_factory(active_all: true)
+        section1 = course.course_sections.create!(name: "section 1")
+        topic1 = course.discussion_topics.create!(title: "topic 1 (for section 1)")
+        add_section_to_topic(topic1, section1)
+        student = user_factory(active_all: true)
+        course.reload
+
+        vis_hash = DiscussionTopic.visible_ids_by_user(course_id: [course.id], user_id: [student.id], item_type: :discussion)
+        expect(vis_hash[student.id].length).to be(0)
+      end
+    end
+
+    describe "differentiated modules" do
+      before do
+        Account.site_admin.enable_feature! :selective_release_backend
+      end
+
+      it "filters based on adhoc overrides" do
+        course = course_factory(active_course: true)
+        student_specific_topic = course.discussion_topics.create!(title: "student specific topic 1")
+        student_specific_topic2 = course.discussion_topics.create!(title: "student specific topic 2")
+
+        student1 = create_users(1, return_type: :record).first
+        course.enroll_student(student1)
+        student2 = create_users(1, return_type: :record).first
+        course.enroll_student(student2)
+        course.reload
+
+        add_student_differentiation_to_topic(student_specific_topic, student1)
+        add_student_differentiation_to_topic(student_specific_topic2, student2)
+
+        vis_hash = DiscussionTopic.visible_ids_by_user(course_id: [course.id], user_id: [student1.id], item_type: :discussion)
+        expect(vis_hash[student1.id].length).to eq(1)
+        expect(vis_hash[student1.id].first).to eq(student_specific_topic.id)
+      end
+
+      it "filters based on section overrides" do
+        course = course_factory(active_course: true)
+        section1 = course.course_sections.create!(name: "test section")
+        section2 = course.course_sections.create!(name: "second test section")
+        section_specific_topic1 = course.discussion_topics.create!(title: "section specific topic 1")
+        section_specific_topic2 = course.discussion_topics.create!(title: "section specific topic 2")
+        add_section_differentiation_to_topic(section_specific_topic1, section1)
+        add_section_differentiation_to_topic(section_specific_topic2, section2)
+        student = create_users(1, return_type: :record).first
+        course.enroll_student(student, section: section1)
+        course.reload
+        vis_hash = DiscussionTopic.visible_ids_by_user(course_id: [course.id], user_id: [student.id], item_type: :discussion)
+        expect(vis_hash[student.id].length).to eq(1)
+        expect(vis_hash[student.id].first).to eq(section_specific_topic1.id)
+      end
+
+      it "filters legacy section specific topics properly" do
+        course = course_factory(active_course: true)
+        section1 = course.course_sections.create!(name: "test section")
+        section2 = course.course_sections.create!(name: "second test section")
+        section_specific_topic1 = course.discussion_topics.create!(title: "section specific topic 1")
+        section_specific_topic2 = course.discussion_topics.create!(title: "section specific topic 2")
+        add_section_to_topic(section_specific_topic1, section1)
+        add_section_to_topic(section_specific_topic2, section2)
+        student = create_users(1, return_type: :record).first
+        course.enroll_student(student, section: section1)
+        course.reload
+        vis_hash = DiscussionTopic.visible_ids_by_user(course_id: [course.id], user_id: [student.id], item_type: :discussion)
+        expect(vis_hash[student.id].length).to eq(1)
+        expect(vis_hash[student.id].first).to eq(section_specific_topic1.id)
+      end
+
+      it "filters graded discussions correctly" do
+        @course = course_factory(active_course: true)
+        section1 = @course.course_sections.create!(name: "Section 1")
+        section2 = @course.course_sections.create!(name: "Section 2")
+        student1 = user_factory(active_all: true)
+        student2 = user_factory(active_all: true)
+        @course.enroll_student(student1, section: section1)
+        @course.enroll_student(student2, section: section2)
+
+        # Create graded discussions with differentiation
+        discussion1 = discussion_and_assignment(only_visible_to_overrides: true).first
+        discussion2 = discussion_and_assignment(only_visible_to_overrides: true).first
+
+        create_section_override_for_assignment(discussion1.assignment, { course_section: section1 })
+        create_section_override_for_assignment(discussion2.assignment, { course_section: section2 })
+
+        vis_hash = DiscussionTopic.visible_ids_by_user(course_id: [@course.id], user_id: [student1.id, student2.id])
+        expect(vis_hash[student1.id]).to contain_exactly(discussion1.id)
+        expect(vis_hash[student2.id]).to contain_exactly(discussion2.id)
+      end
+    end
+  end
+
+  describe "user_can_summarize" do
+    before do
+      @course = course_factory(active_all: true)
+      @admin = account_admin_user(account: @course.root_account)
+      @teacher = user_model
+      @course.enroll_teacher(@teacher, enrollment_state: "active")
+      @student = user_model
+      @course.enroll_student(@student, enrollment_state: "active")
+      @observer = user_model
+      @course.enroll_user(@observer, "ObserverEnrollment").update_attribute(:associated_user_id, @student.id)
+      @ta = user_model
+      @course.enroll_ta(@ta, enrollment_state: "active")
+      @designer = user_model
+      @course.enroll_designer(@designer, enrollment_state: "active")
+
+      @topic = @course.discussion_topics.create!(title: "topic")
+    end
+
+    it "does not allow to summarize if the feature is disabled" do
+      expect(@topic.user_can_summarize?(@teacher)).to be false
+      expect(@topic.user_can_summarize?(@ta)).to be false
+      expect(@topic.user_can_summarize?(@admin)).to be false
+      expect(@topic.user_can_summarize?(@designer)).to be false
+      expect(@topic.user_can_summarize?(@observer)).to be false
+      expect(@topic.user_can_summarize?(@student)).to be false
+    end
+
+    it "allows instructors and read admins to summarize if the feature is enabled" do
+      @course.enable_feature!(:discussion_summary)
+
+      expect(@topic.user_can_summarize?(@teacher)).to be true
+      expect(@topic.user_can_summarize?(@ta)).to be true
+      expect(@topic.user_can_summarize?(@admin)).to be true
+      expect(@topic.user_can_summarize?(@designer)).to be true
+
+      expect(@topic.user_can_summarize?(@observer)).to be false
+      expect(@topic.user_can_summarize?(@student)).to be false
+    end
+  end
+
+  describe "low_level_locked_for?" do
+    before :once do
+      @topic = @course.discussion_topics.create!(title: "topic")
+    end
+
+    it "is unlocked by default" do
+      expect(@topic.low_level_locked_for?(@student)).to be_falsey
+    end
+
+    it "is unlocked for past unlock_at date" do
+      @topic.update(unlock_at: 1.week.ago)
+      expect(@topic.locked_for?(@student)).to be_falsey
+    end
+
+    it "is unlocked for future lock_at date" do
+      @topic.update(lock_at: 1.week.from_now)
+      expect(@topic.locked_for?(@student)).to be_falsey
+    end
+
+    it "is locked for future unlock_at date" do
+      timestamp = 1.week.from_now
+      @topic.update(unlock_at: timestamp)
+      lock_info = @topic.locked_for?(@student)
+      expect(lock_info).to be_truthy
+      expect(lock_info[:unlock_at]).to eq timestamp
+    end
+
+    it "is locked for future delayed_post_at date" do
+      timestamp = 1.week.from_now
+      @topic.update(delayed_post_at: timestamp)
+      lock_info = @topic.locked_for?(@student)
+      expect(lock_info).to be_truthy
+      expect(lock_info[:unlock_at]).to eq timestamp
+    end
+
+    it "is locked for past lock_at date" do
+      timestamp = 1.week.ago
+      @topic.update(lock_at: timestamp)
+      lock_info = @topic.locked_for?(@student)
+      expect(lock_info).to be_truthy
+      expect(lock_info[:lock_at]).to eq timestamp
+    end
+
+    it "locks for unpublished module" do
+      cm = @course.context_modules.create!(name: "module", workflow_state: "unpublished")
+      cm.add_item(type: "discussion_topic", id: @topic.id)
+      @topic.update!(could_be_locked: true)
+      lock_info = @topic.locked_for?(@student)
+      expect(lock_info).to be_truthy
+    end
+
+    it "locks for student with override" do
+      timestamp = 1.week.from_now
+      ao = @topic.assignment_overrides.create!(unlock_at: timestamp, unlock_at_overridden: true)
+      ao.assignment_override_students.create!(user: @student)
+      lock_info = @topic.locked_for?(@student)
+      expect(lock_info).to be_truthy
+      expect(lock_info[:unlock_at]).to eq timestamp
+    end
+
+    it "unlocks for student with override" do
+      @topic.update(lock_at: 1.week.ago)
+      ao = @topic.assignment_overrides.create!(lock_at: 1.week.from_now, lock_at_overridden: true)
+      ao.assignment_override_students.create!(user: @student)
+      lock_info = @topic.locked_for?(@student)
+      expect(lock_info).to be_falsey
+    end
+
+    it "does not fall back to base delayed_post_at for student with override" do
+      @topic.update!(delayed_post_at: 1.week.from_now)
+      ao = @topic.assignment_overrides.create!(unlock_at: 1.week.ago, unlock_at_overridden: true)
+      ao.assignment_override_students.create!(user: @student)
+      expect(@topic.locked_for?(@student)).to be_falsey
+    end
+
+    it "is unlocked for teacher regardless of dates" do
+      @topic.update(lock_at: 1.week.ago)
+      expect(@topic.locked_for?(@teacher, check_policies: true)).to be_falsey
+      expect(@topic.locked_for?(@student, check_policies: true)).to be_truthy
+    end
+
+    it "is unlocked for students with moderate_forum regardless of dates" do
+      @topic.update(lock_at: 1.week.ago)
+      expect(@topic.locked_for?(@student, check_policies: true)).to be_truthy
+      RoleOverride.create!(context: @course.account, permission: "moderate_forum", role: student_role, enabled: true)
+      AdheresToPolicy::Cache.clear
+      expect(@topic.locked_for?(@student, check_policies: true)).to be_falsey
+    end
+
+    it "is locked if locked column is true" do
+      @topic.update(locked: true)
+      expect(@topic.locked_for?(@student)).to be_truthy
+    end
+
+    context "with an assignment" do
+      before :once do
+        @assignment = @course.assignments.create!(title: "assignment")
+        @topic.update!(assignment: @assignment)
+      end
+
+      it "is unlocked by default" do
+        expect(@topic.locked_for?(@student)).to be_falsey
+      end
+
+      it "still enforces the topic's dates" do
+        @topic.update(unlock_at: 1.week.from_now)
+        expect(@topic.locked_for?(@student)).to be_truthy
+      end
+
+      it "does not enforce the topic's overrides" do
+        ao = @topic.assignment_overrides.create!(unlock_at: 1.week.from_now, unlock_at_overridden: true)
+        ao.assignment_override_students.create!(user: @student)
+        expect(@topic.locked_for?(@student)).to be_falsey
+      end
+
+      it "respects assignment's unlock_at" do
+        timestamp = 1.week.from_now
+        @assignment.update!(unlock_at: timestamp)
+        lock_info = @topic.locked_for?(@student)
+        expect(lock_info).to be_truthy
+        expect(lock_info[:unlock_at]).to eq timestamp
+      end
+
+      it "respects assignment's lock_at" do
+        timestamp = 1.week.ago
+        @assignment.update!(lock_at: timestamp)
+        lock_info = @topic.locked_for?(@student)
+        expect(lock_info).to be_truthy
+        expect(lock_info[:lock_at]).to eq timestamp
+      end
+
+      it "respects assignment's overrides" do
+        timestamp = 1.week.from_now
+        ao = @assignment.assignment_overrides.create!(unlock_at: timestamp, unlock_at_overridden: true)
+        ao.assignment_override_students.create!(user: @student)
+        lock_info = @topic.locked_for?(@student)
+        expect(lock_info).to be_truthy
+        expect(lock_info[:unlock_at]).to eq timestamp
       end
     end
   end

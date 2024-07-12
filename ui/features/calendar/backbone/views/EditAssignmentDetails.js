@@ -28,15 +28,17 @@ import editAssignmentTemplate from '../../jst/editAssignment.handlebars'
 import editAssignmentOverrideTemplate from '../../jst/editAssignmentOverride.handlebars'
 import wrapper from '@canvas/forms/jst/EmptyDialogFormWrapper.handlebars'
 import genericSelectOptionsTemplate from '../../jst/genericSelectOptions.handlebars'
-import datePickerFormat from '@canvas/datetime/datePickerFormat'
+import datePickerFormat from '@instructure/moment-utils/datePickerFormat'
 import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
 import withinMomentDates from '../../momentDateHelper'
-import tz from '@canvas/timezone'
+import * as tz from '@instructure/moment-utils'
+import {unfudgeDateForProfileTimezone} from '@instructure/moment-utils'
 import fcUtil from '@canvas/calendar/jquery/fcUtil'
-import '@canvas/datetime'
-import '@canvas/forms/jquery/jquery.instructure_forms'
+import '@canvas/jquery/jquery.instructure_forms'
 import '@canvas/jquery/jquery.instructure_misc_helpers'
 import '../../fcMomentHandlebarsHelpers'
+import {encodeQueryString} from '@canvas/query-string-encoding'
+import {renderDatetimeField} from '@canvas/datetime/jquery/DatetimeField'
 
 const I18n = useI18nScope('calendar')
 
@@ -103,8 +105,8 @@ export default class EditAssignmentDetailsRewrite extends ValidatedFormView {
 
   enableDateField() {
     if (this.event.endDate) {
-      this.$el.find('#assignment_due_at').val(this.event.endDate().format('ddd ll'))
-      this.$el.find('#assignment_override_due_at').val(this.event.endDate().format('ddd ll'))
+      this.$el.find('#assignment_due_at').val(this.event.endDate()?.format('ddd ll'))
+      this.$el.find('#assignment_override_due_at').val(this.event.endDate()?.format('ddd ll'))
     }
     this.$el.find('#assignment_due_at').prop('disabled', false)
     this.$el.find('#assignment_override_due_at').prop('disabled', false)
@@ -138,7 +140,7 @@ export default class EditAssignmentDetailsRewrite extends ValidatedFormView {
       params.assignment_group_id = data.assignment_group_id
     }
     params.return_to = window.location.href
-    pieces[0] += `?${$.param(params)}`
+    pieces[0] += `?${encodeQueryString(params)}`
     return (window.location.href = pieces.join('#'))
   }
 
@@ -201,7 +203,7 @@ export default class EditAssignmentDetailsRewrite extends ValidatedFormView {
   }
 
   unfudgedDate(date) {
-    const unfudged = $.unfudgeDateForProfileTimezone(date)
+    const unfudged = unfudgeDateForProfileTimezone(date)
     if (unfudged) {
       return unfudged.toISOString()
     } else {
@@ -339,7 +341,7 @@ export default class EditAssignmentDetailsRewrite extends ValidatedFormView {
 
   setupTimeAndDatePickers() {
     const $field = this.$el.find('.datetime_field')
-    return $field.datetime_field({
+    return renderDatetimeField($field, {
       datepicker: {
         dateFormat: datePickerFormat(I18n.t('#date.formats.medium_with_weekday')),
       },

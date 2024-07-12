@@ -26,16 +26,20 @@ import {Text} from '@instructure/ui-text'
 import {View} from '@instructure/ui-view'
 import {
   ApiCallStatus,
-  AssignmentConnection,
-  GradebookOptions,
-  GradebookStudentDetails,
-  GradebookUserSubmissionDetails,
+  type AssignmentConnection,
+  type GradebookOptions,
+  type GradebookStudentDetails,
+  type GradebookUserSubmissionDetails,
 } from '../../../types'
 import {useSubmitScore} from '../../hooks/useSubmitScore'
 import {useGetComments} from '../../hooks/useComments'
-import SubmissionDetailModal, {GradeChangeApiUpdate} from './SubmissionDetailModal'
+import SubmissionDetailModal, {type GradeChangeApiUpdate} from './SubmissionDetailModal'
 import ProxyUploadModal from '@canvas/proxy-submission/react/ProxyUploadModal'
-import {submitterPreviewText, passFailStatusOptions} from '../../../utils/gradebookUtils'
+import {
+  submitterPreviewText,
+  disableGrading,
+  passFailStatusOptions,
+} from '../../../utils/gradebookUtils'
 import GradeFormatHelper from '@canvas/grading/GradeFormatHelper'
 import DefaultGradeInput from './DefaultGradeInput'
 
@@ -93,7 +97,15 @@ export default function GradingResults({
         }
       }
       setExcusedChecked(submission.excused)
-      setGradeInput(submission.excused ? I18n.t('Excused') : submission.enteredGrade ?? '-')
+      if (submission.excused) {
+        setGradeInput(I18n.t('Excused'))
+      } else if (submission.enteredGrade == null) {
+        setGradeInput('-')
+      } else if (assignment?.gradingType === 'letter_grade') {
+        setGradeInput(GradeFormatHelper.replaceDashWithMinus(submission.enteredGrade))
+      } else {
+        setGradeInput(submission.enteredGrade)
+      }
     }
   }, [assignment, submission])
 
@@ -165,6 +177,7 @@ export default function GradingResults({
   const {
     changeGradeUrl,
     customOptions: {hideStudentNames},
+    gradingStandardPointsBased,
   } = gradebookOptions
 
   const submitScoreUrl = (changeGradeUrl ?? '')
@@ -186,9 +199,23 @@ export default function GradingResults({
     setGradeInput(input)
   }
 
-  const handleChangePassFailStatus = (event: React.SyntheticEvent, data: {value: string}) => {
-    setGradeInput(data.value)
+  const handleChangePassFailStatus = (
+    event: React.SyntheticEvent,
+    data: {value?: string | number | undefined}
+  ) => {
+    if (typeof data.value === 'string') {
+      setGradeInput(data.value)
+    }
     setPassFailStatusIndex(passFailStatusOptions.findIndex(option => option.value === data.value))
+  }
+
+  const latePenaltyFinalGradeDisplay = (grade: string | null) => {
+    if (grade == null) {
+      return ' -'
+    }
+
+    const displayGrade = GradeFormatHelper.formatGrade(grade)
+    return GradeFormatHelper.replaceDashWithMinus(displayGrade)
   }
 
   return (
@@ -224,8 +251,9 @@ export default function GradingResults({
               handleSetGradeInput={handleSetGradeInput}
               handleSubmitGrade={submitGrade}
               handleChangePassFailStatus={handleChangePassFailStatus}
+              gradingStandardPointsBased={gradingStandardPointsBased}
             />
-            <View as="div">
+            <View as="div" margin="small 0 0 0">
               {submission.late && (
                 <>
                   <View display="inline-block">
@@ -261,11 +289,7 @@ export default function GradingResults({
                       as="div"
                       padding="0 0 0 small"
                     >
-                      <Text>
-                        {submission.grade != null
-                          ? GradeFormatHelper.formatGrade(submission.grade)
-                          : ' -'}
-                      </Text>
+                      <Text>{latePenaltyFinalGradeDisplay(submission.grade)}</Text>
                     </View>
                   </View>
                 </>
@@ -282,11 +306,9 @@ export default function GradingResults({
                     type="checkbox"
                     id="excuse_assignment"
                     name="excuse_assignment"
+                    data-testid="excuse_assignment_checkbox"
                     checked={excusedChecked}
-                    disabled={
-                      submitScoreStatus === ApiCallStatus.PENDING ||
-                      (assignment.moderatedGrading && !assignment.gradesPublished)
-                    }
+                    disabled={disableGrading(assignment, submitScoreStatus)}
                     onChange={markExcused}
                   />
                   {I18n.t('Excuse This Assignment for the Selected Student')}
@@ -295,10 +317,24 @@ export default function GradingResults({
             )}
             {dropped && (
               <p className="dropped muted" data-testid="dropped-assignment-message">
-                This grade is currently dropped for this student.
+                {I18n.t('This grade is currently dropped for this student.')}
               </p>
             )}
-            <View as="div" className="span4" margin="medium 0 0 0" width="14.6rem">
+            {submission.gradeMatchesCurrentSubmission !== null &&
+              !submission.gradeMatchesCurrentSubmission && (
+                <View
+                  as="div"
+                  margin="large 0 0 0"
+                  className="resubmitted_assignment_label"
+                  data-testid="resubmitted_assignment_label"
+                >
+                  <Text color="secondary">
+                    {I18n.t('This assignment has been resubmitted since it was graded last.')}
+                  </Text>
+                </View>
+              )}
+
+            <View as="div" className="span4" margin="small 0 0 0" width="14.6rem">
               <Button
                 data-testid="submission-details-button"
                 display="block"
@@ -358,7 +394,9 @@ type SubmissionStatusProps = {
 function SubmissionStatus({submission}: SubmissionStatusProps) {
   let text = ''
 
-  if (submission.late) {
+  if (submission.customGradeStatus) {
+    text = submission.customGradeStatus.toUpperCase()
+  } else if (submission.late) {
     text = 'LATE'
   } else if (submission.missing) {
     text = 'MISSING'
@@ -370,11 +408,19 @@ function SubmissionStatus({submission}: SubmissionStatusProps) {
 
   return (
     <View as="span">
-      <Pill margin="small" color="danger" data-testid="submission-status-pill">
-        <View as="strong" padding="x-small">
-          {I18n.t('%{text}', {text})}
-        </View>
-      </Pill>
+      {submission.customGradeStatus ? (
+        <Pill margin="small" data-testid="submission-status-pill">
+          <View as="strong" padding="x-small">
+            {text}
+          </View>
+        </Pill>
+      ) : (
+        <Pill margin="small" color="danger" data-testid="submission-status-pill">
+          <View as="strong" padding="x-small">
+            {I18n.t('%{text}', {text})}
+          </View>
+        </Pill>
+      )}
     </View>
   )
 }

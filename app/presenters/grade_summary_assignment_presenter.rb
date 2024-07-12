@@ -19,6 +19,7 @@
 
 class GradeSummaryAssignmentPresenter
   include TextHelper
+  include GradeDisplay
   attr_reader :assignment, :submission, :originality_reports
 
   def initialize(summary, current_user, assignment, submission)
@@ -114,7 +115,7 @@ class GradeSummaryAssignmentPresenter
   end
 
   def unchangeable?
-    (!@summary.editable? || assignment.special_class)
+    !@summary.editable? || assignment.special_class
   end
 
   def has_comments?
@@ -163,7 +164,6 @@ class GradeSummaryAssignmentPresenter
     classes << special_class
     classes << "excused" if excused?
     classes << "extended" if extended?
-    classes << "feedback_visibility_ff" if Account.site_admin.feature_enabled?(:visibility_feedback_student_grades_page)
     classes.join(" ")
   end
 
@@ -205,7 +205,7 @@ class GradeSummaryAssignmentPresenter
 
   def published_grade
     if is_letter_graded_or_gpa_scaled? && !submission.published_grade.nil?
-      "(#{submission.published_grade})"
+      "(#{replace_dash_with_minus(submission.published_grade)})"
     else
       ""
     end
@@ -214,6 +214,8 @@ class GradeSummaryAssignmentPresenter
   def display_score
     if has_no_score_display?
       ""
+    elsif assignment.grading_standard_or_default.points_based
+      "#{I18n.n(round_if_whole(submission.published_score), precision: 2)} #{published_grade}"
     else
       "#{I18n.n round_if_whole(submission.published_score)} #{published_grade}"
     end

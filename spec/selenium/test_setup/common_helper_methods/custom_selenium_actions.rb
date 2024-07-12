@@ -244,7 +244,8 @@ module CustomSeleniumActions
   end
 
   def get_value(selector)
-    driver.execute_script("return $(#{selector.inspect}).val()")
+    script = "return document.querySelector(arguments[0]).value;"
+    driver.execute_script(script, selector)
   end
 
   def get_options(selector, scope = nil)
@@ -416,6 +417,11 @@ module CustomSeleniumActions
     driver.execute_script("$(#{element_jquery_finder.to_s.to_json}).click()")
   end
 
+  def force_click_native(element_finder)
+    f(element_finder)
+    driver.execute_script("document.querySelector(#{element_finder.to_s.to_json}).click();")
+  end
+
   def hover(element)
     element.with_stale_element_protection { driver.action.move_to(element).perform }
   end
@@ -543,7 +549,7 @@ module CustomSeleniumActions
              else
                f("#{form} #{submit_button_css}")
              end
-    scroll_to(button)
+    scroll_into_view(button)
     driver.action.move_to(button).click.perform
   end
 
@@ -577,21 +583,10 @@ module CustomSeleniumActions
     dialog.find_elements(:css, submit_button_css).last.click
   end
 
-  ##
-  # load the simulate plugin to simulate a drag events (among other things)
-  # will only load it once even if its called multiple times
-  def load_simulate_js
-    @load_simulate_js ||= begin
-      js = File.read("spec/selenium/helpers/jquery.simulate.js")
-      driver.execute_script js
-    end
-  end
-
   # when selenium fails you, reach for .simulate
   # takes a CSS selector for jQuery to find the element you want to drag
   # and then the change in x and y you want to drag
   def drag_with_js(selector, x, y)
-    load_simulate_js
     driver.execute_script "$('#{selector}').simulate('drag', { dx: #{x}, dy: #{y} })"
   end
 
@@ -690,8 +685,12 @@ module CustomSeleniumActions
     wait_for_ajaximations
   end
 
-  def scroll_into_view(selector)
-    driver.execute_script("$(#{selector.to_json})[0].scrollIntoView()")
+  def scroll_into_view(target)
+    if target.is_a?(Selenium::WebDriver::Element)
+      driver.execute_script("arguments[0].scrollIntoView(true);", target)
+    else
+      driver.execute_script("$(#{target.to_json})[0].scrollIntoView()")
+    end
   end
 
   # see packages/jquery-scroll-to-visible
@@ -726,5 +725,14 @@ module CustomSeleniumActions
     element.click
   rescue
     click_repeat(element)
+  end
+
+  # If you want to simulate a user's internet connection turning offline, use these methods.
+  def turn_off_network
+    driver.network_conditions = { offline: true, latency: 0, throughput: 0 }
+  end
+
+  def turn_on_network
+    driver.network_conditions = { offline: false, latency: 0, throughput: -1 }
   end
 end

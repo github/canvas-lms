@@ -115,7 +115,7 @@ export const AddressBook = ({
     ...menuData.contextData,
     ...menuData.userData,
   ])
-  const ariaAddressBookLabel = I18n.t('Address Book')
+  const ariaAddressBookLabel = I18n.t('%{label}', {label: props.addressBookLabel})
   const [menuItemCurrent, setMenuItemCurrent] = useState(null)
   const [isSubMenuSelection, setIsSubMenuSelection] = useState(true)
   const {setOnSuccess} = useContext(AlertManagerContext)
@@ -251,12 +251,7 @@ export const AddressBook = ({
   }, [fetchMoreMenuData, hasMoreMenuData, menuItemCurrent])
 
   useEffect(() => {
-    if (
-      activeCourseFilter?.contextID === null &&
-      activeCourseFilter?.contextName === null &&
-      selectedRecipients.length === 0 &&
-      selectedMenuItems.length !== 0
-    ) {
+    if (selectedRecipients.length === 0 && selectedMenuItems.length !== 0) {
       onSelectedIdsChange([])
       setSelectedMenuItems([])
     }
@@ -315,7 +310,7 @@ export const AddressBook = ({
           isSelected={isSelected}
           hasPopup={hasPopup}
           id={`address-book-menu-item-${menuId}-${itemType}`}
-          onSelect={(e) => {
+          onSelect={e => {
             e.persist()
             selectHandler(menuItem, e, isContext, isBackButton, isSubmenu)
           }}
@@ -329,6 +324,7 @@ export const AddressBook = ({
           isKeyboardFocus={focusType === KEYBOARD_FOCUS_TYPE}
           observerEnrollments={observerEnrollments}
           isOnObserverSubmenu={isOnObserverSubmenu}
+          pronouns =  {ENV?.SETTINGS?.can_add_pronouns && itemType === USER_TYPE ? menuItem.pronouns : null}
         >
           {menuItemName}
         </AddressBookItem>
@@ -395,7 +391,7 @@ export const AddressBook = ({
       <View as="div" padding="xx-small" data-testid="menu-loading-spinner">
         <Flex width="100%" margin="xxx-small none xxx-small xxx-small">
           <Flex.Item align="start" margin="0 small 0 0">
-            <Spinner renderTitle={I18n.t('Loading')} size="x-small" />
+            <Spinner renderTitle={I18n.t('Loading')} size="x-small" delay={300} />
           </Flex.Item>
           <Flex.Item align="center" shouldGrow={true} shouldShrink={true}>
             <View>
@@ -487,6 +483,7 @@ export const AddressBook = ({
         isMenuOpen && setIsMenuOpen(false)
         break
       case 13: // Enter
+        if (!isMenuOpen) return
         selectHandler(selectedItem, undefined, undefined, undefined)
         break
       default:
@@ -515,7 +512,7 @@ export const AddressBook = ({
         setIsloadingRecipientsTotal(false)
       }
       menuItem.totalRecipients = totalRecipients
-      let shouldCloseMenu = !(e?.ctrlKey || e?.metaKey)
+      const shouldCloseMenu = !(e?.ctrlKey || e?.metaKey)
       addTag(menuItem, shouldCloseMenu)
       onSelect(menuItem)
       if (onUserFilterSelect) {
@@ -541,7 +538,7 @@ export const AddressBook = ({
 
     setSelectedMenuItems([...newSelectedMenuItems])
     onSelectedIdsChange([...newSelectedMenuItems])
-    if(shouldCloseMenu){
+    if (shouldCloseMenu) {
       setIsMenuOpen(false)
     }
   }
@@ -585,7 +582,9 @@ export const AddressBook = ({
                 <TextInput
                   placeholder={selectedMenuItems.length === 0 ? searchPlaceholder : null}
                   renderLabel={
-                    <ScreenReaderContent>{I18n.t('Address Book Input')}</ScreenReaderContent>
+                    <ScreenReaderContent>
+                      {I18n.t('%{label}', {label: props.addressBookLabel})}
+                    </ScreenReaderContent>
                   }
                   renderBeforeInput={
                     selectedMenuItems.length === 0 ? (
@@ -594,11 +593,6 @@ export const AddressBook = ({
                       renderedSelectedTags
                     )
                   }
-                  onFocus={() => {
-                    if (!isLimitReached) {
-                      setIsMenuOpen(true)
-                    }
-                  }}
                   onBlur={() => {
                     if (focusType === KEYBOARD_FOCUS_TYPE) {
                       setIsMenuOpen(false)
@@ -610,9 +604,9 @@ export const AddressBook = ({
                   type="search"
                   aria-owns={popoverInstanceId.current}
                   aria-label={ariaAddressBookLabel}
-                  aria-labelledby={selectedMenuItems
+                  aria-labelledby={`address-book-form ${selectedMenuItems
                     .map(u => `address-book-label-${u?.id}-${u?.itemType}`)
-                    .join(' ')}
+                    .join(' ')}`}
                   aria-autocomplete="list"
                   inputRef={ref => {
                     textInputRef.current = ref
@@ -641,7 +635,7 @@ export const AddressBook = ({
                 >
                   <ul
                     role="menu"
-                    aria-label={I18n.t('Address Book Menu')}
+                    aria-label={I18n.t('%{label} Menu', {label: props.addressBookLabel})}
                     id={popoverInstanceId.current}
                     style={{
                       paddingInlineStart: '0px',
@@ -662,12 +656,13 @@ export const AddressBook = ({
           <Flex.Item>
             <IconButton
               data-testid="address-button"
-              screenReaderLabel={I18n.t('Open Address Book')}
+              screenReaderLabel={I18n.t('Open %{label} Menu', {label: props.addressBookLabel})}
               onClick={() => {
                 if (isMenuOpen) {
                   setIsMenuOpen(false)
                 } else {
                   textInputRef.current.focus()
+                  setIsMenuOpen(true)
                 }
               }}
               disabled={isLimitReached}
@@ -689,6 +684,7 @@ AddressBook.defaultProps = {
   onSelect: () => {},
   onSelectedIdsChange: () => {},
   selectedRecipients: [],
+  addressBookLabel: 'Search',
 }
 
 AddressBook.propTypes = {
@@ -772,6 +768,7 @@ AddressBook.propTypes = {
    * placeholder text for search text input
    */
   placeholder: PropTypes.string,
+  addressBookLabel: PropTypes.string,
 }
 
 export default AddressBook

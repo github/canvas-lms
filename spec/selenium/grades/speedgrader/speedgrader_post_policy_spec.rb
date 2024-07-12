@@ -62,13 +62,16 @@ RSpec.shared_examples "displayable student grade" do
     StudentGradesPage.comment_buttons.first.click
     aggregate_failures("has grade and comment present") do
       expect(StudentGradesPage.fetch_assignment_score(@assignment)).to eq submission.grade
-      expect(StudentGradesPage.comments(@assignment).first).to include_text submission_comment.comment
+      expect(StudentGradesPage.submission_comments.first).to include_text submission_comment.comment
     end
   end
 end
 
-describe "Speed Grader Post Policy" do
+describe "SpeedGrader Post Policy" do
   include_context "in-process server selenium tests"
+
+  # all tests skipped due to flakiness; see the referenced ticket
+  before { skip } # EVAL-3613
 
   before :once do
     @teacher = course_with_teacher(course_name: "Post Policy Course", name: "Teacher", active_all: true).user

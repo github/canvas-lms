@@ -60,7 +60,7 @@ class Auditors::GradeChange
     end
 
     def initialize(*args)
-      super(*args)
+      super
 
       if attributes["submission"]
         self.submission = attributes.delete("submission")
@@ -220,20 +220,13 @@ class Auditors::GradeChange
 
   Stream = Auditors.stream do
     grades_ar_type = Auditors::ActiveRecord::GradeChangeRecord
-    active_record_type grades_ar_type
-    record_type Auditors::GradeChange::Record
+    record_type grades_ar_type
 
     add_index :assignment do
-      table :grade_changes_by_assignment
-      entry_proc ->(record) { record.assignment }
-      key_proc ->(assignment) { assignment.global_id }
       ar_scope_proc ->(assignment) { grades_ar_type.where(assignment_id: assignment.id) }
     end
 
     add_index :course do
-      table :grade_changes_by_course
-      entry_proc ->(record) { record.course }
-      key_proc ->(course) { course.global_id }
       ar_scope_proc lambda { |course|
         scope = grades_ar_type.where(context_id: course.id, context_type: "Course")
         Auditors::GradeChange.filter_by_assignment(scope)
@@ -241,11 +234,6 @@ class Auditors::GradeChange
     end
 
     add_index :root_account_grader do
-      table :grade_changes_by_root_account_grader
-      # We don't want to index events for nil graders and currently we are not
-      # indexing events for auto grader in cassandra.
-      entry_proc ->(record) { [record.root_account, record.grader] if record.grader && !record.autograded? }
-      key_proc ->(root_account, grader) { [root_account.global_id, grader.global_id] }
       ar_scope_proc lambda { |root_account, grader|
         scope = grades_ar_type.where(root_account_id: root_account.id, grader_id: grader.id)
         Auditors::GradeChange.filter_by_assignment(scope)
@@ -253,9 +241,6 @@ class Auditors::GradeChange
     end
 
     add_index :root_account_student do
-      table :grade_changes_by_root_account_student
-      entry_proc ->(record) { [record.root_account, record.student] }
-      key_proc ->(root_account, student) { [root_account.global_id, student.global_id] }
       ar_scope_proc lambda { |root_account, student|
         scope = grades_ar_type.where(root_account_id: root_account.id, student_id: student.id)
         Auditors::GradeChange.filter_by_assignment(scope)
@@ -263,9 +248,6 @@ class Auditors::GradeChange
     end
 
     add_index :course_assignment do
-      table :grade_changes_by_course_assignment
-      entry_proc ->(record) { [record.course, record.assignment] }
-      key_proc ->(course, assignment) { [course.global_id, assignment&.global_id] }
       ar_scope_proc lambda { |course, assignment|
         scope = grades_ar_type.where(context_id: course.id, context_type: "Course", assignment_id: assignment&.id)
         Auditors::GradeChange.filter_by_assignment(scope)
@@ -273,11 +255,6 @@ class Auditors::GradeChange
     end
 
     add_index :course_assignment_grader do
-      table :grade_changes_by_course_assignment_grader
-      entry_proc lambda { |record|
-        [record.course, record.assignment, record.grader] if record.grader && !record.autograded?
-      }
-      key_proc ->(course, assignment, grader) { [course.global_id, assignment&.global_id, grader.global_id] }
       ar_scope_proc lambda { |course, assignment, grader|
         scope = grades_ar_type.where(context_id: course.id, context_type: "Course", assignment_id: assignment&.id, grader_id: grader.id)
         Auditors::GradeChange.filter_by_assignment(scope)
@@ -285,15 +262,6 @@ class Auditors::GradeChange
     end
 
     add_index :course_assignment_grader_student do
-      table :grade_change_by_course_assignment_grader_student
-      entry_proc lambda { |record|
-        if record.grader && !record.autograded?
-          [record.course, record.assignment, record.grader, record.student]
-        end
-      }
-      key_proc lambda { |course, assignment, grader, student|
-        [course.global_id, assignment&.global_id, grader.global_id, student.global_id]
-      }
       ar_scope_proc lambda { |course, assignment, grader, student|
         scope = grades_ar_type.where(context_id: course.id, context_type: "Course", assignment_id: assignment&.id, grader_id: grader.id, student_id: student.id)
         Auditors::GradeChange.filter_by_assignment(scope)
@@ -301,9 +269,6 @@ class Auditors::GradeChange
     end
 
     add_index :course_assignment_student do
-      table :grade_changes_by_course_assignment_student
-      entry_proc ->(record) { [record.course, record.assignment, record.student] }
-      key_proc ->(course, assignment, student) { [course.global_id, assignment&.global_id, student.global_id] }
       ar_scope_proc lambda { |course, assignment, student|
         scope = grades_ar_type.where(context_id: course.id, context_type: "Course", assignment_id: assignment&.id, student_id: student.id)
         Auditors::GradeChange.filter_by_assignment(scope)
@@ -311,9 +276,6 @@ class Auditors::GradeChange
     end
 
     add_index :course_grader do
-      table :grade_changes_by_course_grader
-      entry_proc ->(record) { [record.course, record.grader] if record.grader && !record.autograded? }
-      key_proc ->(course, grader) { [course.global_id, grader.global_id] }
       ar_scope_proc lambda { |course, grader|
         scope = grades_ar_type.where(context_id: course.id, context_type: "Course", grader_id: grader.id)
         Auditors::GradeChange.filter_by_assignment(scope)
@@ -321,11 +283,6 @@ class Auditors::GradeChange
     end
 
     add_index :course_grader_student do
-      table :grade_changes_by_course_grader_student
-      entry_proc lambda { |record|
-        [record.course, record.grader, record.student] if record.grader && !record.autograded?
-      }
-      key_proc ->(course, grader, student) { [course.global_id, grader.global_id, student.global_id] }
       ar_scope_proc lambda { |course, grader, student|
         scope = grades_ar_type.where(context_id: course.id, context_type: "Course", grader_id: grader.id, student_id: student.id)
         Auditors::GradeChange.filter_by_assignment(scope)
@@ -333,15 +290,13 @@ class Auditors::GradeChange
     end
 
     add_index :course_student do
-      table :grade_changes_by_course_student
-      entry_proc ->(record) { [record.course, record.student] }
-      key_proc ->(course, student) { [course.global_id, student.global_id] }
       ar_scope_proc lambda { |course, student|
         scope = grades_ar_type.where(context_id: course.id, context_type: "Course", student_id: student.id)
         Auditors::GradeChange.filter_by_assignment(scope)
       }
     end
   end
+
   def self.record(skip_insert: false, submission: nil, override_grade_change: nil, event_type: nil)
     if (submission.blank? && override_grade_change.blank?) || (submission.present? && override_grade_change.present?)
       raise ArgumentError, "Must specify exactly one of submission or override_grade_change"
@@ -370,6 +325,21 @@ class Auditors::GradeChange
       Auditors::ActiveRecord::GradeChangeRecord.ar_attributes_from_event_stream(stream_record)
     end
     bulk_insert_records(event_records)
+  end
+
+  def self.create_content_participations(plucked_submissions, assignment, unique_users)
+    root_account_id = assignment.root_account_id
+    content_participations = []
+    content_participation_counts = []
+    plucked_submissions.each do |user_id, submission_id, course_id|
+      context_type = course_id ? "Course" : assignment.context_type
+      context_id = course_id || assignment.context_id
+      content_participations << { content_type: "Submission", user_id:, content_id: submission_id, workflow_state: "unread", content_item: "grade", root_account_id:, }
+      content_participation_counts << { content_type: "Submission", context_type:, user_id:, root_account_id:, unread_count: 0, context_id:, }
+    end
+    content_participations.each_slice(1000) { |batch| ContentParticipation.insert_all(batch) }
+    content_participation_counts.each_slice(1000) { |batch| ContentParticipationCount.insert_all(batch) }
+    assignment.course.refresh_content_participation_counts_for_users(unique_users)
   end
 
   def self.insert_record(event_record)

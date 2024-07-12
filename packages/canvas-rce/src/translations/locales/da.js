@@ -189,6 +189,9 @@ const locale = {
   "congruent_5a244acd": { "message": "Kongruent" },
   "contains_311f37b7": { "message": "Indeholder" },
   "content_1440204b": { "message": "Indhold" },
+  "content_in_the_editor_will_be_changed_press_cancel_d5bf3357": {
+    "message": "Indholdet i editoren vil blive ændret. Tryk på Annuller for at beholde det originale indhold."
+  },
   "content_is_still_being_uploaded_if_you_continue_it_8f06d0cb": {
     "message": "Indhold er stadig ved at blive uploadet. Hvis du fortsætter, bliver det ikke integreret korrekt."
   },
@@ -326,6 +329,8 @@ const locale = {
   "enter_at_least_3_characters_to_search_4f037ee0": {
     "message": "Indtast mindst 3 tegn for at søge"
   },
+  "enter_replacement_text_17631bbc": { "message": "indtast erstatningstekst" },
+  "enter_search_text_26cb4459": { "message": "indtast søgetekst" },
   "epsilon_54bb8afa": { "message": "Epsilon" },
   "epsilon_variant_d31f1e77": { "message": "Epsilon (variant)" },
   "equals_sign_c51bdc58": { "message": "Lig med-symbol" },
@@ -370,6 +375,8 @@ const locale = {
   },
   "files_c300e900": { "message": "Filer" },
   "files_index_af7c662b": { "message": "Filoversigt" },
+  "find_8d605019": { "message": "Find" },
+  "find_and_replace_6e345933": { "message": "Find og erstat" },
   "finish_bc343002": { "message": "Færdig" },
   "fix_heading_hierarchy_f60884c4": { "message": "Ret overskriftshierarki" },
   "flat_music_76d5a5c3": { "message": "Sænket (musik)" },
@@ -492,6 +499,7 @@ const locale = {
   "in_element_of_19ca2f33": { "message": "I (element af)" },
   "increase_indent_6af90f7c": { "message": "Øg indrykning" },
   "indefinite_integral_6623307e": { "message": "Ubestemt integral" },
+  "index_of_max_80dcf7a5": { "message": "{ index } af { max }" },
   "indigo_2035fc55": { "message": "Indigo" },
   "inference_fed5c960": { "message": "Udledning" },
   "infinity_7a10f206": { "message": "Uendelighed" },
@@ -663,6 +671,7 @@ const locale = {
   "nested_less_than_27d17e58": { "message": "Indlejret mindre end" },
   "new_quiz_34aacba6": { "message": "Ny test" },
   "next_40e12421": { "message": "Næste" },
+  "next_findtext_9d69f0fe": { "message": "Næste { findText }" },
   "no_accessibility_issues_were_detected_f8d3c875": {
     "message": "Der blev ikke fundet nogen tilgængelighedsproblemer."
   },
@@ -698,6 +707,7 @@ const locale = {
   },
   "no_quizzes_found_c80c537a": { "message": "Ingen test fundet." },
   "no_results_940393cf": { "message": "Ingen resultater." },
+  "no_results_found_58717065": { "message": "Ingen resultater fundet" },
   "no_results_found_for_filterterm_ad1b04c8": {
     "message": "Ingen resultater fundet for { filterTerm }"
   },
@@ -782,11 +792,16 @@ const locale = {
   "precedes_196b9aef": { "message": "Kommer før" },
   "precedes_equal_20701e84": { "message": "Kommer før lig med" },
   "preformatted_d0670862": { "message": "Præformatteret" },
+  "prepend_findtext_append_8e0e769a": {
+    "message": "{ prepend }{ findText }{ append }"
+  },
   "prev_f82cbc48": { "message": "Forrige" },
   "preview_53003fd2": { "message": "Eksempel" },
   "preview_a3f8f854": { "message": "FORHÅNDSVISNING" },
   "preview_in_overlay_ed772c46": { "message": "Overlejret forhåndsvisning" },
   "preview_inline_9787330": { "message": "Indbygget forhåndsvisning" },
+  "previous_bd2ac015": { "message": "Forrige" },
+  "previous_findtext_8dfbfd30": { "message": "Forrige { findText }" },
   "prime_917ea60e": { "message": "Forbered" },
   "prime_numbers_13464f61": { "message": "Primtal" },
   "product_39cf144f": { "message": "Produkt" },
@@ -815,11 +830,28 @@ const locale = {
   "religion_icon_246e0be1": { "message": "Religion-ikon" },
   "remove_heading_style_5fdc8855": { "message": "Fjern overskriftsstil" },
   "remove_link_d1f2f4d0": { "message": "Fjern link" },
+  "replace_all_d3d68b3": { "message": "Erstat alle" },
+  "replace_all_findtext_with_replacetext_da574b32": {
+    "message": "Erstat alle { findText } med { replaceText }"
+  },
   "replace_e61834a7": { "message": "Erstat" },
+  "replace_findtext_with_replacetext_7b5c7fb3": {
+    "message": "Erstat { findText } med { replaceText }"
+  },
+  "replace_with_eeff01ad": { "message": "Udskift med" },
+  "replaced_alertfindtext_with_alertreplacetext_de5c1795": {
+    "message": "Erstattede { alertFindText } med { alertReplaceText }"
+  },
+  "replaced_all_alertfindtext_with_alertreplacetext_83fdfe59": {
+    "message": "Erstattede alle { alertFindText } med { alertReplaceText }"
+  },
   "reset_95a81614": { "message": "Nulstil" },
   "resize_ec83d538": { "message": "Tilpas størrelse" },
   "restore_auto_save_deccd84b": {
     "message": "Gendan automatisk gemt indhold?"
+  },
+  "result_index_of_max_7db5ad8b": {
+    "message": "Resultat { index } af { max }."
   },
   "reverse_turnstile_does_not_yield_7558be06": {
     "message": "Omvendt drejekors (giver ikke efter)"

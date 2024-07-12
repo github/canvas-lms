@@ -23,7 +23,7 @@ import {
   getHandleChangeObservedUser,
   autoFocusObserverPicker,
 } from '@canvas/observer-picker/util/pageReloadHelper'
-import createStore from '@canvas/util/createStore'
+import createStore from '@canvas/backbone/createStore'
 import {View} from '@instructure/ui-view'
 import $ from 'jquery'
 import '@canvas/rails-flash-notifications'
@@ -35,6 +35,7 @@ import {initializePlanner, renderToDoSidebar} from '@canvas/planner'
 import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
 import apiUserContent from '@canvas/util/jquery/apiUserContent'
 import * as apiClient from '@canvas/courses/courseAPIClient'
+import {dateString, datetimeString, timeString} from '@canvas/datetime/date-functions'
 
 const I18n = useI18nScope('courses_show')
 
@@ -97,9 +98,9 @@ const addToDoSidebar = parent => {
     srFlashMessage: $.screenReaderFlashMessage,
     convertApiUserContent: apiUserContent.convert,
     dateTimeFormatters: {
-      dateString: $.dateString,
-      timeString: $.timeString,
-      datetimeString: $.datetimeString,
+      dateString,
+      timeString,
+      datetimeString,
     },
     forCourse: ENV.COURSE.id,
   })
@@ -112,45 +113,6 @@ const addToDoSidebar = parent => {
 }
 
 $(() => {
-  $('#course_status_form').submit(e => {
-    const input = e.target.elements.namedItem('course[event]')
-    const value = input && input.value
-    const courseId = ENV.COURSE.id
-    if (value === 'offer') {
-      e.preventDefault()
-
-      const defaultView = defaultViewStore.getState().savedDefaultView
-      const container = document.getElementById('choose_home_page_not_modules')
-      if (container) {
-        apiClient.getModules({courseId}).then(({data: modules}) => {
-          if (defaultView === 'modules' && modules.length === 0) {
-            ReactDOM.render(
-              <HomePagePromptContainer
-                forceOpen={true}
-                store={defaultViewStore}
-                courseId={courseId}
-                wikiFrontPageTitle={ENV.COURSE.front_page_title}
-                wikiUrl={ENV.COURSE.pages_url}
-                returnFocusTo={$('.btn-publish').get(0)}
-                onSubmit={() => {
-                  if (defaultViewStore.getState().savedDefaultView !== 'modules') {
-                    apiClient.publishCourse({courseId})
-                  }
-                }}
-              />,
-              container
-            )
-          } else {
-            apiClient.publishCourse({courseId})
-          }
-        })
-      } else {
-        // we don't have the ability to change to change the course home page so just publish it
-        apiClient.publishCourse({courseId})
-      }
-    }
-  })
-
   const container = document.getElementById('choose_home_page')
   if (container) {
     ReactDOM.render(<ChooseHomePageButton store={defaultViewStore} />, container)

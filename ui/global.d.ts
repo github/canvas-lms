@@ -17,8 +17,10 @@
  */
 
 import {sendMessageStudentsWho} from './shared/grading/messageStudentsWhoHelper'
-import {GlobalEnv} from '@canvas/global/env/GlobalEnv'
+import type {GlobalEnv} from '@canvas/global/env/GlobalEnv.d'
 import {GlobalInst} from '@canvas/global/inst/GlobalInst'
+import {GlobalRemotes} from '@canvas/global/remotes/GlobalRemotes'
+import EditorJS from '@editorjs/editorjs'
 
 declare global {
   interface Global {
@@ -32,6 +34,11 @@ declare global {
      * some by client code.
      */
     readonly INST?: GlobalInst
+
+    /**
+     * Remote locations for various pure front-end functionality.
+     */
+    readonly REMOTES?: GlobalRemotes
   }
 
   interface Window {
@@ -51,9 +58,13 @@ declare global {
     INST: GlobalInst
 
     webkitSpeechRecognition: any
-    jsonData: any
     messageStudents: (options: ReturnType<typeof sendMessageStudentsWho>) => void
     updateGrades: () => void
+
+    bundles: string[]
+    deferredBundles: string[]
+    canvasReadyState?: 'loading' | 'complete'
+    block_editor?: EditorJS
   }
 
   /**
@@ -66,6 +77,11 @@ declare global {
    * some by client code.
    */
   const INST: GlobalInst
+
+  /**
+   * Remote locations for various pure front-end functionality.
+   */
+  const REMOTES: GlobalRemotes
 
   type ShowIf = {
     (bool?: boolean): JQuery<HTMLElement>
@@ -92,22 +108,36 @@ declare global {
       scroll?: boolean,
       override_position?: string | number
     ) => JQuery<HTMLElement>
-    getFormData: () => Record<string, unknown>
+    getFormData: <T>(obj?: Record<string, unknown>) => T
     live: any
     loadDocPreview: (options: {
+      attachment_id: string
+      attachment_preview_processing: boolean
+      attachment_view_inline_ping_url: string | null
       height: string
       id: string
       mimeType: string
-      attachment_id: string
-      submission_id: any
-      attachment_view_inline_ping_url: string | undefined
-      attachment_preview_processing: boolean
+      submission_id: string
+      crocodoc_session_url?: string
     }) => void
     mediaComment: any
     mediaCommentThumbnail: (size?: 'normal' | 'small') => void
     raw: (str: string) => string
     showIf: ShowIf
     underscore: (str: string) => string
+    formSubmit: (options: {
+      object_name?: string
+      formErrors?: boolean
+      disableWhileLoading?: boolean
+      required: string[]
+      success: (data: any) => void
+      beforeSubmit?: (data: any) => void
+      error: (response: JQuery.JQueryXHR) => void
+    }) => void
+    formErrors: (errors: Record<string, string>) => void
+    getTemplateData: (options: {textValues: string[]}) => Record<string, unknown>
+    fancyPlaceholder: () => void
+    loadingImage: (str?: string) => void
   }
 
   declare interface JQueryStatic {
@@ -135,6 +165,43 @@ declare global {
 
   declare interface Object {
     fromEntries: any
+  }
+
+  // due to overrides in packages/date-js/core.js
+  interface Date {
+    add(config: {[key: string]: number}): Date
+    addDays(value: number): Date
+    addHours(value: number): Date
+    addMilliseconds(value: number): Date
+    addMinutes(value: number): Date
+    addMonths(value: number): Date
+    addSeconds(value: number): Date
+    addWeeks(value: number): Date
+    addYears(value: number): Date
+    between(start: Date, end: Date): boolean
+    clearTime(): Date
+    clone(): Date
+    compareTo(date: Date): number
+    equals(date: Date): boolean
+    getElapsed(date?: Date): number
+    getOrdinalNumber(): number
+    getTimezone(): string | null
+    getUTCOffset(): string
+    hasDaylightSavingTime(): boolean
+    isAfter(date?: Date): boolean
+    isBefore(date?: Date): boolean
+    isDaylightSavingTime(): boolean
+    isSameDay(date?: Date): boolean
+    isToday(date?: Date): boolean
+    moveToDayOfWeek(dayOfWeek: number, orient?: number): Date
+    moveToFirstDayOfMonth(): Date
+    moveToLastDayOfMonth(): Date
+    moveToMonth(month: number, orient?: number): Date
+    moveToNthOccurrence(dayOfWeek: number, occurrence: number): Date
+    setTimeToNow(): Date
+    setTimezone(offset: string): Date
+    setTimezoneOffset(offset: number): Date
+    toString(format?: string): string
   }
 }
 

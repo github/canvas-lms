@@ -46,14 +46,20 @@
 <% end %>
 <% js_bundle 'assignments_peer_reviews' %>
 
-<h1><%= t :title, "%{assignment} Peer Reviews", :assignment => @assignment.title %></h1>
+<h1 class="ic-Action-header-title" style="margin-bottom: 0.75rem"><%= t :title, "%{assignment} Peer Reviews", :assignment => @assignment.title %></h1>
+<div style="margin-bottom: 2.25rem">
   <% if @assignment.active_rubric_association? %>
-    <%= t :overview_with_rubric, "Student peer reviews will be considered complete when students have commented
-      at least once on the page and filled out the rubric form for the assignment." %>
+    <div class="ic-Action-header-secondary-title">
+      <%= t :overview_with_rubric, "Peer reviews will be considered complete when students have filled out the rubric for the assignment." %>
+    </div>
   <% else %>
-    <%= t :overview, "Student peer reviews will be considered complete when students have commented
-      at least once on the page." %>
+    <div class="ic-Action-header-secondary-title">
+      <%= t :overview, "Peer reviews will be considered complete when students have commented
+        at least once on the page." %>
+    </div>
   <% end %>
+</div>
+<div id="filter_peer_review"></div>
 <ul class="unstyled_list" style="margin-<%= direction('left') %>: 20px;">
   <li style="<%= hidden unless @students.empty? %>" class="no_students_message"><%= t 'messages.no_students_found', "No Students Found" %></li>
   <% @students.each do |student| %>
@@ -89,7 +95,7 @@
 <%= form_tag ".", {:id => "assign_peer_review_form", :style => "display: none;"} do %>
   <select name="reviewee_id">
     <option value=""><%= t 'options.select_student', "[ Select Student ]" %></option>
-    <% @students.each do |student| %>
+    <% @students_dropdown_list.each do |student| %>
       <option value="<%= student.id %>" class="student_<%= student.id %>"><%= student.last_name_first %></option>
     <% end %>
   </select>
@@ -99,3 +105,4 @@
 <ul style="display: none;">
 <%= render :partial => 'peer_review_assignment', :locals => {:request => nil} %>
 </ul>
+<%= will_paginate(@students, :style=>"margin-bottom: 1em;") %>

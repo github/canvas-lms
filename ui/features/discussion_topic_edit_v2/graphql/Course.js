@@ -17,6 +17,7 @@
  */
 
 import {GroupSet} from './GroupSet'
+import {AssignmentGroup} from './AssignmentGroup'
 import {Section} from './Section'
 import {arrayOf, shape, string} from 'prop-types'
 import gql from 'graphql-tag'
@@ -27,18 +28,20 @@ export const Course = {
       _id
       id
       name
-      enrollmentsConnection {
+      assignmentGroupsConnection {
         nodes {
-          user {
-            name
-            courseRoles(roleTypes: "StudentEnrollment")
-          }
+          ...AssignmentGroup
+        }
+      }
+      usersConnection(filter: {enrollmentTypes: StudentEnrollment, enrollmentStates: active}) {
+        nodes {
+          _id
+          name
         }
       }
       groupSetsConnection {
         nodes {
-          _id
-          name
+          ...GroupSet
         }
       }
       sectionsConnection {
@@ -48,16 +51,20 @@ export const Course = {
         }
       }
     }
+    ${AssignmentGroup.fragment}
+    ${GroupSet.fragment}
   `,
   shape: shape({
     _id: string,
     id: string,
     name: string,
-    enrollmentsConnection: shape({
+    assignmentGroupsConnection: shape({
+      nodes: arrayOf(AssignmentGroup.shape),
+    }),
+    usersConnection: shape({
       nodes: arrayOf({
         user: {
           name: string,
-          courseRoles: arrayOf(string),
         },
       }),
     }),
@@ -72,12 +79,14 @@ export const Course = {
     _id: '1',
     id: 'K3n9F08vw4',
     name: 'X-Men School',
-    enrollmentsConnection: shape({
+    assignmentGroupsConnection: shape({
+      nodes: [AssignmentGroup.mock()],
+    }),
+    usersConnection: shape({
       nodes: [
         {
           user: {
             name: 'Albert Einstein',
-            courseRoles: ['StudentEnrollment'],
           },
         },
       ],

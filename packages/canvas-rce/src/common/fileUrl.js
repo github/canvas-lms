@@ -20,6 +20,7 @@
 // or a base URL makes testing difficult, esp since window.location is "about:blank"
 // in mocha tests.
 import {parse, format} from 'url'
+import RCEGlobals from '../rce/RCEGlobals'
 
 function parseCanvasUrl(url, canvasOrigin = window.location.origin) {
   if (!url) {
@@ -92,12 +93,18 @@ export function fixupFileUrl(contextType, contextId, fileInfo, canvasOrigin) {
     parsed = changeDownloadToWrapParams(parsed)
     parsed = addContext(parsed, contextType, contextId)
     // if this is a user file, add the verifier
+    // if this is in New Quizzes and the feature flag is enabled, add the verifier
     if (
       fileInfo.uuid &&
-      (contextType.includes('user') || (!!canvasOrigin && canvasOrigin !== window.location.origin))
+      (contextType.includes('user') ||
+        (!!canvasOrigin &&
+          canvasOrigin !== window.location.origin &&
+          RCEGlobals.getFeatures()?.file_verifiers_for_quiz_links))
     ) {
       delete parsed.search
       parsed.query.verifier = fileInfo.uuid
+    } else {
+      delete parsed.query.verifier
     }
     fileInfo[key] = format(parsed)
   }
@@ -124,8 +131,6 @@ export function prepEmbedSrc(url, canvasOrigin = window.location.origin) {
 
 // when the user opens a link to a resource, we want its view
 // logged, so remove /preview
-// Add wrap=1 to indicate clicking on the link should open a preview
-// and not download the file (this doesn't work if the original link is a download link)
 export function prepLinkedSrc(url) {
   const parsed = parseCanvasUrl(url)
   if (!parsed) {
@@ -133,6 +138,5 @@ export function prepLinkedSrc(url) {
   }
   delete parsed.search
   parsed.pathname = parsed.pathname.replace(/\/preview(\?|$)/, '$1')
-  parsed.query.wrap = '1'
   return format(parsed)
 }

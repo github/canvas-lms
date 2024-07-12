@@ -20,9 +20,8 @@ import $ from 'jquery'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import TimeBlockListManager from '@canvas/calendar/TimeBlockListManager'
 import TimeBlockRow from './TimeBlockRow'
-import '@canvas/datetime'
-import '@canvas/forms/jquery/jquery.instructure_forms'
-import 'date-js'
+import '@canvas/jquery/jquery.instructure_forms'
+import '@instructure/date-js'
 
 const I18n = useI18nScope('calendar')
 
@@ -34,7 +33,7 @@ export default class TimeBlockList {
     this.splitterDiv.find('.split-link').click(this.handleSplitClick)
     this.blankRow = blankRow
 
-    this.element.delegate('input', 'change', event => {
+    this.element.on('change', 'input', event => {
       if ($(event.currentTarget).closest('tr').is(':last-child')) this.addRow()
     })
     this.render()
@@ -91,10 +90,12 @@ export default class TimeBlockList {
     })
 
     if (this.blocksManager.blocks.length === 0) {
-      alert(I18n.t('no_dates_error', 'You need to specify at least one date and time'))
+      // eslint-disable-next-line no-alert
+      window.alert(I18n.t('no_dates_error', 'You need to specify at least one date and time'))
       valid = false
     } else if (!valid) {
-      alert(I18n.t('time_block_errors', 'There are errors in your time block selections.'))
+      // eslint-disable-next-line no-alert
+      window.alert(I18n.t('time_block_errors', 'There are errors in your time block selections.'))
     }
     return valid
   }

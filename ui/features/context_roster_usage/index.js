@@ -18,7 +18,7 @@
 import $ from 'jquery'
 
 import {useScope as useI18nScope} from '@canvas/i18n'
-import '@canvas/datetime'
+import {datetimeString} from '@canvas/datetime/date-functions'
 import '@canvas/util/templateData'
 import 'jquery-pageless'
 
@@ -33,7 +33,7 @@ $(() => {
     scrape(data) {
       if (typeof data === 'string') {
         try {
-          data = $.parseJSON(data)
+          data = JSON.parse(data)
         } catch (e) {
           data = []
         }
@@ -45,7 +45,7 @@ $(() => {
         $access.find('.icon').addClass(access.icon)
         delete access.icon
         access.readable_name = access.readable_name || access.display_name || access.asset_code
-        access.last_viewed = $.datetimeString(access.last_access)
+        access.last_viewed = datetimeString(access.last_access)
         $access.fillTemplateData({data: access})
         $('#usage_report table tbody').append($access.show())
       }

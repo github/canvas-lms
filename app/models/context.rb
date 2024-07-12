@@ -144,7 +144,7 @@ module Context
     raise ArgumentError, "only_check is either an empty array or you are aking for invalid types" if types_to_check.empty?
 
     base_cache_key = "active_record_types3"
-    cache_key = [base_cache_key, (only_check.presence || "everything"), self].cache_key
+    cache_key = [base_cache_key, only_check.presence || "everything", self].cache_key
 
     # if it exists in redis, return that
     if (cached = Rails.cache.read(cache_key))
@@ -253,10 +253,7 @@ module Context
     user = User.find(params[:user_id]) if params[:user_id]
     context = course || group || user
 
-    media_obj = MediaObject.where(media_id: params[:media_object_id]).first if params[:media_object_id]
-    context = media_obj.context if media_obj
-
-    return nil unless context
+    return nil unless context || params[:controller] == "media_objects"
 
     case params[:controller]
     when "files"
@@ -296,7 +293,12 @@ module Context
                  context.context_modules.find_by(id: params[:id])
                end
     when "media_objects"
-      object = media_obj
+      object = if params[:media_object_id]
+                 MediaObject.where(media_id: params[:media_object_id]).first
+               elsif params[:attachment_id]
+                 # get possibly replaced attachment, see app/models/attachment.rb find_attachment_possibly_replaced
+                 Attachment.find_by(id: params[:attachment_id])&.context&.attachments&.find_by(id: params[:attachment_id])
+               end
     when "context"
       object = context.users.find(params[:id]) if params[:action] == "roster_user" && params[:id]
     else
@@ -321,6 +323,31 @@ module Context
       "pages"
     else
       klass.table_name
+    end
+  end
+
+  def self.translated_content_type(content_type)
+    case content_type
+    when "Announcement"
+      I18n.t("Announcement")
+    when "Assignment"
+      I18n.t("Assignment")
+    when "Attachment"
+      I18n.t("Attachment")
+    when "ContextExternalTool"
+      I18n.t("External Tool")
+    when "ContextModuleSubHeader"
+      I18n.t("Context Module Sub Header")
+    when "DiscussionTopic"
+      I18n.t("Discussion Topic")
+    when "ExternalUrl"
+      I18n.t("External Url")
+    when "Quizzes::Quiz", "Quiz"
+      I18n.t("Quiz")
+    when "WikiPage"
+      I18n.t("Page")
+    else
+      I18n.t("Unknown Content Type")
     end
   end
 
@@ -402,7 +429,7 @@ module Context
 
     final_scope = scopes.first if scopes.length == 1
     final_scope ||= scopes.first.union(*scopes[1..], from: true)
-    final_scope.order(updated_at: :desc).limit(1).pluck(:updated_at)&.first
+    final_scope.order(updated_at: :desc).limit(1).pick(:updated_at)
   end
 
   def resolved_root_account_id

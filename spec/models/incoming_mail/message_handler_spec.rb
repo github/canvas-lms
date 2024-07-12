@@ -98,6 +98,24 @@ describe IncomingMail::MessageHandler do
       end
     end
 
+    it "Sets html to nil if it is too long but keeps the plain text" do
+      # Set the max text length to 10
+      allow(ActiveRecord::Base).to receive(:maximum_text_length).and_return(10)
+
+      expected_reply_from_parameters = {
+        purpose: "general",
+        user: original_message.user,
+        subject: IncomingMailProcessor::IncomingMessageProcessor.utf8ify(incoming_message.subject, incoming_message.header[:subject].try(:charset)),
+        html: nil,
+        text: "a"
+      }
+
+      expect(context).to receive(:reply_from).with(expected_reply_from_parameters)
+      allow(subject).to receive(:get_original_message).with(original_message_id, timestamp).and_return(original_message)
+
+      subject.handle(outgoing_from_address, "a", "b" * (ActiveRecord::Base.maximum_text_length + 1), incoming_message, tag)
+    end
+
     context "when a reply from error occurs" do
       context "silent failures" do
         it "silently fails on no message notification id" do
@@ -275,6 +293,40 @@ describe IncomingMail::MessageHandler do
 
             subject.handle(outgoing_from_address, body, html_body, incoming_message, tag)
             expect(InstStatsd::Statsd).to have_received(:increment).with("incoming_mail_processor.message_processing_error.reply_to_locked_topic")
+          end
+        end
+
+        context "with an IncomingMail::Errors::InvalidParticipant error" do
+          it "sends the appropriate message" do
+            allow(InstStatsd::Statsd).to receive(:increment)
+            allow(subject).to receive(:get_original_message).with(original_message_id, timestamp).and_return(original_message)
+            expect(context).to receive(:reply_from).and_raise(IncomingMail::Errors::InvalidParticipant.new)
+
+            email_subject = "Undelivered message"
+            body = <<~TEXT.strip
+              The message you sent with the subject line "some subject" was not delivered because you are not a valid participant in the conversation.
+
+              Thank you,
+              Canvas Support
+            TEXT
+
+            message_attributes = {
+              to: "lucy@example.com",
+              from: "no-reply@example.com",
+              subject: email_subject,
+              body:,
+              delay_for: 0,
+              context: nil,
+              path_type: "email",
+              from_name: "Instructure",
+            }
+
+            expected_bounce_message = Message.new(message_attributes)
+            expect(Message).to receive(:new).with(message_attributes).and_return(expected_bounce_message)
+            expect(expected_bounce_message).to receive(:deliver)
+
+            subject.handle(outgoing_from_address, body, html_body, incoming_message, tag)
+            expect(InstStatsd::Statsd).to have_received(:increment).with("incoming_mail_processor.message_processing_error.invalid_participant")
           end
         end
 

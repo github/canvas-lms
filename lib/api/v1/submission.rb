@@ -47,6 +47,15 @@ module Api::V1::Submission
     # information. Only return it if the caller has permissions.
     hash["body"] = nil if assignment.quiz? && !submission.user_can_read_grade?(current_user)
 
+    if includes.include?("sub_assignment_submissions") && assignment.root_account.feature_enabled?(:discussion_checkpoints)
+      hash["has_sub_assignment_submissions"] = assignment.has_sub_assignments
+      hash["sub_assignment_submissions"] = (assignment.has_sub_assignments &&
+                                           assignment.sub_assignments&.map do |sub_assignment|
+                                             sub_assignment_submission = sub_assignment.submissions.active.find_by(user_id: submission.user_id)
+                                             sub_assignnment_submission_json(sub_assignment_submission, sub_assignment_submission.assignment, current_user, session, context, includes, params, avatars)
+                                           end) || []
+    end
+
     if includes.include?("submission_history")
       if submission.quiz_submission && assignment.quiz && !assignment.quiz.anonymous_survey?
         hash["submission_history"] =
@@ -69,7 +78,7 @@ module Api::V1::Submission
               end
           end
       elsif quizzes_next_submission?(submission)
-        hash["submission_history"] = quizzes_next_submission_history(submission)
+        hash["submission_history"] = quizzes_next_submission_history(submission, current_user)
       else
         histories = submission.submission_history
         ActiveRecord::Associations.preload(histories, :group) if includes.include?("group")
@@ -391,6 +400,23 @@ module Api::V1::Submission
     hash
   end
 
+  def sub_assignnment_submission_json(
+    submission,
+    assignment,
+    current_user,
+    session,
+    context = nil,
+    includes = [],
+    params = {},
+    avatars = false
+  )
+
+    json = submission_json(submission, assignment, current_user, session, context, includes, params, avatars)
+    json["sub_assignment_tag"] = assignment.sub_assignment_tag
+    json.delete("id")
+    json
+  end
+
   # Create an attachment with a ZIP archive of an assignment's submissions.
   # The attachment will be re-created if it's 1 hour old, or determined to be
   # "stale". See the argument descriptions for testing the staleness of the attachment.
@@ -429,7 +455,7 @@ module Api::V1::Submission
     if attachment
       stale = (attachment.locked != anonymous)
       stale ||=
-        (attachment.created_at < Setting.get("submission_zip_ttl_minutes", "60").to_i.minutes.ago)
+        (attachment.created_at < 1.day.ago)
       stale ||=
         attachment.created_at <
         (updated_at || assignment.submissions.maximum(:submitted_at) || attachment.created_at)
@@ -562,9 +588,10 @@ module Api::V1::Submission
       assignment.root_account.feature_enabled?(:quizzes_next_submission_history)
   end
 
-  def quizzes_next_submission_history(submission)
+  def quizzes_next_submission_history(submission, current_user)
     quiz_lti_submission =
       BasicLTI::QuizzesNextVersionedSubmission.new(submission.assignment, submission.user)
-    quiz_lti_submission.grade_history
+    hide_history_scores_on_manual_posting = !submission.grants_right?(current_user, :read_grade)
+    quiz_lti_submission.grade_history(hide_history_scores_on_manual_posting:)
   end
 end

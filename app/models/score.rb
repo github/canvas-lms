@@ -38,10 +38,8 @@ class Score < ActiveRecord::Base
             allow_nil: true
 
   validate :scorable_association_check
-  validate :must_be_overridden_to_have_custom_status
 
   before_validation :set_course_score, unless: :course_score_changed?
-  before_validation :remove_custom_status_if_override_being_removed
   before_save :set_root_account_id
 
   set_policy do
@@ -58,25 +56,19 @@ class Score < ActiveRecord::Base
     can :read
   end
 
-  alias_method :original_destroy, :destroy
-  private :original_destroy
   def destroy
     score_metadata.destroy if score_metadata.present?
-    original_destroy
+    super
   end
 
-  alias_method :original_destroy_permanently!, :destroy_permanently!
-  private :original_destroy_permanently!
   def destroy_permanently!
     ScoreMetadata.where(score: self).delete_all
-    original_destroy_permanently!
+    super
   end
 
-  alias_method :original_undestroy, :undestroy
-  private :original_undestroy
   def undestroy
     score_metadata.undestroy if score_metadata.present?
-    original_undestroy
+    super
   end
 
   def current_grade
@@ -123,18 +115,6 @@ class Score < ActiveRecord::Base
   delegate :score_to_grade, to: :course
 
   private
-
-  def must_be_overridden_to_have_custom_status
-    if custom_grade_status_id && !overridden?
-      errors.add(:custom_grade_status_id, "cannot be set when the score is not overridden")
-    end
-  end
-
-  def remove_custom_status_if_override_being_removed
-    if will_save_change_to_override_score? && override_score.nil? && custom_grade_status_id.present?
-      self.custom_grade_status_id = nil
-    end
-  end
 
   def set_root_account_id
     self.root_account_id ||= enrollment&.root_account_id

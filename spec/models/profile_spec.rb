@@ -36,8 +36,10 @@ describe Profile do
     # rubocop:enable Lint/ConstantDefinitionInBlock, RSpec/LeakyConstantDeclaration
 
     after do
+      # rubocop:disable RSpec/RemoveConst
       Object.send(:remove_const, :FooProfile)
       Object.send(:remove_const, :Foo)
+      # rubocop:enable RSpec/RemoveConst
     end
 
     describe "initialization" do
@@ -51,7 +53,7 @@ describe Profile do
 
       it "has the correct class when found" do
         Foo.new(name: "foo", workflow_state: "registered").profile.save!
-        expect(Profile.all.first.class).to eq FooProfile
+        expect(Profile.first.class).to eq FooProfile
       end
     end
 

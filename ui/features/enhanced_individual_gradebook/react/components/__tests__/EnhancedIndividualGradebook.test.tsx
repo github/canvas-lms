@@ -28,11 +28,11 @@ import userSettings from '@canvas/user-settings'
 import {GradebookSortOrder} from '../../../types/gradebook.d'
 import * as ReactRouterDom from 'react-router-dom'
 import doFetchApi from '@canvas/do-fetch-api-effect'
-import {executeApiRequest} from '@canvas/util/apiRequest'
+import {executeApiRequest} from '@canvas/do-fetch-api-effect/apiRequest'
 
 jest.mock('axios') // mock axios for final grade override helper API call
 jest.mock('@canvas/do-fetch-api-effect', () => jest.fn()) // mock doFetchApi for final grade override helper API call
-jest.mock('@canvas/util/apiRequest', () => ({
+jest.mock('@canvas/do-fetch-api-effect/apiRequest', () => ({
   executeApiRequest: jest.fn(),
 }))
 const mockedAxios = axios as jest.Mocked<typeof axios>
@@ -66,6 +66,7 @@ const mockSearchParams = (defaultSearchParams = {}) => {
 describe('Enhanced Individual Gradebook', () => {
   beforeEach(() => {
     ;(window.ENV as any) = setGradebookOptions()
+    window.ENV.FEATURES = {instui_nav: true}
     mockedAxios.get.mockResolvedValue({
       data: [],
     })
@@ -192,6 +193,7 @@ describe('Enhanced Individual Gradebook', () => {
         },
         attachment_url: 'https://www.testattachment.com/attachment',
       })
+      window.ENV.FEATURES = {instui_nav: true}
       mockSearchParams({student: '5', assignment: '1'})
       // dropdowns
       const {getByTestId} = renderEnhancedIndividualGradebook()
@@ -296,6 +298,25 @@ describe('Enhanced Individual Gradebook', () => {
         within(gradingResults).getByText('This grade is currently dropped for this student.')
       ).toBeInTheDocument()
     })
+
+    it('does not render another flash message when switching students after setting default grades for the assignment', async () => {
+      mockUserSettings()
+      const {getByTestId, getByRole} = renderEnhancedIndividualGradebook()
+      await new Promise(resolve => setTimeout(resolve, 0))
+      mockedExecuteApiRequest.mockResolvedValue({
+        data: [],
+        status: 201,
+      })
+      fireEvent.change(getByTestId('content-selection-assignment-select'), {target: {value: '1'}})
+      fireEvent.click(getByTestId('default-grade-button'))
+      fireEvent.change(getByTestId('default-grade-input'), {target: {value: '10'}})
+      fireEvent.click(getByTestId('default-grade-submit-button'))
+      await new Promise(resolve => setTimeout(resolve, 0))
+      fireEvent.change(getByTestId('content-selection-student-select'), {target: {value: '5'}})
+      const parentElement = getByRole('alert')
+      const childElements = parentElement?.children
+      expect(childElements?.length).toBe(1)
+    })
   })
 
   describe('student dropdown handler tests', () => {
@@ -363,6 +384,7 @@ describe('Enhanced Individual Gradebook', () => {
 
     it('makes api call when "View Ungraded as 0" checkbox is checked & save-view-ungraded-as-zero-to-server is true', async () => {
       ;(window.ENV as any) = setGradebookOptions({save_view_ungraded_as_zero_to_server: true})
+      window.ENV.FEATURES = {instui_nav: true}
       mockUserSettings(false)
       const {getByTestId} = renderEnhancedIndividualGradebook()
       await new Promise(resolve => setTimeout(resolve, 0))
@@ -398,6 +420,7 @@ describe('Enhanced Individual Gradebook', () => {
       ;(window.ENV as any) = setGradebookOptions({
         settings_update_url: 'http://canvas.docker/api/v1/courses/2/gradebook_settings',
       })
+      window.ENV.FEATURES = {instui_nav: true}
       const {getByTestId} = renderEnhancedIndividualGradebook()
       await new Promise(resolve => setTimeout(resolve, 0))
       const showConcludedEnrollmentsCheckbox = getByTestId('show-concluded-enrollments-checkbox')
@@ -431,6 +454,7 @@ describe('Enhanced Individual Gradebook', () => {
           title: 'Notes',
         },
       })
+      window.ENV.FEATURES = {instui_nav: true}
       mockedExecuteApiRequest.mockResolvedValue({
         data: [
           {
@@ -476,6 +500,7 @@ describe('Enhanced Individual Gradebook', () => {
       ;(window.ENV as any) = setGradebookOptions({
         final_grade_override_enabled: true,
       })
+      window.ENV.FEATURES = {instui_nav: true}
       const {getByTestId} = renderEnhancedIndividualGradebook()
       await new Promise(resolve => setTimeout(resolve, 0))
       const allowFinalGradeOverrideCheckbox = getByTestId('allow-final-grade-override-checkbox')

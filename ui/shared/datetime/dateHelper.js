@@ -16,34 +16,29 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import _ from 'underscore'
-import $ from 'jquery'
-import tz from '@canvas/timezone'
-import './jquery/index'
+import {isUndefined, each} from 'lodash'
+import * as tz from '@instructure/moment-utils'
+import {datetimeString, dateString, discussionsDatetimeString} from './date-functions'
 
 const DateHelper = {
   parseDates(object, datesToParse) {
-    _.each(datesToParse, dateString => {
-      const propertyExists = !_.isUndefined(object[dateString])
-      if (propertyExists) object[dateString] = tz.parse(object[dateString])
+    each(datesToParse, dateString_ => {
+      const propertyExists = !isUndefined(object[dateString_])
+      if (propertyExists) object[dateString_] = tz.parse(object[dateString_])
     })
     return object
   },
 
   formatDatetimeForDisplay(date, format = 'medium') {
-    return $.datetimeString(date, {format, timezone: ENV.CONTEXT_TIMEZONE})
+    return datetimeString(date, {format, timezone: ENV.CONTEXT_TIMEZONE})
   },
 
-  formatDatetimeForDiscussions(datetime, format = '') {
-    return $.discussionsDatetimeString(datetime, {format, timezone: ENV.CONTEXT_TIMEZONE})
+  formatDatetimeForDiscussions(datetime, format = '', timezone = ENV.TIMEZONE) {
+    return discussionsDatetimeString(datetime, {format, timezone})
   },
 
-  formatDateForDisplay(date, format = 'medium') {
-    return $.dateString(date, {format, timezone: ENV.CONTEXT_TIMEZONE})
-  },
-
-  isMidnight(date) {
-    return tz.isMidnight(date)
+  formatDateForDisplay(date, format = 'medium', timezone = ENV.CONTEXT_TIMEZONE) {
+    return dateString(date, {format, timezone})
   },
 }
 

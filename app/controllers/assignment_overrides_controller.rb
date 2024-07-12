@@ -32,7 +32,32 @@
 #           "type": "integer"
 #         },
 #         "assignment_id": {
-#           "description": "the ID of the assignment the override applies to",
+#           "description": "the ID of the assignment the override applies to (present if the override applies to an assignment)",
+#           "example": 123,
+#           "type": "integer"
+#         },
+#         "quiz_id": {
+#           "description": "the ID of the quiz the override applies to (present if the override applies to a quiz)",
+#           "example": 123,
+#           "type": "integer"
+#         },
+#         "context_module_id": {
+#           "description": "the ID of the module the override applies to (present if the override applies to a module)",
+#           "example": 123,
+#           "type": "integer"
+#         },
+#         "discussion_topic_id": {
+#           "description": "the ID of the discussion the override applies to (present if the override applies to an ungraded discussion)",
+#           "example": 123,
+#           "type": "integer"
+#         },
+#         "wiki_page_id": {
+#           "description": "the ID of the page the override applies to (present if the override applies to a page)",
+#           "example": 123,
+#           "type": "integer"
+#         },
+#         "attachment_id": {
+#           "description": "the ID of the file the override applies to (present if the override applies to a file)",
 #           "example": 123,
 #           "type": "integer"
 #         },
@@ -103,7 +128,7 @@ class AssignmentOverridesController < ApplicationController
   #
   # @returns [AssignmentOverride]
   def index
-    @overrides = assignment_override_collection(@assignment, true)
+    @overrides = assignment_override_collection(@assignment, include_students: true)
     render json: assignment_overrides_json(@overrides, @current_user)
   end
 

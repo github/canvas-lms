@@ -19,8 +19,6 @@
 #
 
 class Folder < ActiveRecord::Base
-  self.ignored_columns += %i[last_lock_at last_unlock_at]
-
   def self.name_order_by_clause(table = nil)
     col = table ? "#{table}.name" : "name"
     best_unicode_collation_key(col)
@@ -297,7 +295,7 @@ class Folder < ActiveRecord::Base
     dup ||= Folder.new
     dup = existing if existing && options[:overwrite]
     attributes.except("id", "full_name", "parent_folder_id").each do |key, val|
-      dup.send("#{key}=", val)
+      dup.send(:"#{key}=", val)
     end
     if unique_type && context.folders.active.where(unique_type:).exists?
       dup.unique_type = nil # we'll just copy the folder as a normal one and leave the existing unique_type'd one alone
@@ -361,7 +359,7 @@ class Folder < ActiveRecord::Base
     folder = nil
     context.shard.activate do
       Folder.unique_constraint_retry do
-        folder = context.folders.active.where(unique_type:).take
+        folder = context.folders.active.find_by(unique_type:)
         folder ||= context.folders.create!(unique_type:,
                                            name: default_name_proc.call,
                                            parent_folder_id: Folder.root_folders(context).first,
@@ -424,6 +422,8 @@ class Folder < ActiveRecord::Base
   end
 
   def self.unfiled_folder(context)
+    return unless context.respond_to?(:folders)
+
     folder = context.folders.where(parent_folder_id: Folder.root_folders(context).first, workflow_state: "visible", name: "unfiled").first
     unless folder
       folder = context.folders.build(parent_folder: Folder.root_folders(context).first, name: "unfiled")

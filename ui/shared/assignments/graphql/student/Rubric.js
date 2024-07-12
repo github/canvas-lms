@@ -30,6 +30,7 @@ export const Rubric = {
       free_form_criterion_comments: freeFormCriterionComments
       hide_score_total: hideScoreTotal
       points_possible: pointsPossible
+      ratingOrder
       title
     }
     ${RubricCriterion.fragment}
@@ -42,6 +43,22 @@ export const Rubric = {
     hide_score_total: bool,
     points_possible: number.isRequired,
     title: string.isRequired,
+  }),
+
+  mock: ({
+    _id = '1',
+    criteria = [RubricCriterion.mock()],
+    free_form_criterion_comments = false,
+    hide_score_total = false,
+    points_possible = 10,
+    title = 'Rubric Title',
+  } = {}) => ({
+    _id,
+    criteria,
+    free_form_criterion_comments,
+    hide_score_total,
+    points_possible,
+    title,
   }),
 }
 

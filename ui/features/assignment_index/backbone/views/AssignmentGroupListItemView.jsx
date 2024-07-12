@@ -136,6 +136,7 @@ AssignmentGroupListItemView.prototype.render = function () {
   if (this.deleteGroupView) {
     this.deleteGroupView.remove()
   }
+  $('.ig-details').addClass('rendered')
   AssignmentGroupListItemView.__super__.render.call(this, this.canManage())
   if (this.model) {
     return (this.model.view = this)
@@ -291,7 +292,8 @@ AssignmentGroupListItemView.prototype.toJSON = function () {
     toggleMessage: this.messages.toggleMessage,
     hasFrozenAssignments:
       this.model.hasFrozenAssignments != null && this.model.hasFrozenAssignments(),
-    hasIntegrationData: this.model.hasIntegrationData != null && this.model.hasIntegrationData(),
+    hasSisSourceId: this.model.hasSisSourceId != null && this.model.hasSisSourceId(),
+    syncedWithSisCategory: this.model.syncedWithSisCategory != null && this.model.syncedWithSisCategory(),
     postToSISName: ENV.SIS_NAME,
     assignmentGroupMenuPlacements: this.assignment_group_menu_tools,
     ENV,

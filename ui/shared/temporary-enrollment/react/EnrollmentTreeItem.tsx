@@ -15,29 +15,38 @@
  * You should have received a copy of the GNU Affero General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
+
 import React, {useEffect, useState} from 'react'
 import {useScope as useI18nScope} from '@canvas/i18n'
-// @ts-ignore
 import {Text} from '@instructure/ui-text'
-// @ts-ignore
 import {Checkbox} from '@instructure/ui-checkbox'
 import {Flex} from '@instructure/ui-flex'
-import {NodeStructure} from './EnrollmentTree'
 import {translateState} from './EnrollmentTreeGroup'
+import {createAnalyticPropsGenerator} from './util/analytics'
+import {
+  ENROLLMENT_TREE_ICON_OFFSET,
+  ENROLLMENT_TREE_SPACING,
+  MODULE_NAME,
+  type NodeStructure,
+} from './types'
+import type {Spacing} from '@instructure/emotion'
+import {View} from '@instructure/ui-view'
+import ToolTipWrapper from './ToolTipWrapper'
 import RoleMismatchToolTip from './RoleMismatchToolTip'
 
 const I18n = useI18nScope('temporary_enrollment')
 
+// initialize analytics props
+const analyticProps = createAnalyticPropsGenerator(MODULE_NAME)
+
 interface Props extends NodeStructure {
-  indent: string
+  indent: Spacing
   updateCheck?: Function
-  workState?: string
+  workflowState?: string
 }
 
 export function EnrollmentTreeItem(props: Props) {
   const [checked, setChecked] = useState(false)
-  // Doing this to avoid TS2339 errors-- remove once we're on InstUI 8
-  const {Item: FlexItem} = Flex as any
 
   useEffect(() => {
     if (props.isCheck !== undefined) {
@@ -45,39 +54,45 @@ export function EnrollmentTreeItem(props: Props) {
     }
   }, [props.isCheck])
 
+  const handleCheckboxChange = () => {
+    setChecked(!checked)
+
+    if (props.updateCheck) {
+      props.updateCheck(props, !props.isCheck)
+    }
+  }
+
   const renderRow = () => {
     return (
-      <Flex key={props.id} padding="x-small" as="div" alignItems="center">
-        <FlexItem margin={props.indent}>
-          <Checkbox
-            data-testid={'check ' + props.id}
-            label=""
-            size="large"
-            checked={checked}
-            onChange={() => {
-              setChecked(!checked)
-              if (props.updateCheck) {
-                props.updateCheck(props, !props.isCheck)
-              }
-            }}
-          />
-        </FlexItem>
-        <FlexItem margin="0 0 0 x-small">
-          <Text>{props.label}</Text>
-        </FlexItem>
-        {props.isMismatch ? (
-          <FlexItem>
-            <RoleMismatchToolTip />
-          </FlexItem>
-        ) : null}
-        {props.workState ? (
-          <FlexItem margin="0 medium">
-            <Text weight="light">
-              {I18n.t('course status: %{state}', {state: translateState(props.workState)})}
+      <View as="div" key={props.id} padding={props.indent}>
+        <Flex alignItems="start" gap="x-small">
+          <Flex.Item shouldShrink={true}>
+            <Checkbox
+              data-testid={'check-' + props.id}
+              label={<Text weight="bold">{props.label}</Text>}
+              checked={checked}
+              onChange={handleCheckboxChange}
+              {...analyticProps('Course')}
+            />
+          </Flex.Item>
+          {props.isMismatch ? (
+            <Flex.Item>
+              <ToolTipWrapper positionTop={ENROLLMENT_TREE_ICON_OFFSET}>
+                <RoleMismatchToolTip testId={'tip-' + props.id} />
+              </ToolTipWrapper>
+            </Flex.Item>
+          ) : null}
+        </Flex>
+        {props.workflowState ? (
+          <div style={{paddingLeft: ENROLLMENT_TREE_SPACING}}>
+            <Text size="small">
+              {I18n.t('course status: %{state}', {
+                state: translateState(props.workflowState),
+              })}
             </Text>
-          </FlexItem>
+          </div>
         ) : null}
-      </Flex>
+      </View>
     )
   }
 

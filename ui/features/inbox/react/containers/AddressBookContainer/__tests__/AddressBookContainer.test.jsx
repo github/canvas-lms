@@ -23,6 +23,9 @@ import {mswClient} from '../../../../../../shared/msw/mswClient'
 import {mswServer} from '../../../../../../shared/msw/mswServer'
 import {AddressBookContainer} from '../AddressBookContainer'
 import {handlers} from '../../../../graphql/mswHandlers'
+import {enableFetchMocks} from 'jest-fetch-mock'
+
+enableFetchMocks()
 
 describe('Should load <AddressBookContainer> normally', () => {
   const server = mswServer(handlers)
@@ -58,7 +61,10 @@ describe('Should load <AddressBookContainer> normally', () => {
   }
 
   describe('With Context Selection enabled', () => {
-    const contextSelectionDefaultProps = {hasSelectAllFilterOption: true, includeCommonCourses: true}
+    const contextSelectionDefaultProps = {
+      hasSelectAllFilterOption: true,
+      includeCommonCourses: true,
+    }
 
     describe('Rendering', () => {
       it('Does not show context select in initial menu', async () => {
@@ -226,6 +232,22 @@ describe('Should load <AddressBookContainer> normally', () => {
       fireEvent.mouseDown(items[0])
       items = await screen.findAllByTestId('address-book-item')
       expect(items.length).toBe(2)
+    })
+
+    it('clears input when submenu is chosen', async () => {
+      jest.useFakeTimers()
+      const {container} = setup()
+      const input = container.querySelector('input')
+
+      fireEvent.change(input, {target: {value: 'Testing'}})
+      await act(async () => jest.advanceTimersByTime(1000))
+
+      const items = await screen.findAllByTestId('address-book-item')
+      // Click the courses submenu
+      fireEvent.mouseDown(items[1])
+
+      // Input should be cleared after selecting a submenu
+      expect(container.querySelector('input').value).toBe('')
     })
 
     it('Should be able to select only 1 tags when limit is 1', async () => {

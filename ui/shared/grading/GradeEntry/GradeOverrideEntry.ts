@@ -21,7 +21,7 @@ import I18n from '@canvas/i18n'
 
 import round from '@canvas/round'
 import GradeFormatHelper from '../GradeFormatHelper'
-import {gradeToScoreLowerBound} from '../GradingSchemeHelper'
+import {gradePointsToPercentage, gradeToScoreLowerBound} from '../GradingSchemeHelper'
 import {scoreToGrade} from '@instructure/grading-utils'
 import GradeOverride from '../GradeOverride'
 import {parseEntryValue} from '../GradeInputHelper'
@@ -31,7 +31,8 @@ import type {GradeType, DeprecatedGradingScheme, GradeEntryMode} from '../gradin
 
 function schemeKeyForPercentage(percentage, gradingScheme: DeprecatedGradingScheme) {
   if (gradingScheme) {
-    return scoreToGrade(percentage, gradingScheme.data)
+    const grade = scoreToGrade(percentage, gradingScheme.data, gradingScheme.pointsBased)
+    return GradeFormatHelper.replaceDashWithMinus(grade)
   }
   return null
 }
@@ -136,17 +137,34 @@ export default class GradeOverrideEntry extends GradeEntry {
         schemeKey: String(parseResult.value),
       }
       valid = true
+      // points based grading scheme
+    } else if (gradingScheme?.pointsBased) {
+      // entered percentage or is from backend which should be treated as percentage
+      if (parseResult.isPercentage || !inputByUser) {
+        enteredAs = EnterGradesAs.PERCENTAGE
+        grade = {
+          percentage: parseResult.value,
+          schemeKey: schemeKeyForPercentage(parseResult.value, gradingScheme),
+        }
+        valid = true
+        // entered points
+      } else if (parseResult.isPoints) {
+        enteredAs = EnterGradesAs.POINTS
+        grade = {
+          percentage: gradePointsToPercentage(parseResult.value, gradingScheme),
+          schemeKey: null,
+        }
+        valid = true
+      }
+      // percentage based grading scheme
     } else if (parseResult.isPercentage || parseResult.isPoints) {
       enteredAs = EnterGradesAs.PERCENTAGE
       grade = {
         percentage: parseResult.value,
         schemeKey: schemeKeyForPercentage(parseResult.value, gradingScheme),
       }
-      if (
-        this.options.pointsBasedGradingSchemesFeatureEnabled &&
-        gradingScheme &&
-        gradingScheme.pointsBased
-      ) {
+      valid = true
+      if (gradingScheme && gradingScheme.pointsBased) {
         // points based scheme
         if (inputByUser) {
           // don't allow user to input percents or points for points based scheme

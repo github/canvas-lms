@@ -87,6 +87,10 @@ module MasterCourses::Restrictor
 
     def mark_as_importing!(cm)
       @importing_migration = cm if cm&.master_course_subscription
+      # if we are doing a course copy and the source course has up-to-date search embeddings,
+      # we will copy those embeddings in batches instead of regenerating them
+      self.skip_embeddings = true if cm&.for_course_copy? && respond_to?(:skip_embeddings=) &&
+                                     SmartSearch.up_to_date?(cm.source_course)
     end
 
     def skip_downstream_changes!
@@ -100,6 +104,8 @@ module MasterCourses::Restrictor
 
     def check_for_restricted_column_changes
       return true if !check_restrictions? || skip_restrictions?
+
+      return true if is_a?(Lti::LineItem) && !Account.site_admin.feature_enabled?(:blueprint_line_item_support) # hopefully remove when the FF is retired
 
       locked_columns = []
       self.class.base_class.restricted_column_settings.each do |type, columns|
@@ -263,7 +269,7 @@ module MasterCourses::Restrictor
     if @importing_migration
       @importing_migration.master_course_subscription.master_template.find_preloaded_restriction(migration_id) # for extra speeds on import
     else
-      MasterCourses::MasterContentTag.where(migration_id:).pluck(:restrictions).first
+      MasterCourses::MasterContentTag.where(migration_id:).pick(:restrictions)
     end
   end
 

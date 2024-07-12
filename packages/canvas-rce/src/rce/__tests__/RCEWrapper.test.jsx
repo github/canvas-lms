@@ -240,8 +240,8 @@ describe('RCEWrapper', () => {
       expect(rce.mceInstance().getContent()).toEqual(rce.getCode())
     })
 
-    it('inserts code properly', () => {
-      const code = '<div>i am new content</div>'
+    it('inserts code properly with embedded content title', () => {
+      const code = '<div title="embedded content">i am new content</div>'
       jest.spyOn(contentInsertion, 'insertContent').mockImplementation(() => {})
       rce.insertCode(code)
       expect(contentInsertion.insertContent).toHaveBeenCalledWith(rce.mceInstance(), code)
@@ -534,6 +534,14 @@ describe('RCEWrapper', () => {
       const editor_ = createBasicElement({onFocus: jest.fn()})
       editor_.handleFocus()
       expect(editor_.props.onFocus).toHaveBeenCalledWith(editor_)
+    })
+  })
+
+  describe('getResourceIdentifiers', () => {
+    it('returns resourceType and resourceId', () => {
+      createMountedElement({resourceType: 'assignment.body', resourceId: '156'})
+      expect(rce.getResourceIdentifiers().resourceType).toEqual('assignment.body')
+      expect(rce.getResourceIdentifiers().resourceId).toEqual('156')
     })
   })
 
@@ -955,7 +963,7 @@ describe('RCEWrapper', () => {
     })
   })
 
-  describe('lti tool favorites', () => {
+  describe('lti tools for toolbar', () => {
     it('extracts favorites', () => {
       const element = createBasicElement({
         ltiTools: [
@@ -1001,6 +1009,49 @@ describe('RCEWrapper', () => {
       expect(element.ltiToolFavorites).toStrictEqual([
         'instructure_external_button_1',
         'instructure_external_button_3',
+      ])
+    })
+
+    it('extracts always_on tools', () => {
+      const element = createBasicElement({
+        ltiTools: [
+          {
+            canvas_icon_class: null,
+            description: 'first',
+            favorite: false,
+            height: 160,
+            width: 340,
+            id: 1,
+            name: 'An Always On Tool',
+            always_on: true,
+          },
+          {
+            canvas_icon_class: null,
+            description: 'the thing',
+            favorite: true,
+            height: 160,
+            id: 2,
+            name: 'A Tool',
+            width: 340,
+            always_on: false,
+          },
+          {
+            canvas_icon_class: null,
+            description: 'other thing',
+            favorite: true,
+            height: 160,
+            id: 3,
+            name: 'A Tool',
+            always_on: true,
+          },
+        ],
+      })
+
+      // The order here is important, as the always on tools should be at the beginning!
+      expect(element.ltiToolFavorites).toStrictEqual([
+        'instructure_external_button_1',
+        'instructure_external_button_3',
+        'instructure_external_button_2',
       ])
     })
   })
@@ -1147,150 +1198,6 @@ describe('RCEWrapper', () => {
           },
         })
         expect(rce.editor.getContent()).toBe(contentWithRelativeUrls)
-      })
-    })
-  })
-
-  describe('#forwardPostMessages', () => {
-    it('sets name on window object', () => {
-      createMountedElement()
-      expect(rce.editor.getWin().name).toBe(`${RCEWrapper.editorFrameName}_${rce.id}`)
-    })
-  })
-
-  describe('#forwardPostMessagesHandler', () => {
-    let rceWindow, windowReferences, origin, source, message
-
-    beforeEach(() => {
-      createMountedElement()
-    })
-
-    const subject = () =>
-      rce.forwardPostMessagesHandler(rceWindow, windowReferences)({data: message, origin, source})
-
-    describe('when message is not JSON string or JS object', () => {
-      beforeEach(() => {
-        message = 'abcdefghi'
-      })
-
-      it('returns false', () => {
-        expect(subject()).toBe(false)
-      })
-    })
-
-    describe('with message from child to parent', () => {
-      beforeEach(() => {
-        rceWindow = {
-          origin: 'https://parent.domain.com',
-          name: 'active_rce_frame_myUniqId',
-          parent: {
-            postMessage: jest.fn(),
-          },
-        }
-        windowReferences = []
-        message = {subject: 'hello_world', key: 'value'}
-        origin = 'https://test.tool.com'
-        source = {
-          postMessage: jest.fn(),
-        }
-      })
-
-      it('posts message to top parent', () => {
-        subject()
-        expect(rceWindow.parent.postMessage).toHaveBeenCalled()
-      })
-
-      it('attaches sourceToolInfo and frameName to message', () => {
-        subject()
-        expect(rceWindow.parent.postMessage).toHaveBeenCalledWith(
-          {
-            ...message,
-            sourceToolInfo: {origin, windowId: 0},
-            frameName: 'active_rce_frame_myUniqId',
-          },
-          expect.anything()
-        )
-      })
-
-      it('stores source windows in an array', () => {
-        subject()
-        expect(windowReferences.length).toBe(1)
-        expect(windowReferences[0]).toBe(source)
-      })
-
-      it('reuses existing windowId for previously-seen source windows', () => {
-        subject()
-        const source2 = {postMessage: jest.fn(), foo: 'Source2'}
-        rce.forwardPostMessagesHandler(
-          rceWindow,
-          windowReferences
-        )({data: message, origin, source: source2})
-        subject()
-        expect(rceWindow.parent.postMessage.mock.calls[0][0].sourceToolInfo.windowId).toBe(0)
-        expect(rceWindow.parent.postMessage.mock.calls[1][0].sourceToolInfo.windowId).toBe(1)
-        expect(rceWindow.parent.postMessage.mock.calls[2][0].sourceToolInfo.windowId).toBe(0)
-        expect(windowReferences.length).toBe(2)
-        expect(windowReferences[0]).toBe(source)
-        expect(windowReferences[1]).toBe(source2)
-      })
-
-      it('addresses message to parent domain', () => {
-        subject()
-        expect(rceWindow.parent.postMessage).toHaveBeenCalledWith(
-          expect.anything(),
-          rceWindow.origin
-        )
-      })
-    })
-
-    describe('with message from parent to child', () => {
-      beforeEach(() => {
-        message = {
-          subject: 'hello_world',
-          key: 'value',
-          sourceToolInfo: {origin: 'https://test.tool.com', windowId: 1},
-        }
-        rceWindow = {
-          origin: 'https://parent.domain.com',
-          name: 'active_rce_frame_myUniqId',
-          parent: {
-            postMessage: jest.fn(),
-          },
-        }
-        origin = 'https://parent.domain.com'
-        source = {
-          postMessage: jest.fn(),
-        }
-        // source is index 1 (above we're using windowId=1):
-        windowReferences = [undefined, source]
-      })
-
-      describe('when message has no sourceToolInfo', () => {
-        beforeEach(() => {
-          message = {subject: 'hello_world', key: 'value'}
-        })
-
-        it('returns false', () => {
-          expect(subject()).toBe(false)
-        })
-      })
-
-      it('posts message to source window', () => {
-        subject()
-        expect(source.postMessage).toHaveBeenCalled()
-      })
-
-      it('addresses message to sourceToolInfo', () => {
-        subject()
-        expect(source.postMessage).toHaveBeenCalledWith(expect.anything(), 'https://test.tool.com')
-      })
-
-      it('removes sourceToolInfo from message', () => {
-        subject()
-        expect(source.postMessage).toHaveBeenCalledWith(
-          {subject: 'hello_world', key: 'value'},
-          expect.anything()
-        )
       })
     })
   })

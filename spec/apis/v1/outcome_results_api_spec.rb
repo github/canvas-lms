@@ -88,8 +88,8 @@ describe "Outcome Results API", type: :request do
       assessor: outcome_teacher,
       artifact: submission,
       assessment: {
-        :assessment_type => "grading",
-        "criterion_#{criterion[:id]}".to_sym => {
+        assessment_type: "grading",
+        "criterion_#{criterion[:id]}": {
           points:
         }
       }
@@ -598,12 +598,12 @@ describe "Outcome Results API", type: :request do
             expect(rollup["links"].keys.sort).to eq %w[section status user]
             expect(rollup["links"]["section"]).to eq @course.course_sections.first.id.to_s
             expect(rollup["links"]["status"]).to eq student_enrollment_status(@course, outcome_student, @course.course_sections.first)
-            expect(student_ids).to be_include(rollup["links"]["user"])
+            expect(student_ids).to include(rollup["links"]["user"])
             expect(rollup["scores"].size).to eq 1
             rollup["scores"].each do |score|
               expect(score.keys.sort).to eq %w[count hide_points links score submitted_at title]
               expect(score["count"]).to eq 1
-              expect([0, 1]).to be_include(score["score"])
+              expect([0, 1]).to include(score["score"])
               expect(score["links"].keys.sort).to eq %w[outcome]
               expect(score["links"]["outcome"]).to eq outcome_object.id.to_s
             end
@@ -675,18 +675,38 @@ describe "Outcome Results API", type: :request do
             expect(rollup["links"].keys.sort).to eq %w[section status user]
             expect(rollup["links"]["section"]).to eq outcome_course_sections[0].id.to_s
             expect(rollup["links"]["status"]).to eq student_enrollment_status(outcome_course, outcome_course_sections.first.students.first, outcome_course_sections.first)
-            expect(outcome_course_sections[0].student_ids.map(&:to_s)).to be_include(rollup["links"]["user"])
+            expect(outcome_course_sections[0].student_ids.map(&:to_s)).to include(rollup["links"]["user"])
             expect(rollup["scores"].size).to eq 1
             rollup["scores"].each do |score|
               expect(score.keys.sort).to eq %w[count hide_points links score submitted_at title]
               expect(score["count"]).to eq 1
-              expect([0, 2]).to be_include(score["score"])
+              expect([0, 2]).to include(score["score"])
               expect(score["links"].keys.sort).to eq %w[outcome]
               expect(score["links"]["outcome"]).to eq outcome_object.id.to_s
             end
           end
           expect(json["linked"].keys.sort).to eq %w[users]
           expect(json["linked"]["users"].size).to eq outcome_course_sections[0].students.count
+        end
+
+        it "users with rejected enrollments are included" do
+          rejected_student = User.create!(name: "Student - Rejected")
+          rejected_student.register!
+          section1 = add_section "s1", course: outcome_course
+          student_in_section section1, user: rejected_student, allow_multiple_enrollments: true
+          rejected_student.enrollments.first.reject
+          user_session @teacher
+          api_call(:get,
+                   outcome_rollups_url(outcome_course, section_id: section1.id.to_s, include: ["users"]),
+                   controller: "outcome_results",
+                   action: "rollups",
+                   format: "json",
+                   course_id: outcome_course.id.to_s,
+                   section_id: section1.id.to_s,
+                   include: ["users"])
+          json = JSON.parse(response.body)
+          expect(json["linked"]["users"].size).to eq 1
+          expect(json["linked"]["users"][0]["name"]).to eq "Student - Rejected"
         end
       end
 

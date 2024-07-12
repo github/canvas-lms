@@ -114,6 +114,14 @@ module Interfaces::SubmissionInterface
     load_association(:assignment)
   end
 
+  field :graded_anonymously, Boolean, null: true
+
+  field :hide_grade_from_student,
+        Boolean,
+        "hide unpublished grades",
+        method: :hide_grade_from_student?,
+        null: true
+
   field :feedback_for_current_attempt, Boolean, null: false
   def feedback_for_current_attempt
     submission.feedback_for_current_attempt?
@@ -128,6 +136,13 @@ module Interfaces::SubmissionInterface
 
         UnreadCommentCountLoader.for(current_user).load(object)
       end
+  end
+
+  field :has_unread_rubric_assessment, Boolean, null: false
+  def has_unread_rubric_assessment
+    load_association(:content_participations).then do
+      submission.content_participations.where(workflow_state: "unread", content_item: "rubric").exists?
+    end
   end
 
   field :user, Types::UserType, null: true
@@ -146,28 +161,32 @@ module Interfaces::SubmissionInterface
              Types::SubmissionCommentsSortOrderType,
              required: false,
              default_value: nil
+    argument :include_draft_comments, Boolean, required: false, default_value: false
   end
-  def comments_connection(filter:, sort_order:)
+  def comments_connection(filter:, sort_order:, include_draft_comments:)
     filter = filter.to_h
     all_comments, for_attempt, peer_review = filter.values_at(:all_comments, :for_attempt, :peer_review)
 
     load_association(:assignment).then do
-      scope = submission.comments_excluding_drafts_for(current_user)
-      unless all_comments
-        target_attempt = for_attempt || submission.attempt || 0
-        if target_attempt <= 1
-          target_attempt = [nil, 0, 1] # Submission 0 and 1 share comments
-        end
-        scope = scope.where(attempt: target_attempt)
+      load_association(:submission_comments).then do
+        comments = include_draft_comments ? submission.comments_including_drafts_for(current_user) : submission.comments_excluding_drafts_for(current_user)
 
-        if peer_review
-          scope = scope.where(author: current_user)
-        end
+        comments = comments.select { |comment| comment.attempt.in?(attempt_filter(for_attempt)) } unless all_comments
+        comments = comments.select { |comment| comment.author == current_user } if peer_review && !all_comments
+        comments = comments.sort_by { |comment| [comment.created_at.to_i, comment.id] } if sort_order.present?
+        comments.reverse! if sort_order.to_s.casecmp("desc").zero?
+
+        comments.select { |comment| comment.grants_right?(current_user, :read) }
       end
-      scope = scope.reorder(created_at: sort_order) if sort_order
-      scope.select { |comment| comment.grants_right?(current_user, :read) }
     end
   end
+
+  def attempt_filter(for_attempt)
+    target_attempt = for_attempt || submission.attempt || 0
+    target_attempt = [nil, 0, 1] if target_attempt <= 1 # Submission 0 and 1 share comments
+    target_attempt.is_a?(Array) ? target_attempt : [target_attempt]
+  end
+  private :attempt_filter
 
   field :score, Float, null: true
   def score
@@ -214,6 +233,8 @@ module Interfaces::SubmissionInterface
   field :submitted_at, Types::DateTimeType, null: true
   field :graded_at, Types::DateTimeType, null: true
   field :posted_at, Types::DateTimeType, null: true
+  field :cached_due_date, Types::DateTimeType, null: true
+  field :seconds_late, Float, null: true
   field :posted, Boolean, method: :posted?, null: false
   field :state, Types::SubmissionStateType, method: :workflow_state, null: false
 
@@ -283,6 +304,11 @@ module Interfaces::SubmissionInterface
             end
           end
       end
+  end
+
+  field :custom_grade_status, String, null: true
+  def custom_grade_status
+    submission.custom_grade_status&.name.to_s
   end
 
   field :media_object, Types::MediaObjectType, null: true
@@ -399,4 +425,61 @@ module Interfaces::SubmissionInterface
   end
 
   field :assignment_id, ID, null: false
+
+  field :group_id, ID, null: true
+  def group_id
+    # Unfortunately, we can't use submissions.group_id, since that value is
+    # only set once the group has submitted, but not before then. So we have
+    # to jump through some hoops to load the correct group ID for a submission.
+    Loaders::SubmissionGroupIdLoader.load(object).then { |group_id| group_id }
+  end
+
+  field :preview_url, String, "This field is currently under development and its return value is subject to change.", null: true
+  def preview_url
+    load_association(:assignment).then do |assignment|
+      if submission.not_submitted?
+        nil
+      elsif submission.submission_type == "basic_lti_launch"
+        GraphQLHelpers::UrlHelpers.retrieve_course_external_tools_url(
+          submission.course_id,
+          assignment_id: submission.assignment_id,
+          url: submission.external_tool_url(query_params: submission.tool_default_query_params(current_user)),
+          display: "borderless",
+          host: context[:request].host_with_port
+        )
+      elsif submission.submission_type == "discussion_topic"
+        GraphQLHelpers::UrlHelpers.course_discussion_topic_url(
+          submission.course_id,
+          assignment.discussion_topic.id,
+          host: context[:request].host_with_port,
+          embed: true
+        )
+      else
+        GraphQLHelpers::UrlHelpers.course_assignment_submission_url(
+          submission.course_id,
+          submission.assignment_id,
+          submission.user_id,
+          host: context[:request].host_with_port,
+          preview: 1,
+          version: version_query_param(submission)
+        )
+      end
+    end
+  end
+
+  field :submission_comment_download_url, String, null: true
+  def submission_comment_download_url
+    "/submissions/#{object.id}/comments.pdf"
+  end
+
+  field :word_count, Float, null: true
+  delegate :word_count, to: :object
+
+  def version_query_param(submission)
+    if submission.attempt.present? && submission.attempt > 0
+      submission.attempt - 1
+    else
+      submission.attempt
+    end
+  end
 end

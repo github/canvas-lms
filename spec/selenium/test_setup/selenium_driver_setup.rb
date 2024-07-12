@@ -97,10 +97,7 @@ module SeleniumDriverSetup
 
     def shutdown
       server&.shutdown
-      if driver
-        driver.close
-        driver.quit
-      end
+      driver&.quit
     rescue
       nil
     end
@@ -332,7 +329,7 @@ module SeleniumDriverSetup
     def ruby_firefox_driver
       puts "Thread: provisioning local firefox driver"
       Selenium::WebDriver.for(:firefox,
-                              capabilities: desired_capabilities)
+                              options: desired_capabilities)
     end
 
     def browser_name

@@ -19,39 +19,79 @@
 
 module DifferentiableAssignment
   def differentiated_assignments_applies?
-    if is_a?(Assignment) || Quizzes::Quiz.class_names.include?(class_name)
-      only_visible_to_overrides
-    elsif assignment
-      assignment.only_visible_to_overrides
-    else
-      false
-    end
+    !differentiable.visible_to_everyone
   end
 
-  def visible_to_user?(user, opts = {})
-    # slightly redundant conditional, but avoiding unnecessary lookups
-    return true if opts[:differentiated_assignments] == false ||
-                   (opts[:differentiated_assignments] == true && !only_visible_to_overrides) ||
-                   !differentiated_assignments_applies? # checks if DA enabled on course and then only_visible_to_overrides
+  def visible_to_user?(user)
+    return true unless differentiated_assignments_applies?
 
     is_visible = false
     Shard.with_each_shard(user.associated_shards) do
-      visible_instances = DifferentiableAssignment.filter([self], user, context) do |_, user_ids|
+      visible_instances = DifferentiableAssignment.filter([differentiable], user, context) do |_, user_ids|
         conditions = { user_id: user_ids }
-        conditions[column_name] = id
-        visibility_view.where(conditions)
+        conditions[column_name] = differentiable.id
+        if Account.site_admin.feature_enabled?(:selective_release_backend)
+          visible(conditions)
+        else
+          visibility_view.where(conditions)
+        end
       end
       is_visible = true if visible_instances.any?
     end
     is_visible
   end
 
+  def differentiable
+    if (is_a?(WikiPage) || is_a?(DiscussionTopic)) && assignment.present?
+      assignment
+    else
+      self
+    end
+  end
+
   def visibility_view
-    is_a?(Assignment) ? AssignmentStudentVisibility : Quizzes::QuizStudentVisibility
+    case differentiable.class_name
+    when "Assignment"
+      AssignmentStudentVisibility
+    when "ContextModule"
+      ModuleStudentVisibility
+    when "WikiPage"
+      WikiPageStudentVisibility
+    when "DiscussionTopic"
+      UngradedDiscussionStudentVisibility
+    else
+      Quizzes::QuizStudentVisibility
+    end
+  end
+
+  def visible(conditions)
+    case differentiable.class_name
+    when "Assignment"
+      AssignmentVisibility::AssignmentVisibilityService.assignment_visible_to_students(user_ids: conditions[:user_id], assignment_id: conditions[:assignment_id])
+    when "ContextModule"
+      ModuleVisibility::ModuleVisibilityService.module_visible_to_students(user_ids: conditions[:user_id], context_module_id: conditions[:context_module_id])
+    when "WikiPage"
+      WikiPageVisibility::WikiPageVisibilityService.wiki_page_visible_to_students(user_ids: conditions[:user_id], wiki_page_id: conditions[:wiki_page_id])
+    when "DiscussionTopic"
+      UngradedDiscussionVisibility::UngradedDiscussionVisibilityService.discussion_topic_visible_to_students(user_ids: conditions[:user_id], discussion_topic_id: conditions[:discussion_topic_id])
+    else
+      QuizVisibility::QuizVisibilityService.quiz_visible_to_students(quiz_id: conditions[:quiz_id], user_ids: conditions[:user_id])
+    end
   end
 
   def column_name
-    is_a?(Assignment) ? :assignment_id : :quiz_id
+    case differentiable.class_name
+    when "Assignment"
+      :assignment_id
+    when "ContextModule"
+      :context_module_id
+    when "WikiPage"
+      :wiki_page_id
+    when "DiscussionTopic"
+      :discussion_topic_id
+    else
+      :quiz_id
+    end
   end
 
   # will not filter the collection for teachers, will for non-observer students
@@ -73,7 +113,7 @@ module DifferentiableAssignment
   def self.scope_filter(scope, user, context, opts = {})
     context.shard.activate do
       filter(scope, user, context, opts) do |filtered_scope, user_ids|
-        filtered_scope.visible_to_students_in_course_with_da(user_ids, context.id)
+        filtered_scope.visible_to_students_in_course_with_da(user_ids, [context.id])
       end
     end
   end

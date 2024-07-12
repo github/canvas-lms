@@ -26,7 +26,7 @@ import {GradingPeriodGroup} from './GradingPeriodGroup'
 import {Submission} from './Submission'
 
 export const ASSIGNMENTS = gql`
-  query GetAssignments($courseID: ID!, $gradingPeriodID: ID, $studentId: ID) {
+  query GetAssignments($courseID: ID!, $gradingPeriodID: ID, $studentId: ID!) {
     legacyNode(_id: $courseID, type: Course) {
       ... on Course {
         id
@@ -35,9 +35,10 @@ export const ASSIGNMENTS = gql`
         assignmentsConnection(filter: {gradingPeriodId: $gradingPeriodID, userId: $studentId}) {
           nodes {
             ...Assignment
-            submissionsConnection(filter: {userId: $studentId}) {
+            submissionsConnection(filter: {userId: $studentId, includeUnsubmitted: true}) {
               nodes {
                 ...Submission
+                submittedAt
               }
             }
           }
@@ -57,6 +58,15 @@ export const ASSIGNMENTS = gql`
         }
         relevantGradingPeriodGroup {
           ...GradingPeriodGroup
+        }
+        usersConnection(filter: {userIds: [$studentId]}) {
+          nodes {
+            enrollments(courseId: $courseID) {
+              grades {
+                overrideGrade
+              }
+            }
+          }
         }
       }
     }

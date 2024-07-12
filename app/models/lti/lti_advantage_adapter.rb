@@ -108,6 +108,24 @@ module Lti
       login_request(resource_link_request.generate_post_payload_for_homework_submission(*args))
     end
 
+    # Generates a login request pointing to a cached launch (ID token)
+    # suitable for student context card LTI launches.
+    #
+    # These launches occur when a teacher launches a tool from the
+    # student context card, which shows when clicking on the name
+    # from the gradebook or course user list.
+    #
+    # See method-level documentation of "generate_post_payload" for
+    # more details.
+    #
+    # For information on how the cached ID token is eventually retrieved
+    # and sent to a tool, please refer to the inline documentation of
+    # app/controllers/lti/ims/authentication_controller.rb
+    def generate_post_payload_for_student_context_card(student_id:)
+      @opts[:student_id] = student_id
+      login_request(resource_link_request.to_cached_hash)
+    end
+
     # Generates a login request pointing to a general-use
     # cached launch (ID token).
     #
@@ -133,10 +151,7 @@ module Lti
     # For information on how the cached ID token is eventually retrieved
     # and sent to a tool, please refer to the inline documentation of
     # app/controllers/lti/ims/authentication_controller.rb
-    def generate_post_payload(student_id: nil)
-      # Takes a student ID parameter for compatibility with the LTI 1.1 method
-      # (in LtiOutboundAdapter), but we don't use it here yet. See INTEROP-7227
-      # and student_context_card spec in external_tools_controller_spec.rb
+    def generate_post_payload
       login_request(generate_lti_params)
     end
 
@@ -155,19 +170,25 @@ module Lti
     def generate_lti_params
       if resource_type&.to_sym == :course_assignments_menu &&
          !@context.root_account.feature_enabled?(:lti_multiple_assignment_deep_linking)
-        return resource_link_request.generate_post_payload
+        return resource_link_request.to_cached_hash
       end
 
       if resource_type&.to_sym == :module_index_menu_modal &&
          !@context.root_account.feature_enabled?(:lti_deep_linking_module_index_menu_modal)
-        return resource_link_request.generate_post_payload
+        return resource_link_request.to_cached_hash
       end
 
       message_type = @tool.extension_setting(resource_type, :message_type)
+      unless Lti::ResourcePlacement.supported_message_type?(resource_type, message_type)
+        e = Lti::InvalidMessageTypeForPlacementError.new
+        CanvasErrors.capture(e, { tags: { developer_key_id: @tool.global_developer_key_id } }, :error)
+        # We explicitly want to stop the launch at this point.
+        raise e
+      end
       if message_type == LtiAdvantage::Messages::DeepLinkingRequest::MESSAGE_TYPE
-        deep_linking_request.generate_post_payload
+        deep_linking_request.to_cached_hash
       else
-        resource_link_request.generate_post_payload
+        resource_link_request.to_cached_hash
       end
     end
 
@@ -185,7 +206,7 @@ module Lti
         canvas_environment: ApplicationController.test_cluster_name || "prod",
         canvas_region: @context.shard.database_server.config[:region] || "not_configured"
       )
-      req.lti_storage_target = Lti::PlatformStorage.lti_storage_target if @include_storage_target
+      req.lti_storage_target = Lti::PlatformStorage::FORWARDING_TARGET if @include_storage_target
       req.as_json
     end
 

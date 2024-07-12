@@ -44,18 +44,38 @@ describe SubmissionsController do
       expect(assigns[:submission].url).to eql("http://url")
     end
 
-    it "gracefully handles a submission not yet existing for an assigned student" do
-      course_with_student_logged_in(active_all: true)
+    it "creates a submission if a submission does not yet exist for an assigned student" do
+      course_with_student(active_all: true)
+      course_with_teacher_logged_in(course: @course, active_all: true)
       @course.account.enable_service(:avatars)
       @assignment = @course.assignments.create!(title: "some assignment", submission_types: "online_url,online_upload")
-      Submission.find_by(assignment: @assignment, user: @student).destroy
+      # This simulates a scenario where the SubmissionLifecyleManager job to create submissions for assigned students has
+      # not yet completed.
+      @assignment.submissions.find_by(user: @student).destroy
       post "create", params: {
         course_id: @course.id,
         assignment_id: @assignment.id,
         submission: { submission_type: "online_url", url: "url", user_id: @student.id }
       }
 
-      expect(response).to be_successful
+      aggregate_failures do
+        expect(response).to be_redirect
+        expect(@assignment.submissions.where(user: @student).exists?).to be true
+      end
+    end
+
+    it "returns unauthorized if the student is not assigned" do
+      course_with_student(active_all: true)
+      course_with_teacher_logged_in(course: @course, active_all: true)
+      @course.account.enable_service(:avatars)
+      @assignment = @course.assignments.create!(title: "some assignment", submission_types: "online_url,online_upload", only_visible_to_overrides: true)
+      post "create", params: {
+        course_id: @course.id,
+        assignment_id: @assignment.id,
+        submission: { submission_type: "online_url", url: "url", user_id: @student.id }
+      }
+
+      expect(response).to be_unauthorized
     end
 
     it "only emits one live event" do
@@ -268,8 +288,8 @@ describe SubmissionsController do
       expect(assigns[:submission].submission_type).to eql("online_upload")
       expect(assigns[:submission].attachments).not_to be_empty
       expect(assigns[:submission].attachments.length).to be(2)
-      expect(assigns[:submission].attachments.map(&:display_name)).to be_include("doc.doc")
-      expect(assigns[:submission].attachments.map(&:display_name)).to be_include("txt.txt")
+      expect(assigns[:submission].attachments.map(&:display_name)).to include("doc.doc")
+      expect(assigns[:submission].attachments.map(&:display_name)).to include("txt.txt")
     end
 
     it "fails but not raise when the submission is invalid" do
@@ -837,6 +857,14 @@ describe SubmissionsController do
       expect(body["grade"]).to eq "10"
       expect(body["published_grade"]).to eq "10"
       expect(body["published_score"]).to eq 10
+    end
+
+    it "renders a submission status pill if the submission has a custom status" do
+      @submission.update!(workflow_state: "submitted")
+      status = CustomGradeStatus.create!(root_account: @course.root_account, name: "CARROT", color: "#000000", created_by: @teacher)
+      @submission.update!(custom_grade_status: status)
+      get :show, params: { course_id: @context.id, assignment_id: @assignment.id, id: @student.id }, format: :json
+      expect(body["custom_grade_status_id"]).to eq status.id
     end
 
     it "renders json without scores for students for unposted submissions" do

@@ -15,6 +15,8 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 %>
+ <% js_env :context_rubric_associations_url => context_url(@context, :context_rubric_associations_url) rescue nil %>
+
 
 <%
   provide :page_title, join_title( t(:topic, "Topic"), @topic.title)
@@ -69,11 +71,22 @@
         </div>
         <div class="pull-right">
           <% if !@topic.is_announcement && can_do(@context, @current_user, :moderate_forum) %>
-            <button
-              id="topic_publish_button"
-              data-id='<%= @topic.id %>'
-              class='btn <%= "published" if @topic.published? %> <%= "disabled" if @topic.published? && !@topic.can_unpublish? %>'>
-            </button>
+            <% if @topic.published? && !@topic.can_unpublish? %>
+              <% unpublish_tooltip = t('tooltips.cannot_unpublish_discussion', "Can't unpublish if there are student replies") %>
+              <span data-tooltip="left" title="<%= unpublish_tooltip %>" id='course-status' class='published-status published'>
+                <button
+                  id="topic_publish_button"
+                  data-id='<%= @topic.id %>'
+                  class='btn disabled <%= "published" if @topic.published? %>'>
+                </button>
+              </span>
+            <% else %>
+              <button
+                id="topic_publish_button"
+                data-id='<%= @topic.id %>'
+                class='btn <%= "published" if @topic.published? %>'>
+              </button>
+            <% end %>
           <% end %>
 
           <% if @topic.grants_right?(@current_user, :update) %>
@@ -116,7 +129,7 @@
                                                :assignment_id => @topic.assignment.id) %>"
                          target="_blank">
                     <i class="icon-speed-grader" aria-hidden="true"></i>
-                    <%= t :speed_grader, "SpeedGrader™" %>
+                    <%= t :speed_grader, "SpeedGrader" %>
                   </a></li>
                 <% end %>
 
@@ -190,7 +203,7 @@
           <%= render :partial => 'group_discussion', :locals => {show_da_note: (@topic.for_assignment? && @topic.assignment.only_visible_to_overrides)} %>
         <% end %>
         <header class="discussion-section clearfix">
-          <%= avatar((@topic.user), context_code: @context.asset_string) if @topic.user %>
+          <%= avatar((@topic.user), context_code: @context.asset_string, skip_url: true) if @topic.user %>
           <div class="discussion-header-content right-of-avatar">
             <div class="pull-left">
               <h1 class="discussion-title"><%= @topic.title %></h1>
@@ -280,9 +293,10 @@
                 <label class="screenreader-only" for="discussion-search">
                   <%= t("Search entries or author") %>
                 </label>
+                <span id="search_entries_container"></span>
                 <input
                   id               = "discussion-search"
-                  type             = "search"
+                  type             = "hidden"
                   placeholder      = "<%= t("Search entries or author") %>"
                   size             = 50
                 >
@@ -348,7 +362,9 @@
 
   </div>
 
-  <%= prefetch_assignment_external_tools %>
+  <% unless @topic.is_announcement && Account.site_admin.feature_enabled?(:assignment_edit_placement_not_on_announcements) %>
+    <%= prefetch_assignment_external_tools %>
+  <% end %>
 
   <div id="direct-share-mount-point"></div>
 

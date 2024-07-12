@@ -18,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 module Login::Shared
-  include FullStoryHelper
-
   def reset_session_for_login
     reset_session_saving_keys(:return_to,
                               :oauth,
@@ -36,12 +34,9 @@ module Login::Shared
     Auditors::Authentication.record(pseudonym, "login")
 
     # Send metrics for successful login
-    if Setting.get("enable_login_metric", "true") == "true"
-      auth_type = pseudonym&.authentication_provider&.auth_type
-      tags = { auth_type: }
-      tags[:domain] = request.host if Setting.get("enable_login_metric_domain", "true") == "true"
-      InstStatsd::Statsd.increment("login.count", tags:) if auth_type
-    end
+    auth_type = pseudonym&.authentication_provider&.auth_type
+    tags = { auth_type:, domain: request.host }
+    InstStatsd::Statsd.increment("login.count", tags:) if auth_type
 
     # Since the user just logged in, we'll reset the context to include their info.
     setup_live_events_context
@@ -88,8 +83,6 @@ module Login::Shared
     session[:require_terms] = true if @domain_root_account.require_acceptance_of_terms?(user)
     @current_user = user
     @current_pseudonym = pseudonym
-
-    fullstory_init(@domain_root_account, session)
 
     respond_to do |format|
       if (oauth = session[:oauth2])
@@ -140,5 +133,32 @@ module Login::Shared
 
   def delegated_auth_redirect_uri(uri)
     uri
+  end
+
+  def need_email_verification?(unique_ids, auth_provider)
+    old_login_attribute = auth_provider.settings["old_login_attribute"]
+    if old_login_attribute.present? &&
+       auth_provider.login_attribute != old_login_attribute &&
+       unique_ids.is_a?(Hash) &&
+       unique_ids.key?(old_login_attribute) &&
+       unique_ids.key?(auth_provider.login_attribute)
+      pseudonym = @domain_root_account.pseudonyms.for_auth_configuration(unique_ids[old_login_attribute], auth_provider)
+      if pseudonym
+        pseudonym.begin_login_attribute_migration!(unique_ids)
+        redirect_to login_email_verify_show_url(d: CanvasSecurity.create_jwt({ i: pseudonym.id, e: pseudonym.email }, 15.minutes.from_now))
+        return true
+      end
+    end
+    false
+  end
+
+  protected
+
+  def statsd_timeout_error
+    "auth.timeout_error"
+  end
+
+  def statsd_timeout_cutoff
+    "auth.timeout_cutoff"
   end
 end

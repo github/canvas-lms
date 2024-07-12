@@ -17,8 +17,8 @@
  */
 
 import $ from 'jquery'
+import {some, filter} from 'lodash'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import _ from 'underscore'
 import EditCalendarEventDetails from './EditCalendarEventDetails'
 import EditAssignmentDetails from '../backbone/views/EditAssignmentDetails'
 import EditApptCalendarEventDialog from './EditApptCalendarEventDialog'
@@ -38,7 +38,18 @@ const dialog = $('<div id="edit_event"><div /></div>')
     width: 'auto',
     resizable: false,
     title: I18n.t('titles.edit_event', 'Edit Event'),
+    closeOnEscape: false,
+    open: () =>
+      document.addEventListener('keydown', EditEventDetailsDialog.prototype.handleKeyDown),
+    close: () =>
+      document.removeEventListener('keydown', EditEventDetailsDialog.prototype.handleKeyDown),
+    modal: true,
+    zIndex: 1000,
   })
+  // these classes were added in dialog.js with the jquery 1.9.2 upgrade
+  // they're not needed for this dialog and cause styling issues
+  .removeClass('ui-dialog-content')
+  .removeClass('ui-widget-content')
 
 export default class EditEventDetailsDialog {
   constructor(event, useScheduler) {
@@ -114,7 +125,7 @@ export default class EditEventDetailsDialog {
 
       // don't even show the assignments tab if the user doesn't have
       // permission to create them
-      const can_create_assignments = _.some(
+      const can_create_assignments = some(
         this.event.allPossibleContexts,
         c => c.can_create_assignments
       )
@@ -134,6 +145,19 @@ export default class EditEventDetailsDialog {
     dialog.dialog('close')
   }
 
+  handleKeyDown(e) {
+    if (e.key !== 'Escape') return
+
+    if (
+      e.target.getAttribute('aria-expanded') === 'true' ||
+      $('#custom-repeating-event-modal').length > 0
+    ) {
+      e.preventDefault()
+    } else {
+      dialog.dialog('close')
+    }
+  }
+
   dialogClose = () => {
     if (this.oldFocus != null) {
       this.oldFocus.focus()
@@ -144,7 +168,7 @@ export default class EditEventDetailsDialog {
   canManageAppointments = () => {
     if (
       ENV.CALENDAR.SHOW_SCHEDULER &&
-      _.some(this.event.allPossibleContexts, c => c.can_create_appointment_groups) &&
+      some(this.event.allPossibleContexts, c => c.can_create_appointment_groups) &&
       (this.event.eventType.match(/appointment/) || this.event.eventType.match(/generic/))
     ) {
       return true
@@ -210,7 +234,7 @@ export default class EditEventDetailsDialog {
         this.appointmentGroupDetailsForm = new EditAppointmentGroupDetails(
           $('#edit_appointment_group_form_holder'),
           group,
-          _.filter(this.event.allPossibleContexts, c => c.can_create_appointment_groups),
+          filter(this.event.allPossibleContexts, c => c.can_create_appointment_groups),
           this.closeCB,
           this.event,
           this.useScheduler

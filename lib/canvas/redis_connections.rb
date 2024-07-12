@@ -34,24 +34,20 @@ module Canvas
       if Rails.cache &&
          defined?(ActiveSupport::Cache::RedisCacheStore) &&
          Rails.cache.is_a?(ActiveSupport::Cache::RedisCacheStore)
-        ::CanvasCache::Redis.handle_redis_failure(nil, "none") do
-          redis = Rails.cache.redis
-          if redis.respond_to?(:nodes)
-            redis.nodes.each(&:disconnect!)
-          else
-            redis.disconnect!
-          end
+        redis = Rails.cache.redis
+        if redis.respond_to?(:nodes)
+          redis.nodes.each(&:close)
+        else
+          redis.close
         end
       end
 
       if MultiCache.cache.is_a?(ActiveSupport::Cache::HaStore)
-        ::CanvasCache::Redis.handle_redis_failure(nil, "none") do
-          redis = MultiCache.cache.redis
-          if redis.respond_to?(:nodes)
-            redis.nodes.each(&:disconnect!)
-          else
-            redis.disconnect!
-          end
+        redis = MultiCache.cache.redis
+        if redis.respond_to?(:nodes)
+          redis.nodes.each(&:close)
+        else
+          redis.close
         end
       end
 
@@ -63,11 +59,12 @@ module Canvas
     # to make sure we aren't holding open connections we aren't
     # using.
     def self.clear_idle!
-      clear_frequency = Setting.get("clear_idle_connections_frequency", 60).to_i
-      clear_timeout = Setting.get("clear_idle_connections_timeout", 60).to_i
-      @last_clear_time ||= Time.now.utc
-      if (Time.now.utc - @last_clear_time) > clear_frequency
-        @last_clear_time = Time.now.utc
+      clear_frequency = 1.minute.to_i
+      clear_timeout = 1.minute.to_i
+      now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      @last_clear_time ||= now
+      if (now - @last_clear_time) > clear_frequency
+        @last_clear_time = now
         # gather all the redises we can find
         redises = Switchman.config[:cache_map].values
                            .filter_map { |cache| cache.try(:redis) }.uniq

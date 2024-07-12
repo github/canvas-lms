@@ -136,24 +136,22 @@ describe AccountsController do
 
   context "restore_user" do
     before(:once) do
-      @site_admin = site_admin_user
       account_with_admin
       @deleted_user = user_with_pseudonym(account: @account)
       @deleted_user.destroy
     end
 
-    before { user_session(@site_admin) }
+    before { user_session(@admin) }
 
-    it "allows site-admins to restore deleted users" do
+    it "allows admins to restore deleted users" do
       put "restore_user", params: { account_id: @account.id, user_id: @deleted_user.id }
       expect(@deleted_user.reload.workflow_state).to eq "registered"
       expect(@deleted_user.pseudonyms.take.workflow_state).to eq "active"
       expect(@deleted_user.user_account_associations.find_by(account: @account)).not_to be_nil
     end
 
-    it "does not allow standard admins to restore deleted users" do
-      # probably fine if someone wants to allow regular admins to do this at some point
-      user_session(@admin)
+    it "does not allow users without login permissions to restore deleted users" do
+      account_admin_user_with_role_changes(user: @admin, role_changes: { manage_user_logins: false })
       put "restore_user", params: { account_id: @account.id, user_id: @deleted_user.id }, format: "json"
       expect(response).to be_unauthorized
     end
@@ -199,7 +197,7 @@ describe AccountsController do
       new_admin = CommunicationChannel.where(path: "testadmin@example.com").first.user
       expect(new_admin).not_to be_nil
       @account.reload
-      expect(@account.account_users.map(&:user)).to be_include(new_admin)
+      expect(@account.account_users.map(&:user)).to include(new_admin)
     end
 
     it "allows adding a new custom account admin" do
@@ -210,7 +208,7 @@ describe AccountsController do
       new_admin = CommunicationChannel.find_by(path: "testadmin@example.com").user
       expect(new_admin).to_not be_nil
       @account.reload
-      expect(@account.account_users.map(&:user)).to be_include(new_admin)
+      expect(@account.account_users.map(&:user)).to include(new_admin)
       expect(@account.account_users.find_by(role_id: role.id).user).to eq new_admin
     end
 
@@ -228,8 +226,8 @@ describe AccountsController do
       @subaccount.account_users.create!(user_id: @usr.id, role_id: admin_role.id).destroy
       post "add_account_user", params: { account_id: @subaccount.id, role_id: admin_role.id, user_list: "usr@instructure.com" }
       expect(response).to be_successful
-      expect(@subaccount.account_users.map(&:user)).to be_include(@usr)
-      expect(@usr.user_account_associations.map(&:account)).to be_include(@subaccount)
+      expect(@subaccount.account_users.map(&:user)).to include(@usr)
+      expect(@usr.user_account_associations.map(&:account)).to include(@subaccount)
     end
   end
 
@@ -685,7 +683,7 @@ describe AccountsController do
         @account.default_storage_quota_mb = 123
         @account.default_user_storage_quota_mb = 45
         @account.default_group_storage_quota_mb = 9001
-        @account.storage_quota = 555.megabytes
+        @account.storage_quota = 555.decimal_megabytes
         @account.save!
       end
 
@@ -721,19 +719,19 @@ describe AccountsController do
         it "allows setting default quota (bytes)" do
           post "update", params: { id: @account.id,
                                    account: {
-                                     default_storage_quota: 101.megabytes,
+                                     default_storage_quota: 101.decimal_megabytes,
                                    } }
           @account.reload
-          expect(@account.default_storage_quota).to eq 101.megabytes
+          expect(@account.default_storage_quota).to eq 101.decimal_megabytes
         end
 
         it "allows setting storage quota" do
           post "update", params: { id: @account.id,
                                    account: {
-                                     storage_quota: 777.megabytes
+                                     storage_quota: 777.decimal_megabytes
                                    } }
           @account.reload
-          expect(@account.storage_quota).to eq 777.megabytes
+          expect(@account.storage_quota).to eq 777.decimal_megabytes
         end
       end
 
@@ -764,22 +762,22 @@ describe AccountsController do
         it "disallows setting default quota (bytes)" do
           post "update", params: { id: @account.id,
                                    account: {
-                                     default_storage_quota: 101.megabytes,
+                                     default_storage_quota: 101.decimal_megabytes,
                                      default_time_zone: "Alaska"
                                    } }
           @account.reload
-          expect(@account.default_storage_quota).to eq 123.megabytes
+          expect(@account.default_storage_quota).to eq 123.decimal_megabytes
           expect(@account.default_time_zone.name).to eq "Alaska"
         end
 
         it "disallows setting storage quota" do
           post "update", params: { id: @account.id,
                                    account: {
-                                     storage_quota: 777.megabytes,
+                                     storage_quota: 777.decimal_megabytes,
                                      default_time_zone: "Alaska"
                                    } }
           @account.reload
-          expect(@account.storage_quota).to eq 555.megabytes
+          expect(@account.storage_quota).to eq 555.decimal_megabytes
           expect(@account.default_time_zone.name).to eq "Alaska"
         end
       end
@@ -853,61 +851,6 @@ describe AccountsController do
         expect(@account.reload.terms_of_service.passive).to be false
         post "update", params: { id: @account.id, account: { terms_of_service: { passive: "1" } } }
         expect(@account.reload.terms_of_service.passive).to be true
-      end
-    end
-
-    describe "privacy settings" do
-      let(:account) { account_model }
-      let(:sub_account) { account_model(root_account: account) }
-      let(:site_admin) { site_admin_user }
-      let(:payload) do
-        {
-          account: {
-            settings: {
-              enable_fullstory: "0",
-            }
-          }
-        }
-      end
-
-      it "accepts changes made by a siteadmin to a root account" do
-        user_session(site_admin)
-
-        expect do
-          post "update", format: "json", params: { id: account.id, **payload }
-        end.to change {
-          account.reload.settings.fetch(:enable_fullstory, true)
-        }.from(true).to(false)
-      end
-
-      it "ignores changes made to the site_admin account" do
-        user_session(site_admin)
-
-        expect do
-          post "update", format: "json", params: { id: Account.site_admin.id, **payload }
-        end.to not_change {
-          account.reload.settings.fetch(:enable_fullstory, true)
-        }
-      end
-
-      it "ignores changes to sub accounts" do
-        user_session(site_admin)
-
-        expect do
-          post "update", format: "json", params: { id: sub_account.id, **payload }
-        end.to not_change {
-          account.reload.settings.fetch(:enable_fullstory, true)
-        }
-      end
-
-      it "ignores changes from regular admins" do
-        user_session(account_admin_user(account:))
-
-        expect do
-          post "update", format: "json", params: { id: account.id, **payload }
-        end.to not_change {
-          account.reload.settings.fetch(:enable_fullstory, true)
-        }
       end
     end
 
@@ -1402,12 +1345,30 @@ describe AccountsController do
       expect(response.body).to match(/#{@c2.id}/)
     end
 
+    context "post_manually" do
+      it "gets of a list of courses with post_manually populated if included in the includes param" do
+        admin_logged_in(@account)
+        get "courses_api", params: { account_id: @account.id, include: ["post_manually"] }
+
+        expect(response).to be_successful
+        expect(response.body).to match(/"post_manually":false/)
+      end
+
+      it "gets a list of courses without post_manually populated if it is not included in the includes param" do
+        admin_logged_in(@account)
+        get "courses_api", params: { account_id: @account.id }
+
+        expect(response).to be_successful
+        expect(response.body).not_to match(/"post_manually":false/)
+      end
+    end
+
     it "does not set pagination total_pages/last page link" do
       admin_logged_in(@account)
       get "courses_api", params: { account_id: @account.id, per_page: 1 }
 
       expect(response).to be_successful
-      expect(response.headers.to_a.find { |a| a.first == "Link" }.last).to_not include("last")
+      expect(response.headers.to_a.find { |a| a.first.downcase == "link" }.last).to_not include("last")
     end
 
     it "sets pagination total_pages/last page link if includes ui_invoked is set" do
@@ -1416,7 +1377,7 @@ describe AccountsController do
       get "courses_api", params: { account_id: @account.id, per_page: 1, include: ["ui_invoked"] }
 
       expect(response).to be_successful
-      expect(response.headers.to_a.find { |a| a.first == "Link" }.last).to include("last")
+      expect(response.headers.to_a.find { |a| a.first.downcase == "link" }.last).to include("last")
     end
 
     it "properly removes sections from includes" do
@@ -1428,6 +1389,33 @@ describe AccountsController do
 
       expect(response).to be_successful
       expect(response.body).not_to match(/sections/)
+    end
+
+    context "sort by course status" do
+      before do
+        @c1.workflow_state = "created"
+        @c1.save
+        @c2.workflow_state = "available"
+        @c2.save
+        @c3 = course_factory(account: @account, course_name: "apple", sis_source_id: 30)
+        @c3.workflow_state = "completed"
+        @c3.save
+        admin_logged_in(@account)
+      end
+
+      it "is able to sort by status ascending" do
+        get "courses_api", params: { account_id: @account.id, sort: "course_status", order: "asc" }
+
+        expect(response).to be_successful
+        expect(response.body).to match(/"name":"foo".+"name":"bar".+"name":"apple"/)
+      end
+
+      it "is able to sort by status descending" do
+        get "courses_api", params: { account_id: @account.id, sort: "course_status", order: "desc" }
+
+        expect(response).to be_successful
+        expect(response.body).to match(/"name":"apple".+"name":"bar".+"name":"foo"/)
+      end
     end
 
     it "is able to sort courses by name ascending" do
@@ -1910,8 +1898,8 @@ describe AccountsController do
     end
 
     context "pagination" do
-      before(:once) do
-        Setting.set("eportfolio_moderation_results_per_page", 2)
+      before do
+        stub_const("AccountsController::EPORTFOLIO_MODERATION_PER_PAGE", 2)
       end
 
       it "does not return more than the specified results per page" do
@@ -2038,7 +2026,7 @@ describe AccountsController do
 
         # sub account admin with explicit lack of creation rights
         Account.create!(name: "Strange Account", parent_account: Account.default)
-        Account.last.role_overrides.create! [{ role: admin_role, permission: "manage_courses_add", enabled: false }, { role: admin_role, permission: "manage_courses", enabled: false }]
+        Account.last.role_overrides.create! [{ role: admin_role, permission: "manage_courses_add", enabled: false }, { role: admin_role, permission: "manage_courses_admin", enabled: false }]
         Account.last.account_users.create!(user: @user)
 
         @shard2.activate do
@@ -2078,7 +2066,7 @@ describe AccountsController do
 
       it "does not mix up an admin's student creation rights with actual admin rights" do
         Account.default.update(settings: { students_can_create_courses: true })
-        Account.default.role_overrides.create! [{ role: admin_role, permission: "manage_courses_add", enabled: false }, { role: admin_role, permission: "manage_courses", enabled: false }]
+        Account.default.role_overrides.create! [{ role: admin_role, permission: "manage_courses_add", enabled: false }, { role: admin_role, permission: "manage_courses_admin", enabled: false }]
         Account.default.account_users.create!(user: @user)
         course_with_student(user: @user, active_all: true, account: Account.default)
         Account.create!(name: "Sub Account (shouldn't show up)", parent_account: Account.default)

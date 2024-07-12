@@ -19,6 +19,8 @@ import * as uploadFileModule from '@canvas/upload-file'
 
 import {addAttachmentsFn, removeAttachmentFn} from '../attachments'
 
+jest.mock('@canvas/upload-file')
+
 const fileInput = {
   currentTarget: {
     files: [

@@ -33,6 +33,7 @@ import FeatureFlags from '@canvas/feature-flags'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import ready from '@instructure/ready'
 import QuantitativeDataOptions from './react/components/QuantitativeDataOptions'
+import CourseDefaultDueTime from './react/components/CourseDefaultDueTime'
 
 const I18n = useI18nScope('course_settings')
 
@@ -135,13 +136,19 @@ ready(() => {
   if (restrictQuantitativeDataContainer) {
     ReactDOM.render(
       <Suspense fallback={<Loading />}>
-        <QuantitativeDataOptions
-          canManage={
-            ENV.PERMISSIONS.edit_course_availability && ENV.CAN_EDIT_RESTRICT_QUANTITATIVE_DATA
-          }
-        />
+        <QuantitativeDataOptions canManage={ENV.CAN_EDIT_RESTRICT_QUANTITATIVE_DATA} />
       </Suspense>,
       restrictQuantitativeDataContainer
+    )
+  }
+
+  const defaultDueTimeContainer = document.getElementById('default_due_time_container')
+  if (defaultDueTimeContainer) {
+    ReactDOM.render(
+      <Suspense fallback={<Loading />}>
+        <CourseDefaultDueTime />
+      </Suspense>,
+      defaultDueTimeContainer
     )
   }
 

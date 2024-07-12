@@ -28,8 +28,8 @@ module ConditionalRelease
 
     acts_as_list scope: { assignment_set: self, deleted_at: nil }
 
-    belongs_to :assignment_set, required: true
-    belongs_to :assignment
+    belongs_to :assignment_set, optional: false
+    belongs_to :assignment, class_name: "AbstractAssignment"
     has_one :scoring_range, through: :assignment_set
     has_one :rule, through: :assignment_set
     belongs_to :root_account, class_name: "Account"

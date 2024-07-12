@@ -31,32 +31,14 @@ class Canvas::Migration::Worker::CourseCopyWorker < Canvas::Migration::Worker::B
 
     cm.shard.activate do
       source = cm.source_course || Course.find(cm.migration_settings[:source_course_id])
-      ce = ContentExport.new
-      ce.shard = source.shard
-      ce.context = source
-      ce.content_migration = cm
-      ce.selected_content = cm.copy_options
-      ce.export_type = ContentExport::COURSE_COPY
-      ce.user = cm.user
-      ce.save!
+      ce = find_suitable_content_export(source, cm)
+      ce ||= create_content_export(source, cm)
       cm.content_export = ce
-
-      source.shard.activate do
-        ce.export(synchronous: true)
-      end
-
       if ce.workflow_state == "exported_for_course_copy"
         # use the exported attachment as the import archive
         cm.attachment = ce.attachment
         cm.migration_settings[:migration_ids_to_import] ||= { copy: {} }
         cm.migration_settings[:migration_ids_to_import][:copy][:everything] = true
-        # set any attachments referenced in html to be copied
-        ce.selected_content["attachments"] ||= {}
-        ce.referenced_files.each_value do |att_mig_id|
-          ce.selected_content["attachments"][att_mig_id] = true
-        end
-        ce.save
-
         cm.save
         worker = CC::Importer::CCWorker.new
         worker.migration_id = cm.id
@@ -70,6 +52,8 @@ class Canvas::Migration::Worker::CourseCopyWorker < Canvas::Migration::Worker::B
           cm.update_import_progress(20)
 
           cm.import_content
+          SmartSearch.copy_embeddings(cm)
+
           cm.workflow_state = :imported
           cm.save
           cm.update_import_progress(100)
@@ -79,7 +63,7 @@ class Canvas::Migration::Worker::CourseCopyWorker < Canvas::Migration::Worker::B
         cm.migration_settings[:last_error] = "ContentExport failed to export course."
         cm.save
       end
-    rescue InstFS::ServiceError, ActiveRecord::RecordInvalid => e
+    rescue InstFS::ServiceError, ::ActiveRecord::RecordInvalid => e
       Canvas::Errors.capture_exception(:course_copy, e, :warn)
       cm.fail_with_error!(e)
       raise Delayed::RetriableError, e.message
@@ -87,6 +71,50 @@ class Canvas::Migration::Worker::CourseCopyWorker < Canvas::Migration::Worker::B
       cm.fail_with_error!(e)
       raise e
     end
+  end
+
+  def find_suitable_content_export(source, cm)
+    return unless cm.user_id.nil?
+
+    candidate_exports = source.content_exports
+                              .where(export_type: ContentExport::COURSE_COPY,
+                                     workflow_state: "exported_for_course_copy",
+                                     created_at: source.updated_at..,
+                                     user_id: nil)
+                              .order(id: :desc)
+                              .limit(5)
+                              .to_a
+    candidate_exports.detect do |ce|
+      !ce.expired? &&
+        ce.selected_content.slice(*cm.copy_options.keys) == cm.copy_options &&
+        ce.selected_content.key?("attachments")
+    end
+  end
+
+  def create_content_export(source, cm)
+    ce = ContentExport.new
+    ce.shard = source.shard
+    ce.context = source
+    ce.content_migration = cm
+    ce.selected_content = cm.copy_options
+    ce.export_type = ContentExport::COURSE_COPY
+    ce.user = cm.user
+    ce.save!
+
+    source.shard.activate do
+      ce.export(synchronous: true)
+    end
+
+    if ce.workflow_state == "exported_for_course_copy"
+      # set any attachments referenced in html to be copied
+      ce.selected_content["attachments"] ||= {}
+      ce.referenced_files.each_value do |att|
+        ce.selected_content["attachments"][att.export_id] = true
+      end
+      ce.save
+    end
+
+    ce
   end
 
   def self.enqueue(content_migration)

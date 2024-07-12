@@ -57,6 +57,14 @@ describe TokenScopes do
       expect(TokenScopes.all_scopes).to include(*TokenScopes::LTI_HIDDEN_SCOPES.keys)
     end
 
+    it "includes the lti scopes" do
+      expect(TokenScopes.all_scopes).to include(*TokenScopes::LTI_SCOPES.keys)
+    end
+
+    it "includes the postMessage scopes" do
+      expect(TokenScopes.all_scopes).to include(*TokenScopes::LTI_POSTMESSAGE_SCOPES)
+    end
+
     describe "generated_scopes" do
       let!(:generated_scopes) do
         TokenScopes.all_scopes - [

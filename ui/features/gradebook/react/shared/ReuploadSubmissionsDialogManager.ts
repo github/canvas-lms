@@ -1,4 +1,3 @@
-// @ts-nocheck
 /*
  * Copyright (C) 2017 - present Instructure, Inc.
  *
@@ -42,9 +41,11 @@ class ReuploadSubmissionsDialogManager {
 
   constructor(
     assignment: Assignment,
-    reuploadUrlTemplate,
+    reuploadUrlTemplate: string,
     userAssetString: string,
-    downloadedSubmissionsMap
+    downloadedSubmissionsMap: {
+      [assignmentId: string]: boolean
+    }
   ) {
     this.assignment = assignment
     this.downloadedSubmissionsMap = downloadedSubmissionsMap
@@ -58,7 +59,7 @@ class ReuploadSubmissionsDialogManager {
     return this.downloadedSubmissionsMap[this.assignment.id]
   }
 
-  getReuploadForm(cb) {
+  getReuploadForm(cb: () => void) {
     if (this.reuploadForm) {
       return this.reuploadForm
     }
@@ -75,6 +76,7 @@ class ReuploadSubmissionsDialogManager {
           cb()
         }
       },
+      zIndex: 1000,
     })
 
     setupSubmitHandler(this.userAssetString)
@@ -82,7 +84,7 @@ class ReuploadSubmissionsDialogManager {
     return this.reuploadForm
   }
 
-  showDialog(cb) {
+  showDialog(cb: () => void) {
     const form = this.getReuploadForm(cb)
     form.attr('action', this.reuploadUrl).dialog('open')
   }

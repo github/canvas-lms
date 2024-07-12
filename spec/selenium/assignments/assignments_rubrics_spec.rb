@@ -27,6 +27,7 @@ describe "assignment rubrics" do
   context "assignment rubrics as a teacher" do
     before do
       course_with_teacher_logged_in
+      @course.root_account.disable_feature!(:enhanced_rubrics)
     end
 
     def get(url)
@@ -70,6 +71,18 @@ describe "assignment rubrics" do
         .to include_text("criterion 1")
       expect(f(".rubric_table tbody tr:nth-of-type(3) .ratings td:nth-of-type(2) .rating_description_value"))
         .to include_text("rating 1")
+    end
+
+    it "searches for and selects a rubric" do
+      create_assignment_with_points(2)
+      outcome_with_rubric
+      @rubric.associate_with(@course, @course, purpose: "grading")
+      get "/courses/#{@course.id}/assignments/#{@assignment.id}"
+
+      f(".add_rubric_link").click
+      fj(".find_rubric_link:visible").click
+      fj(".select_rubric_link:visible").click
+      expect(f(".rubric_title").text).to eq @rubric.title
     end
 
     it "adds a new rubric to assignment and verify points", priority: "1" do
@@ -711,6 +724,7 @@ describe "assignment rubrics" do
   context "assignment rubrics as an designer" do
     before do
       course_with_designer_logged_in
+      @course.root_account.disable_feature!(:enhanced_rubrics)
     end
 
     it "allows a designer to create a course rubric", priority: "2" do

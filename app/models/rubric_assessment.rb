@@ -36,8 +36,6 @@ class RubricAssessment < ActiveRecord::Base
   has_many :learning_outcome_results, as: :artifact, dependent: :destroy
   serialize :data
 
-  self.ignored_columns += [:comments]
-
   simply_versioned
 
   validates :assessment_type, :rubric_id, :artifact_id, :artifact_type, :assessor_id, presence: true
@@ -50,11 +48,15 @@ class RubricAssessment < ActiveRecord::Base
   after_save :track_outcomes
 
   def track_outcomes
-    outcome_ids = (data || []).filter_map { |r| r[:learning_outcome_id] }.uniq
+    outcome_ids = aligned_outcome_ids
     peer_review = assessment_type == "peer_review"
     provisional_grade = artifact_type == "ModeratedGrading::ProvisionalGrade"
     update_outcomes = outcome_ids.present? && !peer_review && !provisional_grade
     delay_if_production.update_outcomes_for_assessment(outcome_ids) if update_outcomes
+  end
+
+  def aligned_outcome_ids
+    (data || []).filter_map { |r| r[:learning_outcome_id] }.uniq
   end
 
   def update_outcomes_for_assessment(outcome_ids = [])
@@ -151,12 +153,8 @@ class RubricAssessment < ActiveRecord::Base
     return unless artifact.is_a?(Submission)
     return unless data_changed? && data.present?
 
-    if Account.site_admin.feature_enabled?(:visibility_feedback_student_grades_page)
-      if any_comments_or_points?
-        artifact.mark_item_unread("rubric")
-      end
-    elsif any_comments?
-      user.mark_rubric_assessments_unread!(artifact)
+    if any_comments_or_points?
+      artifact.mark_item_unread("rubric")
     end
 
     true

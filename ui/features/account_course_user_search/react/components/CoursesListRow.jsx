@@ -28,7 +28,9 @@ import {
   IconPlusLine,
   IconSettingsLine,
   IconStatsLine,
-  IconPublishLine,
+  IconPublishSolid,
+  IconUnpublishedLine,
+  IconCheckSolid,
 } from '@instructure/ui-icons'
 import {Link} from '@instructure/ui-link'
 import {Text} from '@instructure/ui-text'
@@ -58,6 +60,7 @@ export default class CoursesListRow extends React.Component {
     teacher_count: number,
     sis_course_id: string,
     subaccount_name: string.isRequired,
+    subaccount_id: string.isRequired,
     term: shape({name: string.isRequired}).isRequired,
     roles: arrayOf(shape({id: string.isRequired})),
     showSISIds: bool,
@@ -116,10 +119,22 @@ export default class CoursesListRow extends React.Component {
     }
   }
 
-  openAddUsersToCourseDialog = () => {
+  getAvailableRoles = () => {
     const filterFunc = ENV.FEATURES.granular_permissions_manage_users
       ? role => role.addable_by_user
       : role => role.manageable_by_user
+
+    let roles = (this.props.roles || []).filter(filterFunc)
+    if (this.props.blueprint) {
+      roles = roles.filter(
+        role =>
+          role.base_role_name != 'StudentEnrollment' && role.base_role_name != 'ObserverEnrollment'
+      )
+    }
+    return roles
+  }
+
+  openAddUsersToCourseDialog = () => {
     // eslint-disable-next-line promise/catch-or-return
     this.getSections().then(sections => {
       this.addPeopleApp =
@@ -128,7 +143,7 @@ export default class CoursesListRow extends React.Component {
           courseId: this.props.id,
           courseName: this.props.name,
           defaultInstitutionName: ENV.ROOT_ACCOUNT_NAME || '',
-          roles: (this.props.roles || []).filter(filterFunc),
+          roles: this.getAvailableRoles(),
           sections,
           onClose: () => {
             this.handleNewEnrollments(this.addPeopleApp.usersHaveBeenEnrolled())
@@ -168,16 +183,42 @@ export default class CoursesListRow extends React.Component {
     }
   }
 
+  renderCourseStatusIcon = () => {
+    const {workflow_state} = this.props
+    let tooltip = I18n.t('Unpublished')
+    let classname = 'unpublished-course'
+    let statusIcon = <IconUnpublishedLine size="x-small" />
+
+    if (workflow_state === 'available') {
+      tooltip = I18n.t('Published')
+      classname = 'published-course'
+      statusIcon = <IconPublishSolid size="x-small" />
+    } else if (workflow_state === 'completed') {
+      tooltip = I18n.t('Concluded')
+      classname = 'completed-course'
+      statusIcon = <IconCheckSolid size="x-small" />
+    }
+
+    return (
+      <span className={`published-status ${classname}`}>
+        <Tooltip renderTip={tooltip}>
+          {statusIcon}
+          <ScreenReaderContent>{tooltip}</ScreenReaderContent>
+        </Tooltip>
+      </span>
+    )
+  }
+
   render() {
     const {
       id,
       name,
-      workflow_state,
       sis_course_id,
       total_students,
       teachers,
       teacher_count,
       subaccount_name,
+      subaccount_id,
       showSISIds,
       term,
       blueprint,
@@ -185,7 +226,7 @@ export default class CoursesListRow extends React.Component {
     } = this.props
     const {teachersToShow, newlyEnrolledStudents} = this.state
     const url = `/courses/${id}`
-    const isPublished = workflow_state !== 'unpublished'
+    const sub_url = `/accounts/${subaccount_id}`
 
     const blueprintTip = I18n.t('This is a blueprint course')
     const statsTip = I18n.t('Statistics for %{name}', {name})
@@ -195,16 +236,7 @@ export default class CoursesListRow extends React.Component {
     return (
       <Table.Row>
         <Table.RowHeader textAlign="center">
-          {isPublished ? (
-            <span className="published-status published">
-              <IconPublishLine size="x-small" />
-              <ScreenReaderContent>{I18n.t('yes')}</ScreenReaderContent>
-            </span>
-          ) : (
-            <span className="published-status unpublished">
-              <ScreenReaderContent>{I18n.t('no')}</ScreenReaderContent>
-            </span>
-          )}
+          {this.renderCourseStatusIcon()}
         </Table.RowHeader>
         <Table.Cell>
           <a href={url}>
@@ -245,7 +277,9 @@ export default class CoursesListRow extends React.Component {
           )}
           {!teachers && teacher_count && I18n.t('%{teacher_count} teachers', {teacher_count})}
         </Table.Cell>
-        <Table.Cell>{subaccount_name}</Table.Cell>
+        <Table.Cell>
+          <a href={sub_url}>{subaccount_name}</a>
+        </Table.Cell>
         <Table.Cell>
           {template ? '\u2014' : I18n.n(total_students + newlyEnrolledStudents)}
         </Table.Cell>

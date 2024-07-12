@@ -234,6 +234,43 @@ describe ContextModule do
     end
   end
 
+  describe "update_assignment_submissions" do
+    before :once do
+      Account.site_admin.enable_feature!(:selective_release_backend)
+      course_module
+      @student1 = student_in_course(active_all: true, name: "Student 1").user
+      @assignment = @course.assignments.create!(title: "some assignment")
+      @quiz = @course.quizzes.create!(title: "some quiz", quiz_type: "assignment")
+      @discussion = @course.discussion_topics.create!(title: "some discussion")
+      @discussion.assignment = @course.assignments.create!
+      @discussion.save!
+      @module.add_item({ id: @assignment.id, type: "assignment" })
+      @module.add_item({ id: @quiz.id, type: "quiz" })
+      @module.add_item({ id: @discussion.id, type: "discussion_topic" })
+    end
+
+    it "correctly updates submissions after delete for all items with assignments" do
+      adhoc_override = @module.assignment_overrides.create!(set_type: "ADHOC")
+      adhoc_override.assignment_override_students.create!(user: @student1)
+
+      @module.update_assignment_submissions(@module.current_items_with_assignment)
+      @assignment.submissions.reload
+      @quiz.assignment.submissions.reload
+      @discussion.assignment.submissions.reload
+      expect(@assignment.submissions.length).to eq 1
+      expect(@quiz.assignment.submissions.length).to eq 1
+      expect(@discussion.assignment.submissions.length).to eq 1
+
+      @module.destroy!
+      @assignment.submissions.reload
+      @quiz.assignment.submissions.reload
+      @discussion.assignment.submissions.reload
+      expect(@assignment.submissions.length).to eq 2
+      expect(@quiz.assignment.submissions.length).to eq 2
+      expect(@discussion.assignment.submissions.length).to eq 2
+    end
+  end
+
   describe "prerequisites=" do
     it "assigns prerequisites" do
       course_module
@@ -337,7 +374,7 @@ describe ContextModule do
       @tag = @module.add_item({ id: @assignment.id, type: "assignment" }) # @assignment)
 
       expect(@tag.content).to eql(@assignment)
-      expect(@module.content_tags).to be_include(@tag)
+      expect(@module.content_tags).to include(@tag)
     end
 
     it "does not add an invalid assignment" do
@@ -362,7 +399,7 @@ describe ContextModule do
       @tag = @module.add_item({ id: @page.id, type: "wiki_page" }) # @page)
 
       expect(@tag.content).to eql(@page)
-      expect(@module.content_tags).to be_include(@tag)
+      expect(@module.content_tags).to include(@tag)
     end
 
     it "does not add invalid wiki pages" do
@@ -378,7 +415,7 @@ describe ContextModule do
       @tag = @module.add_item({ id: @file.id, type: "attachment" }) # @file)
 
       expect(@tag.content).to eql(@file)
-      expect(@module.content_tags).to be_include(@tag)
+      expect(@module.content_tags).to include(@tag)
     end
 
     it "allows adding items more than once" do
@@ -386,8 +423,8 @@ describe ContextModule do
       @tag1 = @module.add_item(id: @assignment.id, type: "assignment")
       @tag2 = @module.add_item(id: @assignment.id, type: "assignment")
       expect(@tag1).not_to eq @tag2
-      expect(@module.content_tags).to be_include(@tag1)
-      expect(@module.content_tags).to be_include(@tag2)
+      expect(@module.content_tags).to include(@tag1)
+      expect(@module.content_tags).to include(@tag2)
 
       @mod2 = @course.context_modules.create!(name: "mod2")
       @tag3 = @mod2.add_item(id: @assignment.id, type: "assignment")
@@ -412,7 +449,7 @@ describe ContextModule do
       @module.workflow_state = "published"
       @module.save!
 
-      expect(@module.content_tags).to be_include(@tag)
+      expect(@module.content_tags).to include(@tag)
     end
 
     describe "when adding an LTI 1.3 external tool" do
@@ -444,7 +481,7 @@ describe ContextModule do
         @module.workflow_state = "published"
         @module.save!
 
-        expect(@module.content_tags).to be_include(@tag)
+        expect(@module.content_tags).to include(@tag)
         expect(@tag.associated_asset).to be_a(Lti::ResourceLink)
         expect(@tag.associated_asset.custom).to eq("foo" => "bar")
       end
@@ -693,8 +730,8 @@ describe ContextModule do
 
       tehmod.update_for(@student, :read, tag)
       mods_with_progressions = @student.context_module_progressions.collect(&:context_module_id)
-      expect(mods_with_progressions).not_to be_include othermods[1].id
-      expect(mods_with_progressions).not_to be_include othermods[2].id
+      expect(mods_with_progressions).not_to include othermods[1].id
+      expect(mods_with_progressions).not_to include othermods[2].id
     end
 
     it "does not remove completed contribution requirements when viewed" do
@@ -1419,7 +1456,7 @@ describe ContextModule do
       @submission = @quiz.generate_submission(@student)
       @submission.workflow_state = "complete"
       @submission.save!
-      expect(@module.evaluate_for(@student).requirements_met).to be_include({ id: @tag.id, type: "must_submit" })
+      expect(@module.evaluate_for(@student).requirements_met).to include({ id: @tag.id, type: "must_submit" })
     end
 
     context "with conditional release" do
@@ -1496,6 +1533,11 @@ describe ContextModule do
       expect(cm.completion_events).to eq [:publish_final_grade]
     end
 
+    it "serializes an empty string" do
+      cm = ContextModule.new(completion_events: "")
+      expect(cm.completion_events).to eq []
+    end
+
     it "generates methods correctly" do
       cm = ContextModule.new
       expect(cm.publish_final_grade?).to be_falsey
@@ -1532,10 +1574,10 @@ describe ContextModule do
         expect(@module.content_tags_visible_to(@student_2).map(&:content).include?(@assignment)).to be_falsey
       end
 
-      it "alsoes have the right assignment_and_quiz_visibilities" do
-        expect(@teacher.assignment_and_quiz_visibilities(@course)[:assignment_ids].include?(@assignment.id)).to be_truthy
-        expect(@student_1.assignment_and_quiz_visibilities(@course)[:assignment_ids].include?(@assignment.id)).to be_truthy
-        expect(@student_2.assignment_and_quiz_visibilities(@course)[:assignment_ids].include?(@assignment.id)).to be_falsey
+      it "has the right learning_object_visibilities" do
+        expect(@teacher.learning_object_visibilities(@course)[:assignment_ids].include?(@assignment.id)).to be_truthy
+        expect(@student_1.learning_object_visibilities(@course)[:assignment_ids].include?(@assignment.id)).to be_truthy
+        expect(@student_2.learning_object_visibilities(@course)[:assignment_ids].include?(@assignment.id)).to be_falsey
       end
 
       it "properly returns differentiated assignments for teacher even without update rights" do
@@ -1766,6 +1808,32 @@ describe ContextModule do
     end
   end
 
+  describe "relock_progressions" do
+    before :once do
+      course_with_student(active_all: true)
+      @module1 = @course.context_modules.create!
+      @module2 = @course.context_modules.create!
+      assignment = @course.assignments.create!
+      tag1 = @module1.add_item({ id: assignment.id, type: "assignment" })
+      @module1.update!(completion_requirements: { tag1.id => { type: "min_score", min_score: 90 } })
+      @module2.update!(prerequisites: [{ id: @module1.id, type: "context_module", name: "some module" }])
+      @progression = @module2.evaluate_for(@user)
+    end
+
+    it "does not relock progressions that are already locked" do
+      expect(@progression.workflow_state).to eq "locked"
+      progression1_lock_version = @progression.lock_version
+      @module2.relock_progressions
+      expect(@progression.reload.lock_version).to eq progression1_lock_version
+    end
+
+    it "locks progressions even if not current" do
+      @progression.update!(current: false, workflow_state: "completed")
+      @module2.relock_progressions
+      expect(@progression.reload.workflow_state).to eq "locked"
+    end
+  end
+
   it "evaluates progressions after save" do
     course_module
     course_with_student(course: @course, user: @student, active_all: true)
@@ -1808,7 +1876,28 @@ describe ContextModule do
     expect(m.grants_right?(@teacher, :manage_course_content_delete)).to be false
   end
 
+  it "only loads visibility and progression information once when calculating prerequisites with selective_release_backend on" do
+    Account.site_admin.enable_feature!(:selective_release_backend)
+    course_factory(active_all: true)
+    student_in_course(course: @course)
+    m1 = @course.context_modules.create!(name: "m1")
+    m2 = @course.context_modules.create!(name: "m2", prerequisites: [{ id: m1.id, type: "context_module", name: m1.name }])
+
+    [m1, m2].each do |m|
+      assmt = @course.assignments.create!(title: "assmt", submission_types: "online_text_entry")
+      assmt.submit_homework(@student, body: "bloop")
+      tag = m.add_item({ id: assmt.id, type: "assignment" })
+      m.update_attribute(:completion_requirements, { tag.id => { type: "must_submit" } })
+    end
+
+    expect(AssignmentVisibility::AssignmentVisibilityService).to receive(:visible_assignment_ids_in_course_by_user).once.and_call_original
+    expect(ContextModuleProgressions::Finder).to receive(:find_or_create_for_context_and_user).once.and_call_original
+
+    m2.evaluate_for(@student)
+  end
+
   it "only loads visibility and progression information once when calculating prerequisites" do
+    Account.site_admin.disable_feature!(:selective_release_backend)
     course_factory(active_all: true)
     student_in_course(course: @course)
     m1 = @course.context_modules.create!(name: "m1")
@@ -1825,5 +1914,26 @@ describe ContextModule do
     expect(ContextModuleProgressions::Finder).to receive(:find_or_create_for_context_and_user).once.and_call_original
 
     m2.evaluate_for(@student)
+  end
+
+  describe "only_visible_to_overrides" do
+    before :once do
+      course_factory
+      @module = @course.context_modules.create!
+    end
+
+    it "returns true if the module has active overrides" do
+      @module.assignment_overrides.create!
+      expect(@module.only_visible_to_overrides).to be true
+    end
+
+    it "returns false if the module has no overrides" do
+      expect(@module.only_visible_to_overrides).to be false
+    end
+
+    it "returns false if the module has only deleted overrides" do
+      @module.assignment_overrides.create!(workflow_state: "deleted")
+      expect(@module.only_visible_to_overrides).to be false
+    end
   end
 end

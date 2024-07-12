@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, {memo, useState} from 'react'
+import React, {memo, useState, useRef, useEffect} from 'react'
 import PropTypes from 'prop-types'
 import {View} from '@instructure/ui-view'
 import {Flex} from '@instructure/ui-flex'
@@ -54,6 +54,7 @@ const ManageOutcomeItem = ({
   onCheckboxHandler,
   canUnlink,
   isEnhanced,
+  canArchive,
 }) => {
   const {
     contextType,
@@ -70,6 +71,13 @@ const ManageOutcomeItem = ({
   const onClickHandler = () => setTruncated(prevState => !prevState)
   const onChangeHandler = () => onCheckboxHandler({linkId})
   const onMenuHandlerWrapper = (_, action) => onMenuHandler(linkId, action)
+  const iconButtonRef = useRef(null)
+
+  useEffect(() => {
+    if (iconButtonRef.current) {
+      iconButtonRef.current.setAttribute('aria-expanded', !truncated)
+    }
+  }, [truncated])
 
   // This allows account admins to edit global outcomes
   // within a course. See OUT-1415, OUT-1511
@@ -110,17 +118,16 @@ const ManageOutcomeItem = ({
               )}
               <Flex.Item as="div" padding="0 x-small 0 0">
                 <IconButton
+                  elementRef={b => (iconButtonRef.current = b)}
                   size="small"
-                  screenReaderLabel={
-                    truncated
-                      ? I18n.t('Expand description for outcome %{title}', {title})
-                      : I18n.t('Collapse description for outcome %{title}', {title})
-                  }
+                  screenReaderLabel=""
                   withBackground={false}
                   withBorder={false}
-                  interaction={shouldShowDescription && (!accountLevelMasteryScalesFF || shouldExpand)
-                  ? 'enabled'
-                  : 'disabled'}
+                  interaction={
+                    shouldShowDescription && (!accountLevelMasteryScalesFF || shouldExpand)
+                      ? 'enabled'
+                      : 'disabled'
+                  }
                   onClick={onClickHandler}
                   data-testid="manage-outcome-item-expand-toggle"
                 >
@@ -155,6 +162,7 @@ const ManageOutcomeItem = ({
             <OutcomeKebabMenu
               canDestroy={canUnlink}
               canEdit={canEdit}
+              canArchive={canArchive}
               menuTitle={I18n.t('Menu for outcome %{title}', {title})}
               onMenuHandler={onMenuHandlerWrapper}
             />
@@ -201,7 +209,8 @@ ManageOutcomeItem.propTypes = {
   onMenuHandler: PropTypes.func.isRequired,
   onCheckboxHandler: PropTypes.func.isRequired,
   canUnlink: PropTypes.bool.isRequired,
-  isEnhanced: PropTypes.bool
+  isEnhanced: PropTypes.bool,
+  canArchive: PropTypes.bool,
 }
 
 export default memo(ManageOutcomeItem)

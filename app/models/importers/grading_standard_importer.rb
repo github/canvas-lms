@@ -51,6 +51,8 @@ module Importers
       item.migration_id = hash[:migration_id]
       item.workflow_state = "active" if item.deleted?
       item.title = hash[:title]
+      item.scaling_factor = hash[:points_based].nil? ? 1 : hash[:scaling_factor]
+      item.points_based = hash[:points_based].nil? ? false : hash[:points_based]
       begin
         item.data = GradingStandard.upgrade_data(JSON.parse(hash[:data]), hash[:version] || 1)
       rescue

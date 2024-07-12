@@ -172,8 +172,9 @@ module UserContent
       @user = user
       @contextless_types = contextless_types
       @context_prefix = "/#{context.class.name.tableize}/#{context.id}"
+      @context_regex = %r{(?:/(#{context.class.name.tableize})/(#{context.id})|/(assessment_questions)/(\d+))}
       @absolute_part = '(https?://[\w-]+(?:\.[\w-]+)*(?:\:\d{1,5})?)?'
-      @toplevel_regex = %r{#{@absolute_part}(#{@context_prefix})?/(\w+)(?:/([^\s"<'?/]*)([^\s"<']*))?}
+      @toplevel_regex = %r{#{@absolute_part}#{@context_regex}?/(\w+)(?:/([^\s"<'?/]*)([^\s"<']*))?}
       @handlers = {}
       @default_handler = nil
       @unknown_handler = nil
@@ -182,7 +183,7 @@ module UserContent
 
     attr_reader :user, :context
 
-    UriMatch = Struct.new(:url, :type, :obj_class, :obj_id, :rest, :prefix) do
+    UriMatch = Struct.new(:url, :type, :obj_class, :obj_id, :rest, :prefix, :context_type, :context_id) do
       def query
         rest && rest[/\?.*/]
       end
@@ -208,37 +209,60 @@ module UserContent
     def translate_content(html)
       return html if html.blank?
 
-      asset_types = AssetTypes.slice(*@allowed_types)
+      return precise_translate_content(html) if Account.site_admin.feature_enabled?(:precise_link_replacements)
 
-      html.gsub(@toplevel_regex) do |url|
-        _absolute_part, prefix, type, obj_id, rest = [$1, $2, $3, $4, $5]
-        next url if !@contextless_types.include?(type) && prefix != @context_prefix && url.split("?").first != @context_prefix
+      html.gsub(@toplevel_regex) { |url| replacement(url) }
+    end
 
-        if type != "wiki" && type != "pages" && type != "media_attachments_iframe"
-          if obj_id.to_i > 0
-            obj_id = obj_id.to_i
-          else
-            rest = "/#{obj_id}#{rest}" if obj_id.present? || rest.present?
-            obj_id = nil
+    def precise_translate_content(html)
+      doc = Nokogiri::HTML5::DocumentFragment.parse(html, nil, { max_tree_depth: 10_000 })
+      attributes = %w[value href longdesc src srcset title]
+
+      doc.css("img, iframe, video, audio, source, param, a").each do |e|
+        attributes.each do |attr|
+          attribute_value = e.attributes[attr]&.value
+          if attribute_value&.match?(@toplevel_regex)
+            e.inner_html = e.inner_html.gsub(@toplevel_regex) { |url| replacement(url) } if e.name == "a" && e["href"] && e.inner_html.delete("\n").strip.include?(e["href"].strip)
+            e.set_attribute(attr, attribute_value.gsub(@toplevel_regex) { |url| replacement(url) })
           end
         end
+      end
+      doc.inner_html
+    end
 
-        if (module_item = rest.try(:match, %r{/items/(\d+)}))
-          type   = "items"
-          obj_id = module_item[1].to_i
-        end
+    def replacement(url)
+      asset_types = AssetTypes.slice(*@allowed_types)
+      matched = url.match(@toplevel_regex)
+      context_type, context_id, type, obj_id, rest = [matched[2] || matched[4], matched[3] || matched[5], matched[6], matched[7], matched[8]]
+      prefix = "/#{context_type}/#{context_id}" if context_type && context_id
+      return url if !@contextless_types.include?(type) && prefix != @context_prefix && url.split("?").first != @context_prefix
 
-        if asset_types.key?(type)
-          klass = asset_types[type]
-          klass = klass.to_s.constantize if klass
-          match = UriMatch.new(url, type, klass, obj_id, rest, prefix)
-          handler = @handlers[type] || @default_handler
-          handler&.call(match) || url
+      if type != "wiki" && type != "pages"
+        if obj_id.to_i > 0
+          obj_id = obj_id.to_i
         else
-          match = UriMatch.new(url, type)
-          @unknown_handler&.call(match) || url
+          rest = "/#{obj_id}#{rest}" if obj_id.present? || rest.present?
+          obj_id = nil
         end
       end
+
+      if (module_item = rest.try(:match, %r{/items/(\d+)}))
+        type   = "items"
+        obj_id = module_item[1].to_i
+      end
+
+      if asset_types.key?(type)
+        klass = asset_types[type]
+        klass = klass.to_s.constantize if klass
+        match = UriMatch.new(url, type, klass, obj_id, rest, prefix, context_type, context_id)
+        handler = @handlers[type] || @default_handler
+        converted = handler&.call(match)
+      else
+        match = UriMatch.new(url, type)
+        converted = @unknown_handler&.call(match)
+      end
+      converted ||= url
+      converted.gsub("&amp;", "&") # get rid of ampersand conversions, it can trip up logic that runs after this
     end
 
     # if content is nil, it'll query the block for the content if needed (lazy content load)

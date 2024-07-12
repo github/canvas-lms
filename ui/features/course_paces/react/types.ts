@@ -1,4 +1,3 @@
-// @ts-nocheck
 /*
  * Copyright (C) 2021 - present Instructure, Inc.
  *
@@ -18,7 +17,7 @@
  */
 
 import moment from 'moment'
-import {BlackoutDateState, BlackoutDate, Course} from './shared/types'
+import type {BlackoutDateState, BlackoutDate, Course} from './shared/types'
 
 /* Model types */
 

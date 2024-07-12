@@ -56,13 +56,6 @@ body {
   }
 }
 
-// so we don't get the non-interactionable content
-.scripts-not-loaded {
-  a:not([href]), a[href="#"], button:not([type]) {
-    visibility: hidden !important;
-  }
-}
-
 // **********************************************************************************
 // all of the following are classes that should be applied to 'body' when appropriate
 
@@ -134,6 +127,15 @@ iframe.tool_launch {
   border: none;
   max-width: 100%;
 }
+
+.lti_tool_icon {
+  margin-right: 0.25rem;
+  max-width: 1.2rem;
+ }
+
+.lti_tool_icon_large {
+  max-width: 3rem;
+ }
 
 #assignment_external_tools {
   iframe.tool_launch {

@@ -19,22 +19,24 @@
 import {DISCUSSION_QUERY} from '../graphql/Queries'
 import {DiscussionTopicToolbarContainer} from './containers/DiscussionTopicToolbarContainer/DiscussionTopicToolbarContainer'
 import {DiscussionTopicRepliesContainer} from './containers/DiscussionTopicRepliesContainer/DiscussionTopicRepliesContainer'
+import {DiscussionTopicHeaderContainer} from './containers/DiscussionTopicHeaderContainer/DiscussionTopicHeaderContainer'
 import {DiscussionTopicContainer} from './containers/DiscussionTopicContainer/DiscussionTopicContainer'
 import errorShipUrl from '@canvas/images/ErrorShip.svg'
 import GenericErrorPage from '@canvas/generic-error-page'
-import {getOptimisticResponse, responsiveQuerySizes} from './utils'
+import {getOptimisticResponse, responsiveQuerySizes, getCheckpointSubmission} from './utils'
 import {
   HIGHLIGHT_TIMEOUT,
   SearchContext,
   DiscussionManagerUtilityContext,
   AllThreadsState,
+  REPLY_TO_TOPIC,
+  REPLY_TO_ENTRY,
 } from './utils/constants'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import {IsolatedViewContainer} from './containers/IsolatedViewContainer/IsolatedViewContainer'
 import LoadingIndicator from '@canvas/loading-indicator'
 import {NoResultsFound} from './components/NoResultsFound/NoResultsFound'
 import PropTypes from 'prop-types'
-import React, {useEffect, useState} from 'react'
+import React, {useEffect, useRef, useState} from 'react'
 import {useQuery} from 'react-apollo'
 import {SplitScreenViewContainer} from './containers/SplitScreenViewContainer/SplitScreenViewContainer'
 import {DrawerLayout} from '@instructure/ui-drawer-layout'
@@ -42,6 +44,8 @@ import {Mask} from '@instructure/ui-overlays'
 import {Responsive} from '@instructure/ui-responsive'
 import {View} from '@instructure/ui-view'
 import useCreateDiscussionEntry from './hooks/useCreateDiscussionEntry'
+import {flushSync} from 'react-dom'
+import {captureException} from '@sentry/react'
 
 const I18n = useI18nScope('discussion_topics_post')
 
@@ -54,6 +58,14 @@ const DiscussionTopicManager = props => {
   const [searchPageNumber, setSearchPageNumber] = useState(0)
   const [allThreadsStatus, setAllThreadsStatus] = useState(AllThreadsState.None)
   const [expandedThreads, setExpandedThreads] = useState([])
+  // This state is used to control the state of the topic RCE
+  const [expandedTopicReply, setExpandedTopicReply] = useState(false)
+  const translationEnabled = useRef(ENV?.discussion_translation_available ?? false)
+  const translationLanguages = useRef(ENV?.discussion_translation_languages ?? [])
+  const [showTranslationControl, setShowTranslationControl] = useState(false)
+  // Start as null, populate when ready.
+  const [translateTargetLanguage, setTranslateTargetLanguage] = useState(null)
+
   const searchContext = {
     searchTerm,
     setSearchTerm,
@@ -80,21 +92,15 @@ const DiscussionTopicManager = props => {
     setIsTopicHighlighted(true)
   }
 
-  // Isolated View State
+  // Split_screen parent id
   const [threadParentEntryId, setThreadParentEntryId] = useState(
-    ENV.isolated_view
-      ? ENV.discussions_deep_link?.root_entry_id
-      : ENV.discussions_deep_link?.parent_id
+    ENV.discussions_deep_link?.parent_id
   )
   const [replyFromId, setReplyFromId] = useState(null)
-  const [isolatedViewOpen, setIsolatedViewOpen] = useState(
-    !ENV.split_screen_view && !!ENV.discussions_deep_link?.root_entry_id
-  )
 
   // split screen view
   const [isSplitScreenViewOpen, setSplitScreenViewOpen] = useState(
-    ENV.split_screen_view &&
-      ENV.DISCUSSION?.preferences?.discussions_splitscreen_view &&
+    ENV.DISCUSSION?.preferences?.discussions_splitscreen_view &&
       !!(ENV.discussions_deep_link?.parent_id
         ? ENV.discussions_deep_link?.parent_id
         : ENV.discussions_deep_link?.entry_id)
@@ -107,13 +113,19 @@ const DiscussionTopicManager = props => {
   const [highlightEntryId, setHighlightEntryId] = useState(ENV.discussions_deep_link?.entry_id)
   const [relativeEntryId, setRelativeEntryId] = useState(null)
 
+  const [replyToTopicSubmission, setReplyToTopicSubmission] = useState({})
+  const [replyToEntrySubmission, setReplyToEntrySubmission] = useState({})
+
   const [isUserMissingInitialPost, setIsUserMissingInitialPost] = useState(null)
 
   const [isGradedDiscussion, setIsGradedDiscussion] = useState(false)
 
   // The DrawTray will cause the DiscussionEdit to mount first when it starts transitioning open, then un-mount and remount when it finishes opening
-  // With RCE Draft enabled, this causes the draft message to appear twice each time the RCE is mounted.
   const [isTrayFinishedOpening, setIsTrayFinishedOpening] = useState(false)
+
+  const usedThreadingToolbarChildRef = useRef(null)
+
+  const [isSummaryEnabled, setIsSummaryEnabled] = useState(ENV.discussion_summary_enabled || false)
 
   const discussionManagerUtilities = {
     replyFromId,
@@ -124,7 +136,18 @@ const DiscussionTopicManager = props => {
     setHighlightEntryId,
     setIsGradedDiscussion,
     isGradedDiscussion,
+    usedThreadingToolbarChildRef,
+    translationEnabled,
+    translationLanguages,
+    showTranslationControl,
+    setShowTranslationControl,
+    translateTargetLanguage,
+    setTranslateTargetLanguage,
+    isSummaryEnabled,
+    setIsSummaryEnabled,
   }
+
+  const isModuleItem = ENV.SEQUENCE != null
 
   // Unread filter
   // This introduces a double query for DISCUSSION_QUERY when filter changes
@@ -163,23 +186,18 @@ const DiscussionTopicManager = props => {
     }
   }, [highlightEntryId])
 
-  const openView = (discussionEntryId, isolatedId, withRCE, relativeId = null) => {
-    if (ENV.isolated_view) {
-      openIsolatedView(discussionEntryId, isolatedId, withRCE, relativeId)
-    }
-    if (ENV.split_screen_view) {
-      openSplitScreenView(discussionEntryId, withRCE, relativeId)
-    }
-  }
-
-  const openIsolatedView = (discussionEntryId, isolatedId, withRCE, relativeId = null) => {
-    setReplyFromId(discussionEntryId)
-    setThreadParentEntryId(isolatedId || discussionEntryId)
-    setIsolatedViewOpen(true)
-    setEditorExpanded(withRCE)
-    setRelativeEntryId(relativeId)
-  }
-
+  /**
+   * Opens a split-screen view for a discussion entry.
+   *
+   * @param {number} discussionEntryId - The ID of the discussion entry that will be displayed.
+   *                                     This ID represents the ThreadParentEntryId and is the root entry in the thread.
+   * @param {boolean} withRCE - Controls whether the Rich Content Editor (RCE) will be open or not.
+   * @param {number|null} relativeId - Optional. Used primarily when opening from a search context.
+   *                                   This parameter determines the starting point for querying additional entries.
+   *                                   For example, if opening entry 120 out of 200, and when clicking next,
+   *                                   the function needs to know it's at entry 120 to fetch entries 121-140.
+   *                                   Defaults to `null` if not specified.
+   */
   const openSplitScreenView = (discussionEntryId, withRCE, relativeId = null) => {
     setThreadParentEntryId(discussionEntryId)
     setSplitScreenViewOpen(true)
@@ -188,13 +206,13 @@ const DiscussionTopicManager = props => {
   }
 
   const closeView = () => {
-    if (ENV.isolated_view) {
-      setIsolatedViewOpen(false)
-    }
-    if (ENV.split_screen_view) {
+    flushSync(() => {
       setIsTrayFinishedOpening(false)
       setSplitScreenViewOpen(false)
-    }
+    })
+
+    usedThreadingToolbarChildRef?.current?.focus()
+    usedThreadingToolbarChildRef.current = null
   }
 
   const variables = {
@@ -205,7 +223,6 @@ const DiscussionTopicManager = props => {
     rootEntries: !searchTerm && filter === 'all',
     filter,
     sort,
-    courseID: window.ENV?.course_id,
     unreadBefore,
   }
 
@@ -227,51 +244,19 @@ const DiscussionTopicManager = props => {
     setIsGradedDiscussion(!!discussionTopicQuery?.data?.legacyNode?.assignment)
   }, [discussionTopicQuery])
 
-  const updateDraftCache = (cache, result) => {
-    try {
-      const options = {
-        query: DISCUSSION_QUERY,
-        variables: {...variables},
-      }
-      const newDiscussionEntryDraft = result.data.createDiscussionEntryDraft.discussionEntryDraft
-      const currentDiscussion = JSON.parse(JSON.stringify(cache.readQuery(options)))
-
-      if (currentDiscussion && newDiscussionEntryDraft) {
-        currentDiscussion.legacyNode.discussionEntryDraftsConnection.nodes =
-          currentDiscussion.legacyNode.discussionEntryDraftsConnection.nodes.filter(
-            draft => draft.id !== newDiscussionEntryDraft.id
-          )
-        currentDiscussion.legacyNode.discussionEntryDraftsConnection.nodes.push(
-          newDiscussionEntryDraft
-        )
-
-        cache.writeQuery({...options, data: currentDiscussion})
-      }
-    } catch (e) {
-      // do nothing for errors updating the cache on a draft
-    }
+  const getSubmissionObject = (submissionsArray, submissionTag) => {
+    return submissionsArray.find(node => node.subAssignmentTag === submissionTag) || {}
   }
-
-  const removeDraftFromDiscussionCache = (cache, result) => {
-    try {
-      const options = {
-        query: DISCUSSION_QUERY,
-        variables: {...variables},
-      }
-      const newDiscussionEntry = result.data.createDiscussionEntry.discussionEntry
-      const currentDiscussion = JSON.parse(JSON.stringify(cache.readQuery(options)))
-
-      currentDiscussion.legacyNode.discussionEntryDraftsConnection.nodes =
-        currentDiscussion.legacyNode.discussionEntryDraftsConnection.nodes.filter(
-          draft =>
-            draft.rootEntryId !== newDiscussionEntry.rootEntryId &&
-            draft.discussionTopicID !== newDiscussionEntry.discussionTopicID
-        )
-      cache.writeQuery({...options, data: currentDiscussion})
-    } catch (e) {
-      // do nothing for errors updating the cache on a draft
-    }
-  }
+  // set initial checkpoint submission objects
+  useEffect(() => {
+    setTimeout(() => {
+      const submissionsArray =
+        discussionTopicQuery?.data?.legacyNode?.assignment?.mySubAssignmentSubmissionsConnection
+          ?.nodes || []
+      setReplyToTopicSubmission(getSubmissionObject(submissionsArray, REPLY_TO_TOPIC))
+      setReplyToEntrySubmission(getSubmissionObject(submissionsArray, REPLY_TO_ENTRY))
+    }, 0)
+  }, [discussionTopicQuery])
 
   const updateCache = (cache, result) => {
     try {
@@ -292,7 +277,6 @@ const DiscussionTopicManager = props => {
       } else if (currentDiscussion && newDiscussionEntry) {
         // if we have a new entry update the counts, because we are about to add to the cache (something useMutation dont do, that useQuery does)
         currentDiscussion.legacyNode.entryCounts.repliesCount += 1
-        removeDraftFromDiscussionCache(cache, result)
         // add the new entry to the current entries in the cache
         if (variables.sort === 'desc') {
           currentDiscussion.legacyNode.discussionEntriesConnection.nodes.unshift(newDiscussionEntry)
@@ -301,21 +285,34 @@ const DiscussionTopicManager = props => {
         }
         cache.writeQuery({...options, data: currentDiscussion})
       }
+
+      if (result.data.createDiscussionEntry.mySubAssignmentSubmissions?.length > 0) {
+        const submissionsArray = result.data.createDiscussionEntry.mySubAssignmentSubmissions
+        currentDiscussion.legacyNode.assignment.mySubAssignmentSubmissionsConnection.nodes =
+          submissionsArray
+        cache.writeQuery({...options, data: currentDiscussion})
+      }
     } catch (e) {
       discussionTopicQuery.refetch(variables)
     }
   }
 
-  const onEntryCreationCompletion = data => {
-    setHighlightEntryId(data.createDiscussionEntry.discussionEntry._id)
-    if (sort === 'asc') {
-      setPageNumber(discussionTopicQuery.data.legacyNode.entriesTotalPages - 1)
-    }
-    if (
-      discussionTopicQuery.data.legacyNode.availableForUser &&
-      discussionTopicQuery.data.legacyNode.initialPostRequiredForCurrentUser
-    ) {
-      discussionTopicQuery.refetch(variables)
+  const onEntryCreationCompletion = (data, success) => {
+    if (success) {
+      setHighlightEntryId(data.createDiscussionEntry.discussionEntry._id)
+      setReplyToTopicSubmission(getCheckpointSubmission(data, REPLY_TO_TOPIC))
+      setReplyToEntrySubmission(getCheckpointSubmission(data, REPLY_TO_ENTRY))
+
+      if (sort === 'asc') {
+        setPageNumber(discussionTopicQuery.data.legacyNode.entriesTotalPages - 1)
+      }
+      if (
+        discussionTopicQuery.data.legacyNode.availableForUser &&
+        discussionTopicQuery.data.legacyNode.initialPostRequiredForCurrentUser
+      ) {
+        discussionTopicQuery.refetch(variables)
+      }
+      setExpandedTopicReply(false)
     }
   }
 
@@ -336,6 +333,8 @@ const DiscussionTopicManager = props => {
   }
 
   if (discussionTopicQuery.error || !discussionTopicQuery?.data?.legacyNode) {
+    captureException(new Error(`Error received from discussionTopicQuery: ${discussionTopicQuery.error}`))
+
     return (
       <GenericErrorPage
         imageUrl={errorShipUrl}
@@ -370,29 +369,39 @@ const DiscussionTopicManager = props => {
                   <Mask onClick={() => closeView()} />
                 )}
                 <DrawerLayout.Content label="Splitscreen View Content">
-                <View display="block" padding="medium medium 0 small" height={isSplitScreenViewOpen ? "100vh" : "100%"}>
+                  <View
+                    display="block"
+                    padding="medium medium 0 small"
+                    height={isModuleItem ? '85vh' : '90vh'}
+                  >
+                    <DiscussionTopicHeaderContainer
+                      discussionTopicTitle={discussionTopicQuery.data.legacyNode.title}
+                    />
                     <DiscussionTopicToolbarContainer
                       discussionTopic={discussionTopicQuery.data.legacyNode}
                       setUserSplitScreenPreference={setUserSplitScreenPreference}
                       userSplitScreenPreference={userSplitScreenPreference}
+                      setIsSummaryEnabled={setIsSummaryEnabled}
+                      isSummaryEnabled={isSummaryEnabled}
                       closeView={closeView}
                     />
                     <DiscussionTopicContainer
-                      updateDraftCache={updateDraftCache}
                       discussionTopic={discussionTopicQuery.data.legacyNode}
+                      expandedTopicReply={expandedTopicReply}
+                      setExpandedTopicReply={setExpandedTopicReply}
                       createDiscussionEntry={(message, file, isAnonymousAuthor) => {
                         createDiscussionEntry({
                           variables: {
                             discussionTopicId: ENV.discussion_topic_id,
                             message,
                             fileId: file?._id,
-                            courseID: ENV.course_id,
                             isAnonymousAuthor,
                           },
                           optimisticResponse: getOptimisticResponse({
                             message,
                             attachment: file,
                             isAnonymous:
+                              isAnonymousAuthor &&
                               !!discussionTopicQuery.data.legacyNode.anonymousState &&
                               discussionTopicQuery.data.legacyNode.canReplyAnonymously,
                           }),
@@ -400,6 +409,10 @@ const DiscussionTopicManager = props => {
                         setHighlightEntryId('DISCUSSION_ENTRY_PLACEHOLDER')
                       }}
                       isHighlighted={isTopicHighlighted}
+                      replyToTopicSubmission={replyToTopicSubmission}
+                      replyToEntrySubmission={replyToEntrySubmission}
+                      isSummaryEnabled={ENV.user_can_summarize && isSummaryEnabled}
+                      setIsSummaryEnabled={setIsSummaryEnabled}
                     />
 
                     {discussionTopicQuery.data.legacyNode.discussionEntriesConnection.nodes
@@ -410,17 +423,14 @@ const DiscussionTopicManager = props => {
                       discussionTopicQuery.data.legacyNode.availableForUser && (
                         <DiscussionTopicRepliesContainer
                           discussionTopic={discussionTopicQuery.data.legacyNode}
-                          updateDraftCache={updateDraftCache}
-                          removeDraftFromDiscussionCache={removeDraftFromDiscussionCache}
-                          onOpenIsolatedView={(
+                          onOpenSplitView={(
                             discussionEntryId,
-                            isolatedId,
                             withRCE,
                             relativeId,
                             highlightId
                           ) => {
                             setHighlightEntryId(highlightId)
-                            openView(discussionEntryId, isolatedId, withRCE, relativeId)
+                            openSplitScreenView(discussionEntryId, withRCE, relativeId)
                           }}
                           goToTopic={goToTopic}
                           highlightEntryId={highlightEntryId}
@@ -429,24 +439,6 @@ const DiscussionTopicManager = props => {
                           userSplitScreenPreference={userSplitScreenPreference}
                         />
                       )
-                    )}
-                    {ENV.isolated_view && threadParentEntryId && (
-                      <IsolatedViewContainer
-                        relativeEntryId={relativeEntryId}
-                        removeDraftFromDiscussionCache={removeDraftFromDiscussionCache}
-                        updateDraftCache={updateDraftCache}
-                        discussionTopic={discussionTopicQuery.data.legacyNode}
-                        discussionEntryId={threadParentEntryId}
-                        replyFromId={replyFromId}
-                        open={isolatedViewOpen}
-                        RCEOpen={editorExpanded}
-                        setRCEOpen={setEditorExpanded}
-                        onClose={closeView}
-                        onOpenIsolatedView={openIsolatedView}
-                        goToTopic={goToTopic}
-                        highlightEntryId={highlightEntryId}
-                        setHighlightEntryId={setHighlightEntryId}
-                      />
                     )}
                   </View>
                 </DrawerLayout.Content>
@@ -460,12 +452,10 @@ const DiscussionTopicManager = props => {
                   data-testid="drawer-layout-tray"
                   shouldCloseOnDocumentClick={false}
                 >
-                  {ENV.split_screen_view && !ENV.isolated_view && threadParentEntryId && (
+                  {threadParentEntryId && (
                     <View as="div" maxWidth={responsiveProps.viewPortWidth}>
                       <SplitScreenViewContainer
                         relativeEntryId={relativeEntryId}
-                        removeDraftFromDiscussionCache={removeDraftFromDiscussionCache}
-                        updateDraftCache={updateDraftCache}
                         discussionTopic={discussionTopicQuery.data.legacyNode}
                         discussionEntryId={threadParentEntryId}
                         open={isSplitScreenViewOpen}
@@ -477,6 +467,8 @@ const DiscussionTopicManager = props => {
                         highlightEntryId={highlightEntryId}
                         setHighlightEntryId={setHighlightEntryId}
                         isTrayFinishedOpening={isTrayFinishedOpening}
+                        setReplyToTopicSubmission={setReplyToTopicSubmission}
+                        setReplyToEntrySubmission={setReplyToEntrySubmission}
                       />
                     </View>
                   )}
