@@ -35,7 +35,7 @@
             <i class="icon-more" role="presentation"></i>
             <span class="screenreader-only">More</span>
           </a>
-          <ul aria-labeledby="profileDropdown" class="al-options" role="menu" tabindex="0" aria-hidden="true" aria-expanded="false" >
+          <ul aria-labelledby="profileDropdown" class="al-options" role="menu" tabindex="0" aria-hidden="true" aria-expanded="false" >
             <li class="hide-if-editing"><a data-event="editProfile" role="menuitem"><%= t('edit_profile', 'Edit Profile') %></a></li>
             <li class="show-if-editing"><a data-event="cancelEditProfile" role="menuitem"><%= t('cancel_editing', 'Cancel Editing') %></a></li>
             <li><a href="<%= user_path(@user.id) %>"role="menuitem"><%= t('links.user_account_details', %{Account Details}) %></a></li>
